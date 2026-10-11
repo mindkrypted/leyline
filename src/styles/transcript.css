@@ -284,7 +284,8 @@
 }
 
 .live-stack > .live-message-item,
-.live-stack > .live-assistant-item {
+.live-stack > .live-assistant-item,
+.live-stack > .live-summary-item {
   contain-intrinsic-block-size: auto 100px;
 }
 

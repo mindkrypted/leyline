@@ -1066,7 +1066,7 @@ watch(sessionDetail, (detail) => {
 
 watch(activeRuntimeSession, (session) => {
   if (session?.id !== selectedSessionId.value) return
-  liveTurn.setRuntimeState(session.state)
+  liveTurn.setRuntimeState(session.state, session.snapshotRevision)
 })
 
 watch(reviewAvailable, (available) => {
@@ -2714,12 +2714,6 @@ async function submitCompactCommand(compactCommand, images) {
   promptError.value = ''
   resetLiveState()
   draft.value = ''
-  upsertLiveTool({
-    type: 'tool_execution_start',
-    toolName: 'compact',
-    args: { customInstructions: compactCommand.customInstructions },
-  }, 'running')
-
   const sessionId = selectedSessionId.value
   try {
     const data = await compactPiSession(
@@ -2732,12 +2726,10 @@ async function submitCompactCommand(compactCommand, images) {
     if (data.detail && selectedSessionId.value === sessionId) {
       sessionDetail.value = data.detail
     }
-    if (selectedSessionId.value === sessionId) finishLiveTools('completed')
     await loadSessions({ selectFirst: false, showLoading: false })
     if (selectedSessionId.value === sessionId) await scrollToLatest()
   } catch (error) {
     if (selectedSessionId.value === sessionId) {
-      finishLiveTools('error')
       promptError.value = error.message
     }
   } finally {
@@ -4022,7 +4014,7 @@ function closePickerMenus() {
             />
 
             <TranscriptEntry
-              v-else-if="item.type === 'message'"
+              v-else-if="item.type === 'message' || item.type === 'summary'"
               :copied-entry-id="copiedEntryId"
               :entry="item.persistedEntry || item"
               :research-cwd="selectedSession?.cwd || ''"

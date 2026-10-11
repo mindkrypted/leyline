@@ -30,12 +30,59 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     ...(persistedDetail.value?.entries || []),
     ...optimisticEntries.value,
   ])
-  const liveItems = computed(() => [
+  const liveRows = computed(() => [
     ...liveAssistantMessages.value,
     ...liveUserMessages.value,
     ...liveSystemMessages.value,
     ...liveModelChanges.value,
     ...liveTools.value,
+  ].sort((a, b) => a.seq - b.seq))
+  const transcript = computed(() => {
+    const raw = rawEntries.value
+    const rows = liveRows.value
+    const liveByEntryId = new Map(rows.map((item) => [
+      item.persistedEntry?.id || item.id,
+      item,
+    ]))
+    let start = liveTurnAnchorId.value === null
+      ? raw.length
+      : raw.findIndex((entry) => entry.id === liveTurnAnchorId.value) + 1
+
+    for (let index = 0; index < start; index++) {
+      if (liveByEntryId.has(raw[index].id)) {
+        start = index
+        break
+      }
+    }
+
+    const tail = raw.slice(start).filter(isRenderableEntry)
+    const tailIds = new Set(tail.map((entry) => entry.id))
+    const pendingBefore = new Map()
+    let pending = []
+    for (const item of rows) {
+      const id = item.persistedEntry?.id || item.id
+      if (tailIds.has(id)) {
+        pendingBefore.set(id, pending)
+        pending = []
+      } else {
+        pending.push(item)
+      }
+    }
+
+    return {
+      entries: raw.slice(0, start).filter(isRenderableEntry),
+      liveItems: [
+        ...tail.flatMap((entry) => [
+          ...(pendingBefore.get(entry.id) || []),
+          liveByEntryId.get(entry.id) || { ...entry, persistedEntry: entry },
+        ]),
+        ...pending,
+      ],
+    }
+  })
+  const entries = computed(() => transcript.value.entries)
+  const liveItems = computed(() => [
+    ...transcript.value.liveItems,
     compactingContext.value ? {
       id: 'live-compaction',
       seq: Number.MAX_SAFE_INTEGER - 1,
@@ -48,7 +95,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
       type: 'activity',
       text: liveActivity.value,
     } : null,
-  ].filter(Boolean).sort((a, b) => a.seq - b.seq))
+  ].filter(Boolean))
   const liveTurnActive = computed(() => {
     return agentRunning.value
       || compactingContext.value
@@ -59,27 +106,13 @@ export function useLiveTurnProjection({ onIntent } = {}) {
       || liveModelChanges.value.length > 0
       || Boolean(liveActivity.value)
   })
-  const entries = computed(() => {
-    let list = rawEntries.value
-    if (liveTurnActive.value && liveTurnAnchorLength.value !== null) {
-      list = list.slice(0, liveTurnAnchorLength.value)
-    }
-
-    return list.filter((entry) => {
-      return isRenderableEntry(entry)
-        && !isCoveredByLiveTool(entry)
-        && !isCoveredByLiveAssistant(entry)
-        && !isCoveredByLiveUser(entry)
-        && !isCoveredByLiveSystem(entry)
-        && !liveModelChanges.value.some((change) => change.id === entry.id)
-    })
-  })
   const liveToolSettleTimers = new Map()
   const liveToolVisualFloorMs = 450
   let liveToolSeq = 0
   let liveItemSeq = 0
-  const liveTurnAnchorLength = ref(null)
+  const liveTurnAnchorId = ref(null)
   let activeLiveAssistantId = ''
+  let runtimeSnapshotRevision
   let pendingAssistantEvent
   let liveAssistantFrame
 
@@ -130,7 +163,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     }))
     releaseLiveAnchorIfSettled()
     const lastEntry = detail.entries.findLast(isRenderableEntry)
-    if (liveTurnAnchorLength.value === null
+    if (liveTurnAnchorId.value === null
       && lastEntry?.type === 'model-change'
       && !liveModelChanges.value.some((change) => change.id === lastEntry.id)) {
       clearSettledLiveItems()
@@ -139,14 +172,16 @@ export function useLiveTurnProjection({ onIntent } = {}) {
 
   function beginUserTurn(text, images = []) {
     activeLiveAssistantId = ''
-    if (liveTurnAnchorLength.value === null) clearSettledLiveItems()
+    if (liveTurnAnchorId.value === null) {
+      clearSettledLiveItems()
+      liveTurnAnchorId.value = persistedDetail.value?.entries.at(-1)?.id || ''
+    }
     const entry = pendingUserEntry(text, images)
     optimisticEntries.value = [...optimisticEntries.value, entry]
     liveUserMessages.value = [
       ...liveUserMessages.value,
       { ...entry, seq: ++liveItemSeq },
     ]
-    liveTurnAnchorLength.value = rawEntries.value.length
     return entry
   }
 
@@ -182,10 +217,17 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     liveActivity.value = text || ''
   }
 
-  function setRuntimeState(state) {
+  function setRuntimeState(state, snapshotRevision) {
     if (!state) return
+    const newSnapshot = snapshotRevision === undefined
+      || snapshotRevision !== runtimeSnapshotRevision
+    runtimeSnapshotRevision = snapshotRevision
     compactingContext.value = state.isCompacting === true
     agentRunning.value = state.isStreaming === true
+    if (newSnapshot && !agentRunning.value && !compactingContext.value) {
+      clearLiveAssistant()
+      if (liveActivity.value === 'Thinking…') liveActivity.value = ''
+    }
     syncPendingTools(state)
     if (!agentRunning.value && !compactingContext.value) return
     if (liveActivity.value || liveAssistantMessages.value.length) return
@@ -197,6 +239,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     const pendingIds = new Set(
       Array.isArray(state.pendingToolCalls) ? state.pendingToolCalls : [],
     )
+    let restoredToolsAdded = false
 
     for (const pendingTool of state.pendingTools) {
       const toolCallId = pendingTool?.toolCallId
@@ -223,6 +266,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
         partialResult,
         restoredFromRuntime: true,
       }, 'running')
+      if (!existing) restoredToolsAdded = true
     }
 
     const settledTools = liveTools.value.filter((tool) => {
@@ -250,6 +294,9 @@ export function useLiveTurnProjection({ onIntent } = {}) {
         partialResult,
         restoredFromRuntime: true,
       }, failed ? 'error' : 'completed')
+    }
+    if (restoredToolsAdded && persistedDetail.value) {
+      reconcileLiveTools(persistedDetail.value)
     }
     releaseLiveAnchorIfSettled()
   }
@@ -331,7 +378,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
   }
 
   function reset() {
-    liveTurnAnchorLength.value = null
+    liveTurnAnchorId.value = null
     compactingContext.value = false
     liveActivity.value = ''
     liveAssistantMessages.value = []
@@ -342,6 +389,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     optimisticEntries.value = []
     agentRunning.value = false
     activeLiveAssistantId = ''
+    runtimeSnapshotRevision = undefined
     pendingAssistantEvent = undefined
     clearLiveToolSettleTimers()
     cancelAnimationFrame(liveAssistantFrame)
@@ -353,9 +401,9 @@ export function useLiveTurnProjection({ onIntent } = {}) {
 
   function markLiveTurnStart(event) {
     if (!startsLiveTurn(event)) return
-    if (liveTurnAnchorLength.value !== null) return
+    if (liveTurnAnchorId.value !== null) return
     clearSettledLiveItems()
-    liveTurnAnchorLength.value = rawEntries.value.length
+    liveTurnAnchorId.value = persistedDetail.value?.entries.at(-1)?.id || ''
   }
 
   function clearSettledLiveItems() {
@@ -691,34 +739,9 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     return Boolean(entry.blocks?.length || entry.text?.trim())
   }
 
-  function isCoveredByLiveTool(entry) {
-    if (entry.type !== 'tool') return false
-    return liveTools.value.some((tool) => liveToolMatchesEntry(tool, entry))
-  }
-
-  function isCoveredByLiveAssistant(entry) {
-    if (entry.type !== 'message' || entry.role !== 'assistant') return false
-    return liveAssistantMessages.value.some((message) => {
-      return liveAssistantMatchesEntry(message, entry)
-    })
-  }
-
-  function isCoveredByLiveSystem(entry) {
-    if (entry.type !== 'system') return false
-    return liveSystemMessages.value.some((message) => {
-      return liveSystemMatchesEntry(message, entry)
-    })
-  }
-
-  function isCoveredByLiveUser(entry) {
-    if (entry.type !== 'message' || entry.role !== 'user') return false
-    return liveUserMessages.value.some((message) => {
-      return liveUserMatchesEntry(message, entry)
-    })
-  }
-
   function liveToolMatchesEntry(tool, entry) {
-    if (tool.toolCallId && entry.toolCallId) {
+    if (tool.persistedEntry?.id) return tool.persistedEntry.id === entry.id
+    if (tool.toolCallId || entry.toolCallId) {
       return tool.toolCallId === entry.toolCallId
     }
 
@@ -731,7 +754,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
   }
 
   function releaseLiveAnchorIfSettled() {
-    if (liveTurnAnchorLength.value === null) return
+    if (liveTurnAnchorId.value === null) return
     if (agentRunning.value || compactingContext.value || liveActivity.value) {
       return
     }
@@ -744,7 +767,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     if (liveTools.value.some((tool) => !liveToolSettled(tool))) return
     if (liveSystemMessages.value.some((message) => !message.persistedEntry)) return
     if (liveModelChanges.value.some((change) => !change.persistedEntry)) return
-    liveTurnAnchorLength.value = null
+    liveTurnAnchorId.value = null
   }
 
   function liveToolSettled(tool) {
@@ -783,7 +806,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     }
     if (persisted) return
 
-    const pendingUser = liveItems.value.filter((item) => item.type !== 'activity').at(-1)
+    const pendingUser = liveRows.value.at(-1)
     const seq = ++liveItemSeq
     liveModelChanges.value = [...liveModelChanges.value, {
       ...entry,
@@ -806,7 +829,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     const existing = liveSystemMessages.value.find((message) => {
       return liveSystemMatchesEntry(message, entry)
     })
-    const pendingUser = liveItems.value.filter((item) => item.type !== 'activity').at(-1)
+    const pendingUser = liveRows.value.at(-1)
     const seq = existing?.seq ?? ++liveItemSeq
     const next = {
       ...entry,
