@@ -61,19 +61,23 @@ Pi persists `role: "system"` messages for prompt and tool declarations. The firs
 
 A `preamble` update produces a `full prompt` summary. Other summaries identify section and tool deltas. Older sessions can have no system messages.
 
-`lib/system-prompt.js` supplies shared section titles and display metadata. A nonremoved `preamble` selects **System prompt**, **Prompt**, and the initial-declaration treatment. Other events use **System updated** and **Changes**. These display labels are separate from the projected `label` and `code` fields.
+`lib/system-prompt.js` supplies shared section titles and display metadata. `projectTranscriptEntries()` marks the first System declaration with a nonremoved `preamble` as `initialSystemPrompt`. It selects **System prompt** and **Prompt**. Later events, including preamble updates, use **System updated** and **Changes**. Standalone live entries use the preamble as a fallback until persistence supplies this metadata. These display labels are separate from the projected `label` and `code` fields.
 
 `TranscriptEntry.vue` renders a muted, centered divider with document and panel icons. Its `open-system-prompt` event passes the entry and opener to `App.vue`. System rows do not use tool expansion controls.
 
-`SystemPromptInspector.vue` renders prompt sections and tool descriptions as Markdown in **Prompt**/**Changes** and **Tools** tabs. Removed sections and tools retain their names and removal labels. An event with only tool changes opens **Tools**. Later entries show only that event's changes, not a reconstructed full prompt.
+`SystemPromptInspector.vue` renders prompt sections and tool descriptions in **Prompt**/**Changes** and **Tools** tabs. Removed sections and tools retain their names and removal labels. An event with only tool changes opens **Tools**. Later entries show only that event's changes, not a reconstructed full prompt.
+
+For `project_context`, projection compares instruction files with the last recorded section on the selected branch. `projectContextFiles` stores each path and status, plus previous content only for modified or removed files. Current content stays in the recorded section. Section removal clears the baseline; an unrelated section update preserves it. History never comes from current files on disk or another branch.
+
+The inspector loads `PierrePreview` for unified diffs only when needed. Initial declarations and added files show full content; unchanged files stay collapsed. Missing history or ambiguous file boundaries produce an explanation and full recorded content instead of an inferred diff. Live entries use this fallback until the matching persisted entry supplies comparison data.
 
 **Raw text** displays `entry.text` exactly. **Copy** uses the same text in either view. This projected text combines string content and readable change descriptions. It is not the original JSONL record.
 
 Saved entries expose **Fork from here** and **Reset to here** in a secondary menu. Fork, reset, or compaction activity disables both actions. An active run also disables reset. Live entries do not expose these actions until they match a persisted entry.
 
-`App.vue` owns inspector selection, opener focus restoration, and exclusion with Review and Sources. The inspector closes on session or backend changes, or when its entry leaves the selected branch. Wide layouts reserve transcript space. Narrow layouts overlay the right side. Mobile layouts fill the width below the header and make the main pane inert.
+`App.vue` owns inspector selection, opener focus restoration, and exclusion with Review and Sources. The inspector closes on session or backend changes, or when its entry leaves the selected branch. The inspector overlays the right side below the header on desktop layouts. Mobile layouts fill the width below the header and make the main pane inert.
 
-HTML export renders the same divider and inspector content through `renderExportSystem()`. Its `<details>` element controls the inspector, not an inline tool card. The embedded `systemInspectorJs()` handles tabs, raw view, exact copy, close, and keyboard controls independently of the external Pierre module. Exports omit fork and reset actions.
+HTML export renders the same divider and inspector content through `renderExportSystem()`. Its `<details>` element controls the inspector, not an inline tool card. Instruction-file diffs use Pierre's server-side diff parser and embed the resulting lines as styled HTML. They do not require a network request. The embedded `systemInspectorJs()` handles tabs, raw view, exact copy, close, and keyboard controls independently of the external Pierre module. Exports omit fork and reset actions.
 
 ## Live reconciliation and settlement
 

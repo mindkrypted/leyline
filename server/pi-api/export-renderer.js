@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import MarkdownIt from 'markdown-it'
+import { parseDiffFromFile } from '@pierre/diffs'
 import { configureMarkdownLinks } from '../../lib/markdown-file-links.js'
-import { systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
+import { projectContextView, systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
 import {
   imageBlocksFor,
   messageBlocksFor,
@@ -217,6 +218,52 @@ ${entry.contextLabel ? renderToolContext(entry) : ''}
 </details>`
 }
 
+function renderSystemFileDiff(preview) {
+  try {
+    const diff = parseDiffFromFile(
+      { name: preview.path, contents: preview.oldText },
+      { name: preview.path, contents: preview.newText },
+      { context: 3, timeout: 1000 },
+      true,
+    )
+    const rows = []
+    const row = (type, text) => rows.push(`<span data-line-type="${type}">${escapeHtml(text.replace(/\r?\n$/, ''))}</span>`)
+    const lines = (type, prefix, source, start, count, noNewline) => {
+      for (let index = start; index < start + count; index++) {
+        row(type, prefix + source[index])
+        if (noNewline && index === source.length - 1) row('metadata', '\\ No newline at end of file')
+      }
+    }
+    for (const hunk of diff.hunks) {
+      row('metadata', hunk.hunkSpecs)
+      for (const part of hunk.hunkContent) {
+        if (part.type === 'context') {
+          lines('context', ' ', diff.additionLines, part.additionLineIndex, part.lines, hunk.noEOFCRAdditions)
+        } else {
+          lines('deletion', '-', diff.deletionLines, part.deletionLineIndex, part.deletions, hunk.noEOFCRDeletions)
+          lines('addition', '+', diff.additionLines, part.additionLineIndex, part.additions, hunk.noEOFCRAdditions)
+        }
+      }
+    }
+    return `<pre class="system-prompt-diff" aria-label="Recorded file changes">${rows.join('')}</pre>`
+  } catch {
+    return `<p class="system-prompt-notice">Diff unavailable. Both recorded versions are shown below.</p>
+<h4>Before</h4><pre class="system-prompt-raw">${escapeHtml(preview.oldText)}</pre>
+<h4>After</h4><pre class="system-prompt-raw">${escapeHtml(preview.newText)}</pre>`
+  }
+}
+
+function renderExportProjectContextFile(file, initial) {
+  const label = `<code title="${escapeHtml(file.path)}">${escapeHtml(file.label)}</code>`
+  if (file.status === 'unchanged' && !initial) {
+    return `<details class="system-prompt-file is-unchanged"><summary>${label}<span> · unchanged</span></summary><div class="system-prompt-prose markdown-body">${renderMarkdown(file.content)}</div></details>`
+  }
+  const content = file.preview
+    ? renderSystemFileDiff(file.preview)
+    : `<div class="system-prompt-prose markdown-body">${renderMarkdown(file.content)}</div>`
+  return `<div class="system-prompt-file"><h4>${label}${initial ? '' : `<span> · ${escapeHtml(file.statusLabel)}</span>`}</h4>${content}</div>`
+}
+
 function renderExportSystem(entry, index) {
   const info = systemPromptInfo(entry)
   const sections = entry.sections || []
@@ -226,10 +273,20 @@ function renderExportSystem(entry, index) {
   ]
   const promptSelected = Boolean(sections.length || !tools.length)
   const id = `system-${index}`
-  const prompt = sections.map((section) => `<section class="system-prompt-section">
+  const context = projectContextView(entry)
+  const prompt = sections.map((section) => {
+    const files = section.name === 'project_context' ? context.files : []
+    const body = files.length
+      ? [...files.filter((file) => file.status !== 'unchanged'), ...files.filter((file) => file.status === 'unchanged')]
+        .map((file) => renderExportProjectContextFile(file, info.initial)).join('')
+      : section.removed ? '' : `<div class="system-prompt-prose markdown-body">${renderMarkdown(section.text)}</div>`
+    const notice = section.name === 'project_context' && context.notice
+      ? `<p class="system-prompt-notice">${escapeHtml(context.notice)}</p>` : ''
+    return `<section class="system-prompt-section">
 <h3>${escapeHtml(systemSectionTitle(section.name))}${section.removed ? '<span> · removed</span>' : info.initial ? '' : '<span> · updated</span>'}</h3>
-${section.removed ? '' : `<div class="system-prompt-prose markdown-body">${renderMarkdown(section.text)}</div>`}
-</section>`).join('') || (tools.length
+${notice}${body}
+</section>`
+  }).join('') || (tools.length
     ? '<p class="system-prompt-empty">No prompt sections changed in this event.</p>'
     : `<div class="system-prompt-prose markdown-body">${renderMarkdown(entry.text)}</div>`)
   const toolContent = tools.map((tool) => `<section class="system-prompt-section">
@@ -1475,6 +1532,21 @@ button, input, textarea { color: inherit; font: inherit; }
 }
 .system-prompt-section > h3 span { color: #858585; font-weight: 400; }
 .system-prompt-section > h3 code { font-size: 12px; }
+.system-prompt-notice { margin: 0 0 14px; color: #999; font-size: 11px; line-height: 1.6; }
+.system-prompt-diff { margin: 0; padding: 8px 0; background: #111; color: #bcbcbc; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; line-height: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.system-prompt-diff > span { display: block; padding: 0 8px; min-height: 18px; }
+.system-prompt-diff [data-line-type="addition"] { color: #a8d9b6; background: rgb(47 143 70 / 15%); }
+.system-prompt-diff [data-line-type="deletion"] { color: #e4aaa5; background: rgb(180 60 50 / 15%); }
+.system-prompt-diff [data-line-type="metadata"] { color: #858585; }
+.system-prompt-file { margin: 0 0 14px; }
+.system-prompt-file:last-child { margin-bottom: 0; }
+.system-prompt-file > h4 { margin: 0 0 8px; color: #a5a5a5; font-size: 12px; font-weight: 550; overflow-wrap: anywhere; }
+.system-prompt-file > h4 span { color: #858585; font-weight: 400; }
+.system-prompt-file > h4 code { font-size: 12px; }
+.system-prompt-file.is-unchanged { border-top: 1px solid #282828; padding-top: 10px; }
+.system-prompt-file.is-unchanged > summary { color: #858585; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.system-prompt-file.is-unchanged > summary code { font-size: 12px; }
+.system-prompt-file.is-unchanged .system-prompt-prose { margin-top: 8px; }
 .system-prompt-prose { color: #bcbcbc; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
 .system-prompt-prose img { max-width: 100%; }
 .system-prompt-prose code { border: 0; padding: 0; background: transparent; color: #cecad6; }

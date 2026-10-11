@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { chromium } from 'playwright'
 import { THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
-import { projectEntry } from '../lib/transcript-projection.js'
+import { projectTranscriptEntries } from '../lib/transcript-projection.js'
 import {
   canonicalResearchSourceKey,
   compactResearchState,
@@ -587,8 +587,18 @@ const baseEntries = [
   }),
 ]
 
-const systemEntries = [
-  projectEntry({
+const fixtureGlobalInstructions = '# Shared guidelines\n\n- Use precise edits.\n- Show file paths.'
+const fixtureProjectInstructions = '# Harbor\n\nRun release verification before publication.\n'
+const fixtureProjectInstructionsChanged = '# Harbor\n\nRun release verification before publication. Keep this change limited to scripts/release.js.\n'
+function fixtureProjectContext(projectInstructions) {
+  return '<project_context>\nProject-specific instructions and guidelines:\n\n' +
+    `<project_instructions path="/demo/home/.pi/agent/AGENTS.md">\n${fixtureGlobalInstructions}\n</project_instructions>\n\n` +
+    `<project_instructions path="/demo/harbor/AGENTS.md">\n${projectInstructions}\n</project_instructions>\n</project_context>`
+}
+const fixtureInitialContext = fixtureProjectContext(fixtureProjectInstructions)
+const fixtureDeltaContext = fixtureProjectContext(fixtureProjectInstructionsChanged)
+const systemEntries = projectTranscriptEntries([
+  {
     id: 'system-initial',
     type: 'message',
     timestamp: '2026-08-06T15:42:59.000Z',
@@ -597,7 +607,7 @@ const systemEntries = [
       timestamp: Date.parse('2026-08-06T15:42:59.000Z'),
       sections: {
         preamble: 'You are a coding assistant working on the harbor project.',
-        project: 'Run release verification before publication.',
+        project_context: fixtureInitialContext,
       },
       toolsAdded: [
         { name: 'read', description: 'Read project files.' },
@@ -605,21 +615,19 @@ const systemEntries = [
         { name: 'edit', description: 'Make precise changes to project files.' },
       ],
     },
-  }),
-  projectEntry({
+  },
+  {
     id: 'system-delta',
     type: 'message',
     timestamp: '2026-08-06T15:46:30.000Z',
     message: {
       role: 'system',
       timestamp: Date.parse('2026-08-06T15:46:30.000Z'),
-      sections: {
-        project: 'Run release verification before publication. Keep this change limited to scripts/release.js.',
-      },
+      sections: { project_context: fixtureDeltaContext },
       toolsAdded: [{ name: 'grep', description: 'Search project files for matching text.' }],
     },
-  }),
-]
+  },
+])
 const systemTranscriptEntries = [
   systemEntries[0],
   ...baseEntries.slice(0, -1),
@@ -918,8 +926,13 @@ try {
     ready: '.system-prompt-row',
     scenario: 'system',
     interact: async (page) => {
+      const before = await page.locator('.workbench').boundingBox()
       await page.locator('.system-prompt-trigger').last().click()
-      await page.locator('.system-prompt-inspector').waitFor()
+      const inspector = page.locator('.system-prompt-inspector')
+      await inspector.locator('[data-line-type="change-deletion"]').filter({ hasText: 'Run release verification before publication.' }).waitFor()
+      await inspector.locator('[data-line-type="change-addition"]').filter({ hasText: 'Keep this change limited' }).waitFor()
+      const after = await page.locator('.workbench').boundingBox()
+      if (before.width !== after.width) throw new Error('Prompt inspector moved the transcript')
     },
     clipSelectors: ['.system-prompt-row', '.system-prompt-inspector'],
     padding: 18,
@@ -1374,6 +1387,16 @@ try {
     ready: '.export-shell .transcript',
     scenario: 'export',
     exportPage: true,
+    interact: async (page) => {
+      await page.locator('.system-prompt-export > summary').last().click()
+      const inspector = page.locator('.system-prompt-export[open] .system-prompt-inspector')
+      await inspector.locator('[data-line-type="deletion"]').filter({ hasText: 'Run release verification before publication.' }).waitFor()
+      await inspector.locator('[data-line-type="addition"]').filter({ hasText: 'Keep this change limited' }).waitFor()
+      await inspector.getByRole('button', { name: 'Raw text', exact: true }).click()
+      const raw = await inspector.locator('.system-prompt-raw').innerText()
+      if (raw !== systemEntries[1].text) throw new Error('Export changed the raw system event')
+      await inspector.getByRole('button', { name: 'Close prompt inspector' }).click()
+    },
   })
   await capture({
     browser,
@@ -1796,12 +1819,13 @@ async function capture({
   const page = await context.newPage()
   const unexpected = []
   page.on('console', (message) => {
-    if (message.type() === 'error' && !message.text().includes('esm.sh')) {
+    const blockedPreview = exportPage && message.location().url.startsWith('https://esm.sh/')
+    if (message.type() === 'error' && !blockedPreview && !message.text().includes('esm.sh')) {
       unexpected.push(`console: ${message.text()}`)
     }
   })
   page.on('pageerror', (error) => unexpected.push(`page: ${error.message}`))
-  await page.route('https://esm.sh/**', (request) => request.fulfill({
+  await page.route('https://esm.sh/**', (request) => exportPage ? request.abort() : request.fulfill({
     status: 200,
     contentType: 'application/javascript',
     body: `
@@ -2096,7 +2120,10 @@ async function sanitizeNativeBackendAddress(page) {
 }
 
 async function assertPrivateDataAbsent(page) {
-  const text = await page.locator('body').innerText() + '\n' + await page.locator('input, textarea, select').evaluateAll((elements) => {
+  const shadowText = await page.locator('.pierre-diffs-container').evaluateAll((elements) => {
+    return elements.map((element) => element.shadowRoot?.textContent || '').join('\n')
+  })
+  const text = shadowText + '\n' + await page.locator('body').innerText() + '\n' + await page.locator('input, textarea, select').evaluateAll((elements) => {
     return elements.map((element) => element.value).join('\n')
   })
   const captureHost = new URL(baseUrl).host

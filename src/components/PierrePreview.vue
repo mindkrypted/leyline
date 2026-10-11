@@ -5,6 +5,7 @@ import { DIFFS_TAG_NAME, File, FileDiff, parsePatchFiles } from '@pierre/diffs'
 const props = defineProps({
   preview: { type: Object, default: null },
   clipped: { type: Boolean, default: true },
+  hideFileHeader: Boolean,
 })
 
 const emit = defineEmits(['ready'])
@@ -50,7 +51,7 @@ const visiblePreview = computed(() => {
 
 onMounted(renderPreview)
 onBeforeUnmount(cleanup)
-watch(() => [visiblePreview.value, props.clipped], renderPreview, { deep: true })
+watch(() => [visiblePreview.value, props.clipped, props.hideFileHeader], renderPreview, { deep: true })
 
 function handlePostRender(_node, renderedInstance) {
   if (renderedInstance !== instance) return
@@ -124,6 +125,7 @@ function renderDiff(preview) {
     ...options,
     diffStyle: 'unified',
     hunkSeparators: 'metadata',
+    disableFileHeader: props.hideFileHeader,
   })
   instance.render({
     fileContainer: diffContainer,

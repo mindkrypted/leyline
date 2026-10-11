@@ -1,7 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
-import { systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref } from 'vue'
+import { projectContextView, systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
 import { renderedText } from '../lib/transcript'
+
+const PierrePreview = defineAsyncComponent(() => import('./PierrePreview.vue'))
 
 const props = defineProps({
   entry: { type: Object, required: true },
@@ -16,11 +18,25 @@ const actions = ref(null)
 const tab = ref(props.entry.sections?.length || !props.entry.toolsAdded?.length && !props.entry.toolsRemoved?.length ? 'prompt' : 'tools')
 const raw = ref(false)
 const info = computed(() => systemPromptInfo(props.entry))
-const sections = computed(() => (props.entry.sections || []).map((section) => ({
-  ...section,
-  title: systemSectionTitle(section.name),
-  html: section.removed ? '' : renderedText(section.text),
-})))
+const context = computed(() => projectContextView(props.entry))
+const openFiles = ref(new Set())
+const sections = computed(() => (props.entry.sections || []).map((section) => {
+  const files = section.name === 'project_context' ? context.value.files : []
+  return {
+    ...section,
+    title: systemSectionTitle(section.name),
+    html: section.removed || files.length ? '' : renderedText(section.text),
+    notice: section.name === 'project_context' ? context.value.notice : '',
+    files,
+  }
+}))
+
+function toggleFile(path, open) {
+  const next = new Set(openFiles.value)
+  if (open) next.add(path)
+  else next.delete(path)
+  openFiles.value = next
+}
 const tools = computed(() => [
   ...(props.entry.toolsAdded || []).map((tool) => ({ ...tool, html: renderedText(tool.description) })),
   ...(props.entry.toolsRemoved || []).map((name) => ({ name, removed: true })),
@@ -104,7 +120,19 @@ defineExpose({ dismissMenu })
         <div v-if="tab === 'prompt'" id="system-prompt-panel" role="tabpanel" aria-labelledby="system-prompt-tab">
           <section v-for="section in sections" :key="section.name" class="system-prompt-section">
             <h3>{{ section.title }}<span v-if="section.removed"> · removed</span><span v-else-if="!info.initial"> · updated</span></h3>
-            <div v-if="!section.removed" class="system-prompt-prose markdown-body" v-html="section.html"></div>
+            <p v-if="section.notice" class="system-prompt-notice">{{ section.notice }}</p>
+            <template v-if="section.files.length">
+              <div v-for="file in section.files.filter((item) => item.status !== 'unchanged' || info.initial)" :key="file.path" class="system-prompt-file">
+                <h4><code :title="file.path">{{ file.label }}</code><span v-if="!info.initial"> · {{ file.statusLabel }}</span></h4>
+                <PierrePreview v-if="file.preview" :preview="file.preview" :clipped="false" hide-file-header />
+                <div v-else class="system-prompt-prose markdown-body" v-html="renderedText(file.content)"></div>
+              </div>
+              <details v-for="file in section.files.filter((item) => item.status === 'unchanged' && !info.initial)" :key="file.path" class="system-prompt-file is-unchanged" @toggle="toggleFile(file.path, $event.currentTarget.open)">
+                <summary><code :title="file.path">{{ file.label }}</code><span> · unchanged</span></summary>
+                <div v-if="openFiles.has(file.path)" class="system-prompt-prose markdown-body" v-html="renderedText(file.content)"></div>
+              </details>
+            </template>
+            <div v-else-if="!section.removed" class="system-prompt-prose markdown-body" v-html="section.html"></div>
           </section>
           <div v-if="!sections.length && !tools.length" class="system-prompt-prose markdown-body" v-html="renderedText(entry.text)"></div>
           <p v-else-if="!sections.length" class="system-prompt-empty">No prompt sections changed in this event.</p>

@@ -36,7 +36,7 @@ Put a rule in the narrowest owning module. Keep `src/style.css` free of componen
 
 System events use muted, centered dividers with document and panel icons and plain summary text. Keep them separate from tool cards. The prompt inspector uses **Prompt**/**Changes** and **Tools** tabs, readable Markdown, and simple section separators. Do not add nested section cards.
 
-Above 1120 pixels, the app reserves a column for the inspector. From 761 to 1120 pixels, the inspector overlays the right side below the header. At 760 pixels or less, it fills the width below the header. Export reserves space above 1120 pixels and uses a full-height overlay below that width. Its inspector fills the viewport width at 760 pixels or less.
+The app inspector always overlays the right side below the header. At 760 pixels or less, it fills the width below the header. Export reserves space above 1120 pixels and uses a full-height overlay below that width. Its inspector fills the viewport width at 760 pixels or less.
 
 ## Settings layout
 

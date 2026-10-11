@@ -38,11 +38,15 @@ Select a divider to open the prompt inspector on the right:
 - **Changes** shows updated or removed sections for a later event. It does not reconstruct the full prompt at that point.
 - **Tools** shows initial or added tools and their descriptions, plus removed tool names. An event with only tool changes opens this tab.
 
+For project context changes, the divider names the changed instruction files. The inspector shows added and removed lines for modified or removed files. Unchanged files stay collapsed. Initial declarations and added files show their full content.
+
+The diff compares recorded versions from the selected branch. Pi still sends the updated section in full. If the previous version is unavailable, or file boundaries are unclear, the inspector explains why it shows full content instead.
+
 Select **Raw text** to see the exact event text without Markdown formatting. **Copy** copies that same text from either view. Select **Reading view** to return to the tabs.
 
 For a saved event, the **System event actions** menu offers **Fork from here** and **Reset to here**. Reset is unavailable during an active run. Both actions are unavailable during a fork, reset, or compaction.
 
-The inspector reserves transcript space on wide windows. On narrower windows, it overlays the right side. On mobile, it fills the width below the header and blocks interaction with the transcript.
+The inspector overlays the right side below the header. The transcript stays visible and interactive beside it. On mobile, the inspector fills the width below the header and blocks interaction with the transcript.
 
 The inspector cannot stay open beside **Review** or **Sources**. Select **Close prompt inspector** to close it. Escape closes the actions menu first, then the inspector. Selection stays open when a live event becomes a saved entry. The inspector closes when you change sessions or backends, or the event leaves the selected branch.
 

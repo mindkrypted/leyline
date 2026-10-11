@@ -37,13 +37,13 @@ The **Prompt** tab shows initial prompt sections. Later events use **Changes** f
 
 **Raw text** shows the exact event text. **Copy** copies that same text from either view. **Reading view** returns to the tabs. Select **Close prompt inspector** or press Escape to close the inspector. Exports do not include **Fork from here** or **Reset to here**.
 
-The inspector controls use embedded JavaScript, independent of the external Pierre preview renderer. They do not require network access.
+The inspector controls and instruction-file diffs are included in the exported HTML. They do not require network access. Modified and removed instruction files show added and removed lines. Added files show full content. If a recorded comparison is unavailable, the inspector explains why it shows full content instead.
 
 A deep research export also includes the styled report, research-thread results, and every ledger source. Each source shows one evidence summary. An excluded source shows its exclusion reason instead.
 
 Tool rows render their previews when you expand them. Exported runtime event rows are omitted.
 
-Images and transcript data are embedded in the HTML. File, diff, and patch previews load their renderer from `esm.sh` when expanded. Those previews require network access.
+Images and transcript data are embedded in the HTML. File, diff, and patch previews in tool rows load their renderer from `esm.sh` when expanded. Those tool previews require network access.
 
 ## Use the responsive layout
 

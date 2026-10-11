@@ -59,30 +59,19 @@
   text-transform: uppercase;
 }
 
-.leyline-app.system-prompt-open,
-.leyline-app.system-prompt-open.event-log-open {
-  --system-prompt-width: min(440px, 36vw);
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--system-prompt-width);
-}
-
-.leyline-app.sidebar-hidden.system-prompt-open,
-.leyline-app.sidebar-hidden.system-prompt-open.event-log-open {
-  grid-template-columns: 0 minmax(0, 1fr) var(--system-prompt-width);
-}
-
 .system-prompt-inspector {
-  position: relative;
-  z-index: 5;
+  position: fixed;
+  z-index: 31;
+  inset: 53px 0 0 auto;
   display: flex;
-  grid-column: 3;
-  grid-row: 2;
   flex-direction: column;
-  width: var(--system-prompt-width, min(440px, 36vw));
+  width: min(440px, 36vw);
   min-width: 0;
   min-height: 0;
   border-left: 1px solid #303030;
   background: #171717;
   outline: none;
+  box-shadow: -18px 0 50px rgb(0 0 0 / 25%);
 }
 
 .system-prompt-header {
@@ -215,6 +204,58 @@
 
 .system-prompt-section > h3 code {
   font-size: 12px;
+}
+
+.system-prompt-notice {
+  margin: 0 0 14px;
+  color: #999;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.system-prompt-file {
+  margin: 0 0 14px;
+}
+
+.system-prompt-file:last-child {
+  margin-bottom: 0;
+}
+
+.system-prompt-file > h4 {
+  margin: 0 0 8px;
+  color: #a5a5a5;
+  font-size: 12px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+
+.system-prompt-file > h4 span {
+  color: #858585;
+  font-weight: 400;
+}
+
+.system-prompt-file > h4 code {
+  font-size: 12px;
+}
+
+.system-prompt-file.is-unchanged {
+  border-top: 1px solid #282828;
+  padding-top: 10px;
+}
+
+.system-prompt-file.is-unchanged > summary {
+  color: #858585;
+  font-size: 12px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.system-prompt-file.is-unchanged > summary code {
+  font-size: 12px;
+}
+
+.system-prompt-file.is-unchanged .system-prompt-prose {
+  margin-top: 8px;
 }
 
 .system-prompt-prose {
@@ -358,37 +399,14 @@
 }
 
 @media (min-width: 761px) and (max-width: 1120px) {
-  .leyline-app.system-prompt-open,
-  .leyline-app.system-prompt-open.event-log-open {
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
-  }
-
-  .leyline-app.sidebar-hidden.system-prompt-open,
-  .leyline-app.sidebar-hidden.system-prompt-open.event-log-open {
-    grid-template-columns: 0 minmax(0, 1fr) 0;
-  }
-
   .system-prompt-inspector {
-    position: fixed;
-    z-index: 12;
-    inset: 53px 0 0 auto;
     width: 420px;
     max-width: 100%;
-    box-shadow: -18px 0 50px rgb(0 0 0 / 25%);
   }
 }
 
 @media (max-width: 760px) {
-  .leyline-app.system-prompt-open,
-  .leyline-app.system-prompt-open.event-log-open,
-  .leyline-app.sidebar-hidden.system-prompt-open,
-  .leyline-app.sidebar-hidden.system-prompt-open.event-log-open {
-    grid-template-columns: 1fr;
-  }
-
   .system-prompt-inspector {
-    position: fixed;
-    z-index: 12;
     inset: 50px 0 0;
     width: 100%;
     border-left: 0;
