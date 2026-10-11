@@ -324,6 +324,7 @@ function providerValues(form) {
 
 function modelValues(form) {
   const values = {}
+  if (form.kind === 'custom' && form.model && form.values.id !== form.initial.id) values.id = form.values.id
   const custom = form.create && form.kind === 'custom'
   for (const key of ['name', 'contextWindow', 'maxTokens', 'reasoning', 'input']) {
     const value = form.values[key]
@@ -424,7 +425,7 @@ function saveDraft(event) {
       body.id = form.values.id
       void writeConfig((target) => saveProviderSettings(target, body), body.id)
     } else {
-      Object.assign(body, { providerId: form.providerId, modelId: form.values.id, kind: form.kind })
+      Object.assign(body, { providerId: form.providerId, modelId: form.model?.id || form.values.id, kind: form.kind })
       void writeConfig((target) => saveModelSettings(target, body))
     }
   } catch (failure) {
@@ -437,10 +438,10 @@ function testDraft(event) {
   try {
     const form = draft.value
     const providerId = form.type === 'provider' ? form.values.id : form.providerId
-    const modelId = form.type === 'provider' ? form.testModelId : form.values.id
+    const modelId = form.type === 'provider' ? form.testModelId : form.model?.id || form.values.id
     validId(providerId)
     if (providerId.includes('/')) throw new Error('Provider IDs cannot contain slashes.')
-    validId(modelId)
+    validId(form.type === 'model' ? form.values.id : modelId)
     const values = form.type === 'provider' ? providerValues(form) : modelValues(form)
     const body = {
       providerId,
@@ -451,7 +452,7 @@ function testDraft(event) {
     const target = { ...props.target }
     error.value = ''
     conflict.value = false
-    operationOwner.value = { id: providerId, action: 'test', generation, draft: form, title: `${modelId} · Test draft connection` }
+    operationOwner.value = { id: providerId, action: 'test', generation, draft: form, title: `${values.id || modelId} · Test draft connection` }
     void start((baseUrl) => runProviderSettingsAction(target, body, baseUrl))
   } catch (failure) {
     showDraftError(failure, event.currentTarget.form)
@@ -837,8 +838,8 @@ function metadataRows(value) {
                 <div class="pi-settings-form-grid">
                   <label class="pi-settings-field">
                     <span>Model ID</span>
-                    <input v-model="draft.values.id" name="id" required maxlength="512" :readonly="Boolean(draft.model)" :disabled="locked" spellcheck="false" />
-                    <small>{{ draft.model ? 'Model IDs cannot be changed.' : 'Must match the ID served by your endpoint.' }}</small>
+                    <input v-model="draft.values.id" name="id" required maxlength="512" :readonly="draft.kind !== 'custom'" :disabled="locked" spellcheck="false" />
+                    <small>{{ draft.kind === 'custom' ? 'Must match the ID served by your endpoint.' : 'Catalog model IDs cannot be changed.' }}</small>
                   </label>
                   <label class="pi-settings-field">
                     <span>Display name</span>

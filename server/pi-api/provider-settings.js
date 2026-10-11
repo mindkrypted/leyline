@@ -125,6 +125,24 @@ function metadata(value) {
   if (Object.hasOwn(value, 'compat')) compat(value.compat)
 }
 
+function modelChanges(modelId, kind, create, values) {
+  fields(values, ['id', ...modelFields])
+  if (Object.hasOwn(values, 'id')) {
+    id(values.id)
+    if (values.id !== modelId && (kind !== 'custom' || create)) throw settingsError('Only saved custom model IDs can be changed')
+  }
+  if (Object.hasOwn(values, 'cost')) fields(values.cost, costFields)
+  if (Object.hasOwn(values, 'compat')) fields(values.compat, ['supportsDeveloperRole'])
+  metadata(values)
+}
+
+function validateModelRename(runtime, providerId, config, modelId, values) {
+  if (values.id === undefined || values.id === modelId) return
+  if (!config?.models?.some((model) => model.id === modelId)) throw settingsError('Custom model does not exist', 404)
+  if (config.models.some((model) => model.id === values.id) || Object.hasOwn(config.modelOverrides || {}, values.id)
+    || runtime.getModel(providerId, values.id)) throw settingsError('Model ID already exists for this provider', 409)
+}
+
 function validateConfig(data) {
   try {
     object(data)
@@ -403,12 +421,8 @@ export function createProviderSettings({ getRuntime, assertProviderRoutes }) {
     if (!['custom', 'override'].includes(body.kind)) throw settingsError('Select a custom model or an override')
     if (saving) {
       if (body.create !== undefined) boolean(body.create)
-      fields(body.values, ['id', ...modelFields])
+      modelChanges(body.modelId, body.kind, body.create, body.values)
       if (!body.create && !Object.keys(body.values).length) throw settingsError('No model changes supplied')
-      if (Object.hasOwn(body.values, 'id') && body.values.id !== body.modelId) throw settingsError('Model IDs cannot be renamed')
-      if (Object.hasOwn(body.values, 'cost')) fields(body.values.cost, costFields)
-      if (Object.hasOwn(body.values, 'compat')) fields(body.values.compat, ['supportsDeveloperRole'])
-      metadata(body.values)
     }
   }
 
@@ -421,6 +435,7 @@ export function createProviderSettings({ getRuntime, assertProviderRoutes }) {
       const existing = body.kind === 'custom' ? index >= 0 : Object.hasOwn(config?.modelOverrides || {}, body.modelId)
       if (body.create && existing) throw settingsError('Model configuration already exists', 409)
       if (!body.create && !existing) throw settingsError('Model configuration does not exist', 404)
+      validateModelRename(runtime, body.providerId, config, body.modelId, body.values)
       const catalog = runtime.getModel(body.providerId, body.modelId)
       if (body.kind === 'override' && index >= 0) throw settingsError('Edit this model as a custom definition')
       if (body.kind === 'override' && !existing && !catalog) throw settingsError('Only catalog models can receive a new override')
@@ -452,6 +467,7 @@ export function createProviderSettings({ getRuntime, assertProviderRoutes }) {
       }
       const holder = body.kind === 'custom' ? config.models[index] : config?.modelOverrides?.[body.modelId]
       const path = ['providers', body.providerId, ...(body.kind === 'custom' ? ['models', index] : ['modelOverrides', body.modelId])]
+      if (body.values.id !== undefined && body.values.id !== body.modelId) values.id = body.values.id
       return Object.entries(values).flatMap(([key, value]) => {
         if (key === 'cost') return Object.entries(value).map(([rate, amount]) => ({ path: [...path, 'cost', rate], value: amount }))
         if (key === 'thinkingLevelMap') return [{ path: [...path, 'thinkingLevelMap'], value: Object.keys(value).length ? value : undefined }]
@@ -502,11 +518,8 @@ export function createProviderSettings({ getRuntime, assertProviderRoutes }) {
             else text(value)
           }
         } else {
-          fields(body.draft.values, modelFields)
           if (!['custom', 'override'].includes(body.draft.kind)) throw settingsError('Invalid model draft kind')
-          metadata(body.draft.values)
-          if (Object.hasOwn(body.draft.values, 'cost')) fields(body.draft.values.cost, costFields)
-          if (Object.hasOwn(body.draft.values, 'compat')) fields(body.draft.values.compat, ['supportsDeveloperRole'])
+          modelChanges(body.modelId, body.draft.kind, body.draft.create, body.draft.values)
         }
       }
     } else if (body.modelId !== undefined || body.draft !== undefined) throw settingsError('Model drafts are only supported for a connection test')
@@ -532,6 +545,7 @@ export function createProviderSettings({ getRuntime, assertProviderRoutes }) {
             if (body.draft.revision !== current.revision) throw settingsError('The configuration changed. Refresh settings before testing the draft.', 409)
             validateConfig(current.data)
             configuration = current.data
+            if (body.draft.type === 'model') validateModelRename(modelRuntime, body.providerId, own(configuration.providers, body.providerId), body.modelId, body.draft.values)
             if (body.draft.type === 'provider' && body.draft.values.api !== undefined
               && !apis.has(body.draft.values.api) && !modelRuntime.getModels(body.providerId).some((model) => model.api === body.draft.values.api)) throw settingsError('Unsupported provider API')
             if (body.draft.type === 'provider' && body.draft.create && (provider || Object.hasOwn(configuration.providers, body.providerId))) throw settingsError('Provider ID already exists', 409)

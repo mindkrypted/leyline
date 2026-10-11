@@ -28,6 +28,38 @@ function mergeDraftMetadata(base, values) {
   return model
 }
 
+async function inheritedModels(source, providerId, signal) {
+  const native = source.getRegisteredNativeProvider(providerId)
+  if (native && !isCustomProviderAdapter(source, providerId)) return native.getModels()
+  const modelsStore = new InMemoryModelsStore()
+  try {
+    const text = await readFile(join(getAgentDir(), 'models-store.json'), { encoding: 'utf8', signal })
+    const entry = (text ? JSON.parse(text.replace(/^\uFEFF/, '')) : {})[providerId]
+    if (entry) await modelsStore.write(providerId, entry, { signal })
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw settingsError('Could not read catalog defaults for the draft test. Refresh the catalog and try again.')
+  }
+  const runtime = await ModelRuntime.create({ modelsPath: null, modelsStore, credentials: emptyCredentials, refreshOnCreate: false, signal })
+  const result = await runtime.refresh({ providers: [providerId], allowNetwork: false, signal })
+  if (result.aborted || result.errors.size || runtime.getError()) throw settingsError('Could not restore catalog defaults for the draft test. Refresh the catalog and try again.')
+  return runtime.getModels(providerId)
+}
+
+async function inheritedRouting(source, providerId, modelId, provider, signal) {
+  const defaults = (await inheritedModels(source, providerId, signal))
+    .map((model) => ({ ...model, baseUrl: provider.oauth === 'radius' ? model.baseUrl : provider.baseUrl ?? model.baseUrl }))
+  for (const definition of provider.models || []) {
+    const api = definition.api ?? provider.api
+    const fallback = defaults.find((model) => model.id === definition.id) ?? defaults.find((model) => model.api === api)
+      ?? defaults.find((model) => model.api === 'openai-completions') ?? defaults[0]
+    const routing = { id: definition.id, api: api ?? fallback?.api, baseUrl: definition.baseUrl ?? provider.baseUrl ?? fallback?.baseUrl }
+    if (definition.id === modelId) return routing
+    const index = defaults.findIndex((model) => model.id === definition.id)
+    if (index < 0) defaults.push(routing)
+    else defaults[index] = routing
+  }
+}
+
 async function inheritedMetadata(source, providerId, modelId, provider, signal) {
   const extension = source.getRegisteredProviderConfig(providerId)
   if (extension?.refreshModels || extension?.oauth?.modifyModels) {
@@ -36,24 +68,7 @@ async function inheritedMetadata(source, providerId, modelId, provider, signal) 
   if (extension?.models) return extension.models.find((model) => (model.type || 'chat') === 'chat' && model.id === modelId) || {}
   const definition = provider.models?.find((model) => model.id === modelId)
   if (definition) return { thinkingLevelMap: definition.thinkingLevelMap, compat: { ...provider.compat, ...definition.compat } }
-  const native = source.getRegisteredNativeProvider(providerId)
-  let base
-  if (native && !isCustomProviderAdapter(source, providerId)) {
-    base = native.getModels().find((model) => model.id === modelId)
-  } else {
-    const modelsStore = new InMemoryModelsStore()
-    try {
-      const text = await readFile(join(getAgentDir(), 'models-store.json'), { encoding: 'utf8', signal })
-      const entry = (text ? JSON.parse(text.replace(/^\uFEFF/, '')) : {})[providerId]
-      if (entry) await modelsStore.write(providerId, entry, { signal })
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw settingsError('Could not read catalog defaults for the draft test. Refresh the catalog and try again.')
-    }
-    const runtime = await ModelRuntime.create({ modelsPath: null, modelsStore, credentials: emptyCredentials, refreshOnCreate: false, signal })
-    const result = await runtime.refresh({ providers: [providerId], allowNetwork: false, signal })
-    if (result.aborted || result.errors.size || runtime.getError()) throw settingsError('Could not restore catalog defaults for the draft test. Refresh the catalog and try again.')
-    base = runtime.getModel(providerId, modelId)
-  }
+  const base = (await inheritedModels(source, providerId, signal)).find((model) => model.id === modelId)
   if (!base) throw settingsError('Inherited model metadata is unavailable. Save the model and test the saved settings instead.')
   return { thinkingLevelMap: base.thinkingLevelMap, compat: { ...base.compat, ...provider.compat } }
 }
@@ -61,6 +76,7 @@ async function inheritedMetadata(source, providerId, modelId, provider, signal) 
 async function draftModel(source, body, configuration, signal) {
   const provider = structuredClone(configuration.providers?.[body.providerId] || {})
   const draft = body.draft
+  const modelId = draft.type === 'model' ? draft.values.id ?? body.modelId : body.modelId
   if (draft.type === 'provider') {
     for (const [key, value] of Object.entries(draft.values)) {
       if (value === null) delete provider[key]
@@ -76,17 +92,21 @@ async function draftModel(source, body, configuration, signal) {
     if (index < 0) definitions.push(model)
     else definitions[index] = model
   }
-  const base = source.getModel(body.providerId, body.modelId)
-  const definition = provider.models?.find((model) => model.id === body.modelId) || {}
-  const overrides = provider.modelOverrides?.[body.modelId] || {}
+  const base = source.getModel(body.providerId, modelId)
+  const definition = provider.models?.find((model) => model.id === modelId) || {}
+  const overrides = provider.modelOverrides?.[modelId] || {}
   const model = mergeMetadata(mergeMetadata({
-    id: body.modelId, name: body.modelId, provider: body.providerId,
+    id: modelId, name: modelId, provider: body.providerId,
     contextWindow: 32768, maxTokens: 16, input: ['text'], reasoning: false,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     ...base,
   }, definition), overrides)
-  model.api = base?.api === 'pi-virtual' ? base.api : definition.api ?? provider.api ?? base?.api
-  model.baseUrl = base?.api === 'pi-virtual' ? base.baseUrl : definition.baseUrl ?? provider.baseUrl ?? base?.baseUrl
+  const routing = modelId !== body.modelId && (!(definition.api ?? provider.api) || !(definition.baseUrl ?? provider.baseUrl))
+    ? await inheritedRouting(source, body.providerId, modelId, provider, signal) : base
+  model.api = base?.api === 'pi-virtual' ? base.api : definition.api ?? provider.api ?? routing?.api
+  model.baseUrl = base?.api === 'pi-virtual' ? base.baseUrl : definition.baseUrl ?? provider.baseUrl ?? routing?.baseUrl
+  const legacy = source.getRegisteredProviderConfig(body.providerId)
+  if (modelId !== body.modelId && legacy?.baseUrl && !legacy.models) model.baseUrl = legacy.baseUrl
   model.headers = { ...base?.headers, ...overrides.headers, ...definition.headers }
   model.compat = { ...provider.compat, ...base?.compat, ...definition.compat, ...overrides.compat }
   if (draft.type === 'model' && model.api !== 'pi-virtual'
@@ -96,7 +116,7 @@ async function draftModel(source, body, configuration, signal) {
       || (Object.hasOwn(draft.values, 'thinkingLevelMap')
         && Object.keys(previous?.thinkingLevelMap || {}).some((level) => !Object.hasOwn(overrides.thinkingLevelMap || {}, level)))
       || (draft.values.compat?.supportsDeveloperRole === null && Object.hasOwn(previous?.compat || {}, 'supportsDeveloperRole'))
-    const inherited = needsDefaults || !base ? await inheritedMetadata(source, body.providerId, body.modelId, provider, signal) : base
+    const inherited = needsDefaults || !base ? await inheritedMetadata(source, body.providerId, modelId, provider, signal) : base
     if (Object.hasOwn(draft.values, 'thinkingLevelMap')) {
       model.thinkingLevelMap = inherited.thinkingLevelMap || overrides.thinkingLevelMap
         ? { ...inherited.thinkingLevelMap, ...overrides.thinkingLevelMap } : undefined
@@ -125,6 +145,8 @@ async function prepareDraft(source, body, configuration, signal, { provider, mod
   const native = source.getRegisteredNativeProvider(body.providerId)
   const extension = native && !isCustomProviderAdapter(source, body.providerId)
   const legacy = source.getRegisteredProviderConfig(body.providerId)
+  const useNativeStream = extension && native.getModels().some((entry) => entry.api === model.api)
+    && !(legacy?.streamSimple && legacy.api === model.api)
   const oauth = source.isUsingOAuth(body.providerId)
   const original = source.getModel(body.providerId, body.modelId)
   if (oauth && body.draft.type === 'provider' && ['baseUrl', 'api'].some((key) => Object.hasOwn(body.draft.values, key)
@@ -154,15 +176,16 @@ async function prepareDraft(source, body, configuration, signal, { provider, mod
     if (!auth?.auth.apiKey) throw settingsError('The draft API key could not be resolved.')
     await runtime.setRuntimeApiKey(body.providerId, auth.auth.apiKey, { signal })
   }
-  const resolution = !replacement && source.getProviderAuthStatus(body.providerId).source === 'runtime' && original
-    ? await source.getAuth(original, { signal })
+  const useRuntimeKey = !replacement && source.getProviderAuthStatus(body.providerId).source === 'runtime' && original
+  const resolution = useRuntimeKey
+    ? await source.getAuth(model.id !== body.modelId ? body.providerId : original, { signal })
     : await runtime.getAuth(model, { signal })
   if (!resolution) throw settingsError('The provider could not resolve its authentication.')
-  if (extension || provider.oauth) {
+  if (extension || provider.oauth || (useRuntimeKey && model.id !== body.modelId)) {
     const headers = await template.getAuth(model, { apiKey: resolution.auth.apiKey, env: resolution.env, signal })
     resolution.auth.headers = { ...resolution.auth.headers, ...headers?.auth.headers }
   }
-  return { model, provider: extension && original?.api === model.api || provider.oauth ? baseline : configured, resolution }
+  return { model, provider: useNativeStream || provider.oauth ? baseline : configured, resolution }
 }
 
 function reportedStatus(message) {
@@ -214,7 +237,7 @@ export async function testProviderConnection({ source, body, operation, configur
       providerStatus = reportedStatus(response.errorMessage)
       throw new Error('Connection test failed')
     }
-    return { providerId: body.providerId, modelId: body.modelId, action: 'test', durationMs: Date.now() - started, ...(httpStatus ? { httpStatus } : {}) }
+    return { providerId: body.providerId, modelId: draftModelResult?.model.id || body.modelId, action: 'test', durationMs: Date.now() - started, ...(httpStatus ? { httpStatus } : {}) }
   } catch (error) {
     operation.signal.throwIfAborted()
     if (signal.aborted) throw settingsError('Connection test timed out after 30 seconds.', 408)
