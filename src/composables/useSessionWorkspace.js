@@ -116,7 +116,7 @@ export function useSessionWorkspace({
       if (!status.label || !session?.cwd || session.isSubagentSession) return []
       return [{
         activityAt: state.activityAt || 0,
-        canStop: state.isStreaming && !state.isCompacting,
+        canStop: state.isStreaming || state.isCompacting,
         detail: runtimeActivityDetail(state),
         project: {
           cwd: session.cwd,
@@ -1218,22 +1218,26 @@ export function useSessionWorkspace({
   }
 
   async function resetSessionToEntry(entry) {
-    if (!entry?.id || !selectedSession.value || !canBranchFromEntry()
-      || liveTurn?.agentRunning?.value) return
+    if (!entry?.id || !selectedSession.value || !canBranchFromEntry()) return
 
+    const sessionId = selectedSessionId.value
+    const token = sessionSelectionToken
     resettingEntryId.value = entry.id
     sessionError.value = ''
     liveTurn?.setActivity?.('Resetting session…')
 
     try {
-      const data = await resetPiSession(entry.id)
+      const data = await resetPiSession(sessionId, entry.id)
+      if (!isCurrentSessionSelection(token, sessionId)) return
       setSelectedSessionData(data.detail, data.active)
       updateSelectedSessionSummary(data.detail.session)
       await scrollToLatest?.()
       await reconnectTerminalIfOpen()
     } catch (error) {
-      sessionError.value = error.message
-      liveTurn?.setActivity?.('')
+      if (selectedSessionId.value === sessionId) {
+        sessionError.value = error.message
+        liveTurn?.setActivity?.('')
+      }
     } finally {
       resettingEntryId.value = ''
     }
@@ -1242,7 +1246,6 @@ export function useSessionWorkspace({
   function canBranchFromEntry() {
     return !forkingEntryId.value
       && !resettingEntryId.value
-      && !liveTurn?.compactingContext?.value
   }
 
   async function reloadSession() {
@@ -1276,7 +1279,8 @@ export function useSessionWorkspace({
   }
 
   async function selectModel(model) {
-    if (switchingUltrafast.value || !model || modelKey(model) === selectedModelKey.value) return false
+    if (switchingModel.value || switchingUltrafast.value
+      || !model || modelKey(model) === selectedModelKey.value) return false
 
     switchingModel.value = true
     sessionError.value = ''
@@ -1349,7 +1353,8 @@ export function useSessionWorkspace({
   }
 
   async function selectThinkingLevel(level) {
-    if (switchingUltrafast.value || !level || level === composerRuntime.value?.state?.thinkingLevel) {
+    if (switchingModel.value || switchingThinking.value || switchingUltrafast.value
+      || !level || level === composerRuntime.value?.state?.thinkingLevel) {
       return false
     }
 
@@ -1819,6 +1824,7 @@ export function useSessionWorkspace({
     hydrateSessions,
     initPhase,
     initializing,
+    invalidateSessionRefresh,
     loadHomeProjects,
     loadRoutedSession,
     loadSessions,

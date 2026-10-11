@@ -19,7 +19,7 @@ const VISION_THINKING_LEVELS = new Set([
 const VISION_DELEGATION_CUSTOM_TYPE = 'leyline-vision-delegation'
 const sessionDelegations = new WeakMap()
 
-export function installVisionDelegationContext(session) {
+export function installVisionDelegationContext(session, prepareDelegation) {
   const state = { pending: [], records: [] }
   const transformContext = session.agent.transformContext
   session.agent.transformContext = async (messages, signal) => {
@@ -29,6 +29,45 @@ export function installVisionDelegationContext(session) {
     ]
     const transformed = applyVisionDelegations(messages, records)
     return transformContext ? transformContext(transformed, signal) : transformed
+  }
+  const streamFunction = session.agent.streamFunction
+  session.agent.streamFunction = async (model, context, options) => {
+    if (!options?.signal || options.signal !== session.agent.signal
+      || options.sessionId !== session.sessionManager.getSessionId()) {
+      return streamFunction(model, context, options)
+    }
+    if (options.signal.aborted) throw new Error('Prompt cancelled')
+    if (model.input?.includes('image')) return streamFunction(model, context, options)
+    let messages = applyVisionDelegations(context.messages, [
+      ...visionDelegationRecords(session.sessionManager.getBranch()),
+      ...state.records,
+    ])
+    for (const message of messages) {
+      if (message.role !== 'user' || !Array.isArray(message.content)) continue
+      const images = message.content.filter((item) => item.type === 'image')
+      if (!images.length) continue
+      if (!prepareDelegation) throw new Error('The dispatched model does not support images.')
+      const delegation = await prepareDelegation(images, options?.signal, model)
+      if (options?.signal?.aborted) throw new Error('Prompt cancelled')
+      const signature = imageSignature(images)
+      const userEntry = session.sessionManager.getBranch().find((entry) => {
+        return entry.type === 'message' && entry.message?.role === 'user'
+          && entry.message.timestamp === message.timestamp
+          && imageSignature(entry.message.content) === signature
+      })
+      const record = {
+        signature,
+        text: delegation.text,
+        settledText: delegation.settledText || delegation.text,
+        paths: delegation.paths,
+        userTimestamp: message.timestamp,
+        userEntryId: userEntry?.id,
+      }
+      if (userEntry) session.sessionManager.appendCustomEntry(VISION_DELEGATION_CUSTOM_TYPE, record)
+      state.records.push(record)
+      messages = applyVisionDelegations(messages, [record])
+    }
+    return streamFunction(model, { ...context, messages }, options)
   }
   session.subscribe((event) => {
     if (event.type !== 'message_end' || event.message?.role !== 'user') return

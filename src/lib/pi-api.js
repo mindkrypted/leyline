@@ -313,8 +313,8 @@ export function forkPiSession(sessionId, entryId) {
   )
 }
 
-export function resetPiSession(entryId) {
-  return apiRequest('/api/pi/reset-to-entry', 'Failed to reset session', {
+export function resetPiSession(sessionId, entryId) {
+  return apiRequest(sessionActionUrl(sessionId, 'reset-to-entry'), 'Failed to reset session', {
     method: 'POST',
     body: { entryId },
   })

@@ -249,7 +249,7 @@ async function piApiHandler(req, res) {
   
         const body = await readJson(req)
         const handle = requireActiveHandle()
-        await bashSession(handle, body.command, body.excludeFromContext)
+        await bashSession(handle, body.command, body.excludeFromContext, responseAbortSignal(res))
         return json(res, {
           ok: true,
           active: activeSessionDto(handle),
@@ -647,6 +647,7 @@ async function piApiHandler(req, res) {
         'compact',
         'edit-prompt',
         'fork',
+        'reset-to-entry',
         'interrupt',
         'reload',
         'model',
@@ -689,7 +690,7 @@ async function piApiHandler(req, res) {
           return json(res, { ok: true, queued: disposition === 'queued', active: activeSessionDto(handle) })
         }
         if (action === 'bash') {
-          await bashSession(handle, body.command, body.excludeFromContext)
+          await bashSession(handle, body.command, body.excludeFromContext, responseAbortSignal(res))
           return json(res, {
             ok: true,
             active: activeSessionDto(handle),
@@ -721,6 +722,14 @@ async function piApiHandler(req, res) {
             ok: true,
             active: activeSessionDto(fork),
             detail: toActiveSessionDetailDto(fork),
+          })
+        }
+        if (action === 'reset-to-entry') {
+          await resetSessionToEntry(handle, body.entryId)
+          return json(res, {
+            ok: true,
+            active: activeSessionDto(handle),
+            detail: toActiveSessionDetailDto(handle),
           })
         }
         if (action === 'interrupt') {

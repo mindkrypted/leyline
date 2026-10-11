@@ -9,7 +9,6 @@ const props = defineProps({
   entry: { type: Object, required: true },
   copiedEntryId: { type: String, default: '' },
   branchBusy: Boolean,
-  running: Boolean,
 })
 const emit = defineEmits(['close', 'copy', 'fork', 'reset'])
 const pane = ref(null)
@@ -160,7 +159,7 @@ defineExpose({ dismissMenu })
           </summary>
           <div class="system-prompt-menu">
             <button type="button" :disabled="branchBusy" @click="branch('fork')">Fork from here</button>
-            <button type="button" :disabled="branchBusy || running" @click="branch('reset')">Reset to here</button>
+            <button type="button" :disabled="branchBusy" @click="branch('reset')">Reset to here</button>
           </div>
         </details>
       </div>

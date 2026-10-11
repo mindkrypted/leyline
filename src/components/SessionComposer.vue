@@ -22,6 +22,7 @@ const props = defineProps({
   },
   canSubmitDraft: Boolean,
   compacting: Boolean,
+  shellRunning: Boolean,
   chips: {
     type: Array,
     default: () => [],
@@ -178,16 +179,15 @@ const queueUiOpen = computed(() => sendMenuOpen.value || Boolean(queue.value?.su
 const shellMode = computed(() => props.draft.trimStart().startsWith('!'))
 const hiddenShellMode = computed(() => props.draft.trimStart().startsWith('!!'))
 const queueMode = computed(() => !shellMode.value && !props.editingLabel
-  && (props.agentRunning || props.promptQueue?.held || props.promptQueue?.items?.length > 0))
-const stopMode = computed(() => props.agentRunning && shellMode.value)
-const submitDisabled = computed(() => props.compacting || props.promptSubmitting
-  || props.reloadingSession || props.switchingUltrafast || !props.canSubmitDraft
-  || (props.agentRunning && Boolean(props.editingLabel)))
+  && (props.agentRunning || props.compacting || props.reloadingSession
+    || props.switchingModel || props.switchingUltrafast
+    || props.promptQueue?.held || props.promptQueue?.items?.length > 0))
+const submitDisabled = computed(() => (props.promptSubmitting && (!props.compacting || props.editingLabel))
+  || !props.canSubmitDraft
+  || (props.shellRunning && shellMode.value)
+  || (props.reloadingSession && Boolean(props.editingLabel)))
 const shellModeLabel = computed(() => {
   return hiddenShellMode.value ? 'shell · hidden' : 'shell · context'
-})
-const inputDisabled = computed(() => {
-  return !props.agentRunning && (props.reloadingSession || props.compacting)
 })
 const {
   dictationButtonDisabled,
@@ -198,7 +198,7 @@ const {
 } = useDictation({
   focus: () => textarea.value?.focus(),
   getDraft: () => props.draft,
-  inputDisabled,
+  inputDisabled: ref(false),
   onDraftChange: () => emit('show-slash-picker'),
   setDraft: (value) => emit('update:draft', value),
 })
@@ -209,7 +209,6 @@ watch([queueMode, () => props.promptSubmitting], ([queueing, submitting]) => {
 })
 
 function focus() {
-  if (inputDisabled.value) return
   textarea.value?.focus()
 }
 
@@ -262,7 +261,7 @@ function updateDraft(event) {
       'hidden-shell-mode-composer': hiddenShellMode,
       'research-mode-composer': research,
     }"
-    @submit.prevent="!switchingUltrafast && emit('submit')"
+    @submit.prevent="emit('submit')"
   >
     <Transition name="composer-reveal">
       <div v-if="editingLabel" class="editing-banner">
@@ -285,11 +284,8 @@ function updateDraft(event) {
       <textarea
         ref="textarea"
         :value="draft"
-        :disabled="inputDisabled"
         :placeholder="placeholder"
-        @keydown="switchingUltrafast && $event.key === 'Enter' && !$event.shiftKey
-          ? $event.preventDefault()
-          : emit('keydown', $event)"
+        @keydown="emit('keydown', $event)"
         @input="updateDraft"
         @paste="emit('paste', $event)"
       ></textarea>
@@ -351,12 +347,7 @@ function updateDraft(event) {
             :available-models="availableModels"
             :current-mobile-model-label="currentMobileModelLabel"
             :current-model-label="currentModelLabel"
-            :disabled="agentRunning
-              || compacting
-              || promptSubmitting
-              || reloadingSession
-              || switchingModel
-              || switchingUltrafast"
+            :disabled="reloadingSession || switchingModel || switchingUltrafast"
             :model-key="modelKey"
             :open="modelPickerOpen && !switchingUltrafast"
             :selected-model-key="selectedModelKey"
@@ -367,12 +358,8 @@ function updateDraft(event) {
             <button
               class="composer-chip model-picker-button"
               type="button"
-              :disabled="agentRunning
-                || compacting
-                || promptSubmitting
-                || reloadingSession
-                || switchingThinking
-                || switchingUltrafast"
+              :disabled="reloadingSession || switchingModel
+                || switchingThinking || switchingUltrafast"
               @click="emit('toggle-picker', 'thinking')"
             >
               <span class="model-label desktop-label">
@@ -402,13 +389,8 @@ function updateDraft(event) {
           <UltrafastToggle
             v-if="ultrafastAvailable"
             :enabled="ultrafastEnabled"
-            :disabled="agentRunning
-              || compacting
-              || promptSubmitting
-              || reloadingSession
-              || switchingModel
-              || switchingThinking
-              || switchingUltrafast"
+            :disabled="reloadingSession || switchingModel
+              || switchingThinking || switchingUltrafast"
             @toggle="emit('toggle-ultrafast')"
           />
           <button
@@ -446,17 +428,13 @@ function updateDraft(event) {
           <div ref="sendActions" class="composer-send-actions">
             <button
               class="send-button"
-              :class="{
-                'stop-button': stopMode,
-                'shell-run-button': shellMode,
-              }"
-              :type="stopMode ? 'button' : 'submit'"
-              :disabled="stopMode ? interrupting || compacting : submitDisabled"
+              :class="{ 'shell-run-button': shellMode }"
+              type="submit"
+              :disabled="submitDisabled"
               :title="queueMode
                 ? 'Queue next task (Enter)'
-                : stopMode ? 'Stop generation' : shellMode ? 'Run shell command' : 'Send message'"
-              :aria-label="queueMode ? 'Queue message' : stopMode ? 'Stop generation' : shellMode ? 'Run shell command' : 'Send message'"
-              @click="stopMode && emit('interrupt')"
+                : shellMode ? 'Run shell command' : 'Send message'"
+              :aria-label="queueMode ? 'Queue message' : shellMode ? 'Run shell command' : 'Send message'"
             >{{ queueMode || editingLabel ? '↑' : sendButtonLabel }}</button>
             <button
               v-if="queueMode"
@@ -488,10 +466,10 @@ function updateDraft(event) {
           {{ compacting ? 'compacting' : 'running' }}
         </span>
         <button
-          v-if="agentRunning && !shellMode"
+          v-if="agentRunning || compacting || shellRunning"
           class="composer-stop-control"
           type="button"
-          :disabled="interrupting || compacting"
+          :disabled="interrupting"
           title="Stop the current run and hold queued messages"
           aria-label="Stop generation"
           @click="emit('interrupt')"
@@ -504,7 +482,7 @@ function updateDraft(event) {
           class="composer-chip research-mode-chip"
           :class="{ active: research }"
           type="button"
-          :disabled="shellMode || inputDisabled || promptSubmitting"
+          :disabled="shellMode || promptSubmitting"
           :aria-pressed="research"
           title="Toggle deep research mode"
           @click="emit('toggle-research')"

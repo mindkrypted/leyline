@@ -141,6 +141,8 @@ let reviewCloseTimer = null
 let reviewDesktopQuery = null
 let reviewExpansionTimer = null
 const promptSubmitting = ref(false)
+const manualCompactionSessions = ref(new Set())
+const shellRunningSessions = ref(new Set())
 const interrupting = ref(false)
 const activityInterruptingSessionId = ref('')
 const activityActionError = ref('')
@@ -393,6 +395,7 @@ const {
   hydrateSessions,
   initPhase,
   initializing,
+  invalidateSessionRefresh,
   loadHomeProjects,
   loadRoutedSession,
   loadSessions,
@@ -941,20 +944,18 @@ const canToggleEmptySessionResearch = computed(() => {
     && !selectedSessionHasMessages.value
     && !liveTurnActive.value
 })
+const composerCompacting = computed(() => compactingContext.value
+  || manualCompactionSessions.value.has(selectedSessionId.value))
+const composerShellRunning = computed(() => shellRunningSessions.value.has(selectedSessionId.value))
 const sendButtonLabel = computed(() => {
-  if (compactingContext.value) return '…'
-  if (agentRunning.value) return '■'
-  if (promptSubmitting.value || reloadingSession.value || sessionActivating.value) {
-    return '…'
-  }
+  if (promptSubmitting.value || sessionActivating.value) return '…'
   if (shellModeDraft.value) return 'Run'
   return '↑'
 })
 const composerPlaceholder = computed(() => {
-  if (compactingContext.value) return 'Compacting context before continuing…'
   if (sessionActivating.value) return 'Activating pi runtime…'
   if (promptQueue.value.held) return 'Add a task to the held queue…'
-  if (agentRunning.value) return 'Add the next task…'
+  if (agentRunning.value || composerCompacting.value || reloadingSession.value) return 'Add the next task…'
   if (researchReportNeedsRepair.value) {
     return 'Ask Leyline to repair and revalidate the report'
   }
@@ -2507,19 +2508,18 @@ function restoreComposerEdit(key, entry, text, images) {
 }
 
 async function submitDraft(streamingBehavior) {
-  const text = draft.value.trim()
+  const submittedDraft = draft.value
+  const text = submittedDraft.trim()
   const submittedAttachments = attachedImages.value
   const images = submittedAttachments.map(({ preview, ...image }) => image)
   const shellCommand = shellCommandFromText(text)
   const compactCommand = compactCommandFromText(text)
   if (!text && images.length === 0) return
-  if (promptSubmitting.value
-    || switchingUltrafast.value
-    || reloadingSession.value
+  if ((promptSubmitting.value && (!composerCompacting.value || editingEntry.value))
+    || (reloadingSession.value && editingEntry.value)
     || sessionLoading.value
     || sessionSwitching.value
-    || sessionActivating.value
-    || compactingContext.value) {
+    || sessionActivating.value) {
     return
   }
 
@@ -2533,17 +2533,13 @@ async function submitDraft(streamingBehavior) {
     return
   }
 
-  if (editingEntry.value && agentRunning.value) {
-    promptError.value = 'Wait for the current response to finish before editing.'
-    return
-  }
-
   if (streamingBehavior === 'steer' && promptQueue.value.held && !editingEntry.value) {
     promptError.value = 'Resume the queue before steering.'
     return
   }
 
-  if (!editingEntry.value && (agentRunning.value
+  if (!editingEntry.value && (agentRunning.value || composerCompacting.value
+    || reloadingSession.value || switchingModel.value || switchingUltrafast.value
     || promptQueue.value.held || promptQueue.value.items.length)) {
     const sessionId = selectedSessionId.value
     const submittedDraft = draft.value
@@ -2586,6 +2582,14 @@ async function submitDraft(streamingBehavior) {
     return
   }
   if (editing && editing !== editingEntry.value) editingEntry.value = editing
+  if (editing) {
+    draft.value = ''
+    attachedImages.value = []
+    if (!await stopForPromptEdit(sessionId)) {
+      restoreComposerEdit(composerDraftKey(sessionId), editing, submittedDraft, submittedAttachments)
+      return
+    }
+  }
   const previousDetail = sessionDetail.value
   const shouldFollowOutput = editing || stickToBottom.value
   const startsTurn = !isHandledSlashCommand(text)
@@ -2599,6 +2603,7 @@ async function submitDraft(streamingBehavior) {
     && !selectedSessionHasMessages.value
     && emptySessionKind.value === 'research'
   if (editing) {
+    invalidateSessionRefresh()
     resetLiveState()
     trimSessionToEntry(editing.id)
     stickToBottom.value = true
@@ -2609,11 +2614,12 @@ async function submitDraft(streamingBehavior) {
   const motionToken = startsEmptySession ? composerMotion.begin('session') : null
   if (!startsEmptySession && !startupRun.value) pulseComposerCommit()
   const localEntry = beginUserTurn(text, images)
-  const submittedDraft = draft.value
   promptSubmitting.value = true
   promptError.value = ''
-  draft.value = ''
-  attachedImages.value = []
+  if (!editing) {
+    draft.value = ''
+    attachedImages.value = []
+  }
   if (shouldFollowOutput) await scrollToLatest()
   else hasNewOutput.value = true
 
@@ -2642,7 +2648,7 @@ async function submitDraft(streamingBehavior) {
       if (isHandledSlashCommand(text) || data.queued) {
         removeOptimisticEntry(localEntry, data.queued === true)
       }
-      editingEntry.value = null
+      if (editingEntry.value?.id === editing?.id) editingEntry.value = null
       if (startsTurn && !data.queued
         && activeRuntimeSession.value?.state?.isStreaming) {
         setAgentRunning(true, 'Thinking…')
@@ -2701,8 +2707,8 @@ async function submitCompactCommand(compactCommand, images) {
     promptError.value = 'Cancel editing before compacting.'
     return
   }
-  if (agentRunning.value) {
-    promptError.value = 'Wait for the current response to finish before compacting.'
+  if (composerCompacting.value) {
+    promptError.value = 'Compaction is already running.'
     return
   }
   if (images.length) {
@@ -2710,11 +2716,12 @@ async function submitCompactCommand(compactCommand, images) {
     return
   }
 
-  promptSubmitting.value = true
-  promptError.value = ''
-  resetLiveState()
-  draft.value = ''
   const sessionId = selectedSessionId.value
+  const submittedDraft = draft.value
+  manualCompactionSessions.value = new Set([...manualCompactionSessions.value, sessionId])
+  promptError.value = ''
+  draft.value = ''
+  refocusComposer()
   try {
     const data = await compactPiSession(
       sessionId,
@@ -2729,12 +2736,15 @@ async function submitCompactCommand(compactCommand, images) {
     await loadSessions({ selectFirst: false, showLoading: false })
     if (selectedSessionId.value === sessionId) await scrollToLatest()
   } catch (error) {
-    if (selectedSessionId.value === sessionId) {
+    if (selectedSessionId.value === sessionId && error.name !== 'AbortError'
+      && !['Compaction cancelled', 'This operation was aborted'].includes(error.message)) {
+      if (!draft.value && !attachedImages.value.length) draft.value = submittedDraft
       promptError.value = error.message
     }
   } finally {
-    promptSubmitting.value = false
-    refocusComposer()
+    const pending = new Set(manualCompactionSessions.value)
+    pending.delete(sessionId)
+    manualCompactionSessions.value = pending
   }
 }
 
@@ -2748,18 +2758,20 @@ async function submitShellCommand(shellCommand, images) {
     return
   }
 
+  const sessionId = selectedSessionId.value
+  if (shellRunningSessions.value.has(sessionId)) return
   const submittedDraft = draft.value
-  promptSubmitting.value = true
+  shellRunningSessions.value = new Set([...shellRunningSessions.value, sessionId])
   promptError.value = ''
   draft.value = ''
-  if (!agentRunning.value) resetLiveState()
+  if (!agentRunning.value && !composerCompacting.value) resetLiveState()
+  refocusComposer()
   upsertLiveTool({
     type: 'tool_execution_start',
     toolName: 'bash',
     args: { command: shellCommand.command },
   }, 'running')
 
-  const sessionId = selectedSessionId.value
   const shellCwd = settingsCwd.value
   try {
     const data = await runShellCommand(
@@ -2779,14 +2791,14 @@ async function submitShellCommand(shellCommand, images) {
   } catch (error) {
     if (selectedSessionId.value === sessionId) {
       finishLiveTools('error')
-      draft.value = submittedDraft
+      if (!draft.value && !attachedImages.value.length) draft.value = submittedDraft
       promptError.value = error.message
     }
   } finally {
     invalidateReview(shellCwd)
-    promptSubmitting.value = false
-    if (selectedSessionId.value === sessionId) setLiveActivity('')
-    refocusComposer()
+    const running = new Set(shellRunningSessions.value)
+    running.delete(sessionId)
+    shellRunningSessions.value = running
   }
 }
 
@@ -2799,10 +2811,7 @@ function slashCommandStartsTurn(text) {
 }
 
 function startEditingEntry(entry) {
-  if (agentRunning.value
-    || compactingContext.value
-    || promptSubmitting.value
-    || !entry?.id) return
+  if (!entry?.id) return
 
   const target = persistedEditingEntry(entry)
   if (!target) {
@@ -2823,9 +2832,7 @@ function startEditingEntry(entry) {
 }
 
 async function retryEntry(entry) {
-  if (agentRunning.value
-    || compactingContext.value
-    || promptSubmitting.value
+  if (promptSubmitting.value
     || reloadingSession.value
     || sessionLoading.value
     || sessionSwitching.value
@@ -2844,7 +2851,9 @@ async function retryEntry(entry) {
   if (!text && images.length === 0) return
 
   const sessionId = selectedSessionId.value
+  if (!await stopForPromptEdit(sessionId)) return
   const previousDetail = sessionDetail.value
+  invalidateSessionRefresh()
   resetLiveState()
   trimSessionToEntry(target.id)
   stickToBottom.value = true
@@ -2878,6 +2887,24 @@ async function retryEntry(entry) {
   } finally {
     promptSubmitting.value = false
     refocusComposer()
+  }
+}
+
+async function stopForPromptEdit(sessionId) {
+  if (!agentRunning.value && !composerCompacting.value && !composerShellRunning.value) return true
+  promptSubmitting.value = true
+  setLiveActivity('Stopping…')
+  try {
+    const data = await interruptPiSession(sessionId)
+    if (selectedSessionId.value !== sessionId) return false
+    if (data.active) activeRuntimeSession.value = data.active
+    return true
+  } catch (error) {
+    if (selectedSessionId.value === sessionId) promptError.value = error.message
+    return false
+  } finally {
+    promptSubmitting.value = false
+    if (selectedSessionId.value === sessionId && liveActivity.value === 'Stopping…') setLiveActivity('')
   }
 }
 
@@ -2952,7 +2979,8 @@ async function runGoalCommand(command) {
 }
 
 async function interruptAgent() {
-  if (!agentRunning.value || interrupting.value) return
+  if ((!agentRunning.value && !composerCompacting.value && !composerShellRunning.value)
+    || interrupting.value) return
 
   interrupting.value = true
   promptError.value = ''
@@ -3306,7 +3334,8 @@ function handleEscape(event) {
     event?.stopPropagation?.()
     return
   }
-  if (!anyEscapeTargetOpen() && agentRunning.value) {
+  if (!anyEscapeTargetOpen()
+    && (agentRunning.value || composerCompacting.value || composerShellRunning.value)) {
     event?.preventDefault?.()
     void interruptAgent()
   }
@@ -4252,7 +4281,8 @@ function closePickerMenus() {
             v-model:draft="draft"
             :agent-running="agentRunning"
             :attached-images="attachedImages"
-            :compacting="compactingContext"
+            :compacting="composerCompacting"
+            :shell-running="composerShellRunning"
             :available-models="availableModels"
             :available-thinking-levels="availableThinkingLevels"
             :can-submit-draft="canSubmitDraft"
@@ -4357,8 +4387,7 @@ function closePickerMenus() {
         ref="systemPromptPane"
         :entry="systemPromptEntry"
         :copied-entry-id="copiedEntryId"
-        :branch-busy="!!forkingEntryId || !!resettingEntryId || compactingContext"
-        :running="agentRunning"
+        :branch-busy="!!forkingEntryId || !!resettingEntryId"
         @close="closeSystemPrompt"
         @copy="copyEntry"
         @fork="forkSession"

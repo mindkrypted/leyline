@@ -77,6 +77,7 @@ import {
   createAgentSessionFromServices,
   createAgentSessionRuntime,
   createAgentSessionServices,
+  createEventBus,
   createMcpExtension,
   createToolSearchExtension,
   getAgentDir,
@@ -173,6 +174,9 @@ const runtimeHandles = new Map()
 const hiddenRuntimeHandles = new Set()
 const runtimeHandlePromises = new Map()
 const pendingRuntimeCreations = new Set()
+const runtimeInitializations = new Set()
+const trashingSessionIds = new Set()
+const trashingProjectCwds = new Set()
 const providerSettingsRuntimes = createProviderSettingsRuntimes({ isClosing: () => runtimeShuttingDown })
 const providerSessions = new Set()
 const runtimeDisposals = new WeakMap()
@@ -330,16 +334,23 @@ function childSessionMarker(manager) {
   })?.data
 }
 
-function createRuntimeResult(...args) {
-  return withProviderSettingsLock(async (signal) => {
-    const result = await buildRuntimeResult(...args)
-    if (signal.aborted || runtimeShuttingDown) {
-      await disposeRuntime(new AgentSessionRuntime(result.session, result.services, createRuntime))
-      throw new Error('Runtime is shutting down')
-    }
-    providerSessions.add(result.session)
-    return result
-  })
+async function createRuntimeResult(...args) {
+  const options = args[0]
+  requireSessionAvailable({ id: options.sessionManager.getSessionId(), cwd: options.cwd })
+  runtimeInitializations.add(options)
+  try {
+    return await withProviderSettingsLock(async (signal) => {
+      const result = await buildRuntimeResult(...args)
+      if (signal.aborted || runtimeShuttingDown) {
+        await disposeRuntime(new AgentSessionRuntime(result.session, result.services, createRuntime))
+        throw new Error('Runtime is shutting down')
+      }
+      providerSessions.add(result.session)
+      return result
+    })
+  } finally {
+    runtimeInitializations.delete(options)
+  }
 }
 
 async function buildRuntimeResult(
@@ -360,6 +371,7 @@ async function buildRuntimeResult(
     ...(child?.toolPolicy?.excludeTools || []),
     ...(child ? [SUBAGENT_DELEGATION_TOOL] : []),
   ])]
+  const requestEvents = reloadServices?.requestEvents || createEventBus()
   const services = reloadServices ? {
     ...reloadServices,
     modelRuntime: await ModelRuntime.create({
@@ -370,6 +382,7 @@ async function buildRuntimeResult(
     cwd,
     agentDir,
     resourceLoaderOptions: {
+      eventBus: requestEvents,
       extensionFactories: systemPrompt ? [] : [
         {
           name: 'tool-search',
@@ -407,6 +420,7 @@ async function buildRuntimeResult(
         : { appendSystemPromptOverride: appendLeylineSystemPrompt }),
     },
   })
+  services.requestEvents = requestEvents
   const previousExtensions = reloadServices && services.resourceLoader.getExtensions()
   let runtime
   try {
@@ -453,7 +467,23 @@ async function buildRuntimeResult(
       diagnostics: services.diagnostics,
     }
     forceOneAtATime(runtime.session)
-    installVisionDelegationContext(runtime.session)
+    installVisionDelegationContext(runtime.session, systemPrompt ? undefined : (images, signal, requestModel) => {
+      return prepareVisionDelegation(runtime.session, images, signal, requestModel)
+    })
+    const streamFunction = runtime.session.agent.streamFunction
+    runtime.session.agent.streamFunction = (requestModel, context, options) => {
+      const requestOptions = { ...options }
+      if (options?.signal && options.signal === runtime.session.agent.signal
+        && options.sessionId === runtime.session.sessionManager.getSessionId()) {
+        requestEvents.emit('leyline:provider-request', {
+          model: requestModel,
+          options: requestOptions,
+          ctx: runtime.session.extensionRunner.createContext(),
+        })
+      }
+      return streamFunction(requestModel, context, requestOptions)
+    }
+    requestEvents.emit('leyline:request-boundary-ready')
     return runtime
   } catch (error) {
     if (runtime || services.resourceLoader.getExtensions() !== previousExtensions) {
@@ -511,10 +541,6 @@ async function resolveSession(id, path, cwd) {
   return findSession(id)
 }
 
-function isActiveSession(id) {
-  return activeHandle && id === activeSessionId
-}
-
 const switchActiveSession = trackRuntimeCreation(async (session) => {
   const handle = await ensureRuntimeForSession(session)
   setActiveHandle(handle)
@@ -534,13 +560,29 @@ function requireActiveHandle() {
   return activeHandle
 }
 
+function requireSessionAvailable(session) {
+  if (trashingSessionIds.has(session.id) || trashingProjectCwds.has(session.cwd)) {
+    throw new Error('Session deletion is in progress.')
+  }
+}
+
 function requireInitializedSession(handle) {
+  requireSessionAvailable({ id: handle.sessionId, cwd: handle.runtime.cwd })
+  if (runtimeShuttingDown || handle.disposalPromise) throw new Error('Session is closed')
   if (handle.initializing || handle.bindingExtensions || handle.reloading) {
     throw new Error('Wait for session initialization to finish.')
   }
 }
 
+function requireSessionMutation(handle) {
+  requireInitializedSession(handle)
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
+  if (handle.settingModel) throw new Error('Wait for the model change to finish.')
+  if (handle.settingUltrafast) throw new Error('Wait for the Ultrafast change to finish.')
+}
+
 const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
+  requireSessionAvailable(session)
   const key = session.id || session.path
   const existing = runtimeHandles.get(session.id)
   if (existing) return existing
@@ -565,9 +607,10 @@ const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
       unsubscribe: undefined,
       extensionUiState: emptyExtensionUiState(),
     }
-    runtimeHandles.set(sessionId, handle)
-    forceOneAtATime(runtime.session)
     try {
+      requireSessionAvailable({ id: sessionId, cwd: runtime.cwd })
+      runtimeHandles.set(sessionId, handle)
+      forceOneAtATime(runtime.session)
       await bindRuntimeHandle(handle)
       return handle
     } catch (error) {
@@ -626,10 +669,36 @@ async function promptSession(
   kind,
   handoffId,
   onAccepted,
+  editing = false,
 ) {
+  requireSessionAvailable({ id: handle.sessionId, cwd: handle.runtime.cwd })
+  if (runtimeShuttingDown || handle.disposalPromise) throw new Error('Session is closed')
+  const promptText = typeof text === 'string' ? text : ''
+  const promptImages = validateImages(images)
+  const promptHandoffId = typeof handoffId === 'string'
+    && handoffId.length <= 100
+    ? handoffId
+    : undefined
+  if (!promptText.trim() && promptImages.length === 0) {
+    throw new Error('text or image is required')
+  }
+  if (streamingBehavior && !['steer', 'followUp'].includes(streamingBehavior)) {
+    throw new Error('invalid streaming behavior')
+  }
+  if (signal?.aborted) throw new Error('Prompt cancelled')
+  const queue = ensurePromptQueue(handle)
+  const retainPrompt = () => {
+    if (editing) throw new Error('Prompt cancelled')
+    if (!onAccepted) {
+      queue.add({ text: promptText, images: promptImages, kind, handoffId: promptHandoffId })
+    }
+    if (handle.interruptPromise || handle.reloading || (handle.changingBranch && !editing)) {
+      queue.hold()
+    }
+    return 'queued'
+  }
+  if (handle.reloading) return retainPrompt()
   requireInitializedSession(handle)
-  if (handle.settingModel) throw new Error('Finish the model change before sending.')
-  if (handle.settingUltrafast) throw new Error('Finish the Ultrafast change before sending.')
   const session = handle.runtime.session
   const controller = new AbortController()
   const abortPrompt = () => controller.abort()
@@ -637,33 +706,31 @@ async function promptSession(
   else signal?.addEventListener?.('abort', abortPrompt, { once: true })
   handle.pendingPromptControllers ||= new Set()
   handle.pendingPromptControllers.add(controller)
+  let release
 
   try {
     if (controller.signal.aborted) throw new Error('Prompt cancelled')
     forceOneAtATime(session)
-    const promptText = typeof text === 'string' ? text : ''
-    const promptImages = validateImages(images)
-    const promptHandoffId = typeof handoffId === 'string'
-      && handoffId.length <= 100
-      ? handoffId
-      : undefined
-    if (!promptText.trim() && promptImages.length === 0) {
-      throw new Error('text or image is required')
+    const waitingForPrompt = () => {
+      if (handle.interruptPromise || handle.reloading || (handle.changingBranch && !editing)) return true
+      if (isExtensionCommand(session, promptText)) return false
+      if (handle.settingModel || handle.settingUltrafast
+        || handle.compactionPromise || session.isCompacting) return true
+      if (onAccepted) return false
+      const pending = queue.snapshot()
+      return pending.held || (streamingBehavior !== 'steer'
+        && (streamingBehavior === 'followUp' || !session.isIdle || pending.items.length))
     }
-    if (streamingBehavior
-      && !['steer', 'followUp'].includes(streamingBehavior)) {
-      throw new Error('invalid streaming behavior')
-    }
+    if (waitingForPrompt()) return retainPrompt()
     await initializeSessionKind(handle, kind)
     if (controller.signal.aborted) throw new Error('Prompt cancelled')
-    const queue = ensurePromptQueue(handle)
-    const pending = queue.snapshot()
-    if (!onAccepted && !isExtensionCommand(session, promptText)
-      && (pending.held || (streamingBehavior !== 'steer'
-        && (streamingBehavior === 'followUp' || !session.isIdle || pending.items.length)))) {
-      queue.add({ text: promptText, images: promptImages, kind, handoffId: promptHandoffId })
-      return 'queued'
-    }
+    if (waitingForPrompt()) return retainPrompt()
+
+    release = await lockPromptSubmission(handle)
+    if (controller.signal.aborted) throw new Error('Prompt cancelled')
+    if (waitingForPrompt()) return retainPrompt()
+    requireInitializedSession(handle)
+    if (handle.runtime.session !== session) throw new Error('Session changed before sending')
 
     const model = session.state?.model || session.model
     const modelSupportsImages = Boolean(model?.input?.includes('image'))
@@ -672,12 +739,15 @@ async function promptSession(
       && !isExtensionCommand(session, promptText)
     const delegation = shouldDelegate
       ? await prepareVisionDelegation(
-        handle,
+        session,
         promptImages,
         controller.signal,
       )
       : null
     if (controller.signal.aborted) throw new Error('Prompt cancelled')
+    if (waitingForPrompt()) return retainPrompt()
+    requireInitializedSession(handle)
+    if (handle.runtime.session !== session) throw new Error('Session changed before sending')
 
     if (!delegation) {
       const disposition = await runSessionPrompt(
@@ -729,6 +799,7 @@ async function promptSession(
   } finally {
     signal?.removeEventListener?.('abort', abortPrompt)
     handle.pendingPromptControllers.delete(controller)
+    release?.()
     handle.promptQueue?.schedule()
   }
 }
@@ -743,6 +814,8 @@ function ensurePromptQueue(handle) {
       && !handle.initializing
       && !handle.settingModel
       && !handle.settingUltrafast
+      && !handle.compactionPromise
+      && !handle.changingBranch
       && !handle.disposalPromise
       && !runtimeShuttingDown,
     submit: (item, streamingBehavior, signal, onAccepted) => promptSession(
@@ -762,8 +835,8 @@ function ensurePromptQueue(handle) {
 
 async function updatePromptQueue(handle, request) {
   requireInitializedSession(handle)
-  if (request.action === 'resume' && handle.interruptPromise) {
-    throw new Error('Wait for the current run to stop before resuming.')
+  if (request.action === 'resume' && (handle.interruptPromise || handle.changingBranch)) {
+    throw new Error('Wait for the current operation to finish before resuming.')
   }
   await ensurePromptQueue(handle).update(request)
 }
@@ -778,7 +851,6 @@ async function runSessionPrompt(
   visionRegistration,
   onAccepted,
 ) {
-  const release = await lockPromptSubmission(handle)
   const session = handle.runtime.session
   let handoff
   try {
@@ -815,7 +887,6 @@ async function runSessionPrompt(
     return disposition
   } finally {
     settlePromptHandoff(handle, handoff)
-    release()
   }
 }
 
@@ -857,19 +928,18 @@ function isExtensionCommand(session, text) {
   return Boolean(session.extensionRunner.getCommand(name))
 }
 
-async function prepareVisionDelegation(handle, images, signal) {
+async function prepareVisionDelegation(session, images, signal, model = session.state?.model || session.model) {
   if (signal?.aborted) throw new Error('Prompt cancelled')
-  const session = handle.runtime.session
   const cwd = session.sessionManager.getCwd()
   const sessionPath = session.sessionManager.getSessionFile() || null
   const resolved = resolveVisionConfig({ cwd, sessionPath })
   if (!resolved.model) {
     throw new Error(
-      `${formatModelLabel(session.state?.model || session.model)} does not support images and no vision model is configured. Set a default vision model in Leyline Settings → Vision.`,
+      `${formatModelLabel(model)} does not support images and no vision model is configured. Set a default vision model in Leyline Settings → Vision.`,
     )
   }
 
-  const modelRuntime = handle.runtime.services?.modelRuntime
+  const modelRuntime = session.modelRuntime
   const visionModel = modelRuntime
     ? resolveSubagentModel(modelRuntime, resolved.model)
     : null
@@ -947,40 +1017,65 @@ function formatModelLabel(model) {
   return String(model)
 }
 
-async function bashSession(handle, command, excludeFromContext = false) {
+async function bashSession(handle, command, excludeFromContext = false, signal) {
+  requireInitializedSession(handle)
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
+  if (handle.interruptPromise) throw new Error('Wait for the current run to stop.')
   const session = handle.runtime.session
   const bashCommand = typeof command === 'string' ? command.trim() : ''
   if (!bashCommand) throw new Error('shell command is required')
-  if (session.isBashRunning) {
+  if (handle.bashPromise || session.isBashRunning) {
     throw new Error('A shell command is already running')
   }
 
-  const eventResult = await session.extensionRunner.emitUserBash({
-    type: 'user_bash',
-    command: bashCommand,
-    excludeFromContext: excludeFromContext === true,
-    cwd: session.sessionManager.getCwd(),
-  })
+  if (signal?.aborted) throw new Error('Shell command cancelled')
 
-  if (eventResult?.result) {
-    session.recordBashResult(bashCommand, eventResult.result, {
-      excludeFromContext: excludeFromContext === true,
-    })
-    return eventResult.result
+  const controller = new AbortController()
+  const abortBash = () => {
+    controller.abort()
+    session.abortBash()
   }
-
-  return session.executeBash(bashCommand, undefined, {
-    excludeFromContext: excludeFromContext === true,
-    operations: eventResult?.operations,
+  signal?.addEventListener('abort', abortBash, { once: true })
+  handle.bashController = controller
+  handle.bashPromise = Promise.resolve().then(async () => {
+    if (controller.signal.aborted) throw new Error('Shell command cancelled')
+    const eventResult = await session.extensionRunner.emitUserBash({
+      type: 'user_bash',
+      command: bashCommand,
+      excludeFromContext: excludeFromContext === true,
+      cwd: session.sessionManager.getCwd(),
+    })
+    if (controller.signal.aborted) throw new Error('Shell command cancelled')
+    requireInitializedSession(handle)
+    if (handle.changingBranch || handle.interruptPromise || handle.runtime.session !== session) {
+      throw new Error('Session changed before running the shell command')
+    }
+    if (eventResult?.result) {
+      session.recordBashResult(bashCommand, eventResult.result, {
+        excludeFromContext: excludeFromContext === true,
+      })
+      return eventResult.result
+    }
+    return session.executeBash(bashCommand, undefined, {
+      excludeFromContext: excludeFromContext === true,
+      operations: eventResult?.operations,
+    })
   })
+  try {
+    return await handle.bashPromise
+  } finally {
+    signal?.removeEventListener('abort', abortBash)
+    handle.bashController = undefined
+    handle.bashPromise = undefined
+  }
 }
 
 async function compactSession(handle, customInstructions) {
+  requireInitializedSession(handle)
   const session = handle.runtime.session
-  if (session.isStreaming) {
-    throw new Error('Wait for the current response to finish before compacting.')
-  }
-  if (session.isCompacting) {
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
+  if (handle.interruptPromise) throw new Error('Wait for the current run to stop.')
+  if (session.isCompacting || handle.compactionPromise) {
     throw new Error('Compaction is already running.')
   }
 
@@ -991,7 +1086,35 @@ async function compactSession(handle, customInstructions) {
   const instructions = typeof customInstructions === 'string'
     ? customInstructions.trim()
     : ''
-  await session.compact(instructions || undefined)
+  const controller = new AbortController()
+  handle.compactionController = controller
+  const unsubscribe = session.subscribe((event) => {
+    if (event.type === 'compaction_start' && controller.signal.aborted) {
+      session.abortCompaction()
+    }
+  })
+  handle.compactionPromise = (async () => {
+    const release = await lockPromptSubmission(handle)
+    let operation
+    try {
+      requireInitializedSession(handle)
+      if (controller.signal.aborted) throw new Error('Compaction cancelled')
+      if (handle.runtime.session !== session) throw new Error('Session changed before compacting')
+      if (session.isCompacting) throw new Error('Compaction is already running.')
+      operation = session.compact(instructions || undefined)
+    } finally {
+      release()
+    }
+    await operation
+  })()
+  try {
+    await handle.compactionPromise
+  } finally {
+    unsubscribe()
+    handle.compactionController = undefined
+    handle.compactionPromise = undefined
+    handle.promptQueue?.schedule()
+  }
 }
 
 function validateImages(images) {
@@ -1015,13 +1138,26 @@ function validateImages(images) {
 async function interruptSession(handle) {
   if (handle.interruptPromise) return handle.interruptPromise
   ensurePromptQueue(handle).hold()
-  handle.subagentController?.abort()
-  cleanupExtensionConfirmations(handle, { invalidate: false })
-  for (const controller of handle.pendingPromptControllers || []) {
-    controller.abort()
-  }
-  handle.interruptPromise = handle.runtime.session.abort()
+  const session = handle.runtime.session
+  handle.interruptPromise = Promise.resolve().then(async () => {
+    await session.abort()
+    await handle.promptSubmissionLock
+    await handle.compactionPromise?.catch(() => {})
+    if (handle.bashPromise) {
+      await waitForSettings(handle.bashPromise.catch(() => {}), AbortSignal.timeout(3000))
+    }
+    await session.abort()
+    await session.waitForIdle()
+  })
   try {
+    handle.subagentController?.abort()
+    handle.compactionController?.abort()
+    handle.bashController?.abort()
+    session.abortBash()
+    cleanupExtensionConfirmations(handle, { invalidate: false })
+    for (const controller of handle.pendingPromptControllers || []) {
+      controller.abort()
+    }
     await handle.interruptPromise
   } finally {
     handle.interruptPromise = undefined
@@ -1041,20 +1177,16 @@ async function editSessionPrompt(
   if (!entryId) throw new Error('entryId is required')
   if (handle.settingModel) throw new Error('Finish the model change before editing.')
   if (handle.settingUltrafast) throw new Error('Finish the Ultrafast change before editing.')
-  if (session.isStreaming) {
-    throw new Error('Wait for the current response to finish before editing.')
-  }
-  if (session.isCompacting) {
-    throw new Error('Wait for compaction to finish before editing.')
-  }
-
-  if (handle.pendingPromptControllers?.size) {
-    throw new Error('Wait for the pending message to finish sending before editing.')
-  }
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   const entry = session.sessionManager.getEntry(entryId)
   if (entry?.type !== 'message' || entry.message?.role !== 'user') {
     throw new Error('Only user messages can be edited')
   }
+  const promptImages = validateImages(images)
+  if ((typeof text !== 'string' || !text.trim()) && !promptImages.length) {
+    throw new Error('text or image is required')
+  }
+  if (signal?.aborted) throw new Error('Prompt cancelled')
 
   const ultrafastModel = handle.extensionUiState?.statuses?.[ULTRAFAST_STATUS_KEY] === 'on'
     ? session.model
@@ -1065,13 +1197,17 @@ async function editSessionPrompt(
       && handle.runtime.session === session
       && session.model?.provider === ultrafastModel.provider
       && session.model?.id === ultrafastModel.id) {
-      await setSessionUltrafast(handle, true)
+      await setSessionUltrafast(handle, true, undefined, true)
     }
   }
 
-  if (handle.promptQueue?.snapshot().items.length) handle.promptQueue.hold()
-  const oldLeafId = session.sessionManager.getLeafId()
+  handle.changingBranch = true
   try {
+    await interruptSession(handle)
+    requireInitializedSession(handle)
+    if (signal?.aborted) throw new Error('Prompt cancelled')
+    if (handle.runtime.session !== session) throw new Error('Session changed before editing')
+    const oldLeafId = session.sessionManager.getLeafId()
     if (oldLeafId === entryId) moveSessionLeaf(session, entry.parentId || null)
     else {
       const result = await session.navigateTree(entryId)
@@ -1082,12 +1218,13 @@ async function editSessionPrompt(
       await promptSession(
         handle,
         text,
-        images,
+        promptImages,
         undefined,
         signal,
         undefined,
         handoffId,
         () => {},
+        true,
       )
     } catch (error) {
       moveSessionLeaf(session, oldLeafId)
@@ -1095,6 +1232,7 @@ async function editSessionPrompt(
       throw error
     }
   } finally {
+    handle.changingBranch = false
     handle.promptQueue?.schedule()
   }
 }
@@ -1109,17 +1247,9 @@ async function resetSessionToEntry(handle, entryId) {
   requireInitializedSession(handle)
   const session = handle.runtime.session
   if (!entryId) throw new Error('entryId is required')
-  if (session.isStreaming) {
-    throw new Error('Wait for the current response to finish before resetting.')
-  }
-  if (session.isCompacting) {
-    throw new Error('Wait for compaction to finish before resetting.')
-  }
-
-  if (handle.pendingPromptControllers?.size) {
-    throw new Error('Wait for the pending message to finish sending before resetting.')
-  }
-  if (handle.promptQueue?.snapshot().items.length) handle.promptQueue.hold()
+  if (handle.settingModel) throw new Error('Finish the model change before resetting.')
+  if (handle.settingUltrafast) throw new Error('Finish the Ultrafast change before resetting.')
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   const manager = session.sessionManager
   const entry = manager.getEntry(entryId)
   if (!entry) throw new Error('Entry not found')
@@ -1129,14 +1259,23 @@ async function resetSessionToEntry(handle, entryId) {
     throw new Error('Entry is not on the active thread')
   }
 
-  const header = manager.getHeader()
-  manager.fileEntries = [header, ...manager.getBranch(entryId)]
-  manager._buildIndex()
-  manager._rewriteFile()
-  restoreTrailingResearchReport(manager)
-  updateSessionContext(session)
-  await bindRuntimeHandle(handle)
-  return activeSessionDto(handle)
+  handle.changingBranch = true
+  try {
+    await interruptSession(handle)
+    requireInitializedSession(handle)
+    if (handle.runtime.session !== session) throw new Error('Session changed before resetting')
+    const header = manager.getHeader()
+    manager.fileEntries = [header, ...manager.getBranch(entryId)]
+    manager._buildIndex()
+    manager._rewriteFile()
+    restoreTrailingResearchReport(manager)
+    updateSessionContext(session)
+    await bindRuntimeHandle(handle)
+    return activeSessionDto(handle)
+  } finally {
+    handle.changingBranch = false
+    handle.promptQueue?.schedule()
+  }
 }
 
 function updateSessionContext(session) {
@@ -1148,9 +1287,7 @@ const forkSession = trackRuntimeCreation(async (handle, entryId) => {
   const session = handle.runtime.session
   if (!entryId) throw new Error('entryId is required')
   if (!session.sessionManager.getEntry(entryId)) throw new Error('Entry not found')
-  if (session.isCompacting) {
-    throw new Error('Wait for compaction to finish before forking.')
-  }
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
 
   const result = await session.extensionRunner.emit({
     type: 'session_before_fork',
@@ -1161,6 +1298,8 @@ const forkSession = trackRuntimeCreation(async (handle, entryId) => {
   if (runtimeShuttingDown || handle.disposalPromise) {
     throw new Error('Runtime is shutting down')
   }
+  requireInitializedSession(handle)
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   if (handle.runtime.session !== session) throw new Error('Session changed before forking')
 
   const previousSessionFile = session.sessionManager.getSessionFile()
@@ -1195,8 +1334,9 @@ const forkSession = trackRuntimeCreation(async (handle, entryId) => {
     unsubscribe: undefined,
     extensionUiState: emptyExtensionUiState(),
   }
-  runtimeHandles.set(fork.sessionId, fork)
   try {
+    requireSessionAvailable({ id: fork.sessionId, cwd: runtime.cwd })
+    runtimeHandles.set(fork.sessionId, fork)
     await bindRuntimeHandle(fork)
     setActiveHandle(fork)
     return fork
@@ -1332,6 +1472,8 @@ async function renameSession(id, name) {
   const nextName = normalizeSessionName(name)
   const handle = runtimeHandles.get(id)
   if (handle) {
+    requireInitializedSession(handle)
+    if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
     handle.runtime.session.setSessionName(nextName)
     return toActiveSessionDetailDto(handle)
   }
@@ -1339,6 +1481,7 @@ async function renameSession(id, name) {
   const session = await findSession(id)
   if (!session) throw new Error('Session not found')
 
+  requireSessionAvailable(session)
   const manager = SessionManager.open(session.path)
   if (manager.getSessionId() !== id) {
     throw new Error('Session path does not match session id')
@@ -1362,91 +1505,82 @@ async function removeVisionAttachments(sessionId) {
 }
 
 async function trashSession(id) {
-  const session = await findSession(id)
-  if (!session) throw new Error('Session not found')
+  requireSessionAvailable({ id })
+  if (runtimeHandlePromises.has(id)
+    || [...runtimeInitializations].some((options) => options.sessionManager.getSessionId() === id)) {
+    throw new Error('Wait for session initialization to finish.')
+  }
   const handle = runtimeHandles.get(id)
-  if (handle) {
-    if (handle.runtime.session.isStreaming) {
-      throw new Error('Wait for the current response to finish before deleting.')
-    }
-    if (handle.runtime.session.isCompacting) {
-      throw new Error('Wait for compaction to finish before deleting.')
-    }
-  }
-
-  if (handle && !existsSync(session.path)) {
-    await discardRuntimeHandle(handle)
-    return { path: null }
-  }
-
-  const trashPath = trashSessionPath(session)
-  await mkdir(dirname(trashPath), { recursive: true })
+    || [...hiddenRuntimeHandles].find((item) => item.sessionId === id)
+  if (handle) requireSessionMutation(handle)
+  trashingSessionIds.add(id)
   try {
-    await rename(session.path, trashPath)
-  } catch (error) {
-    if (!isActiveSession(id) || error?.code !== 'ENOENT') throw error
-    await discardActiveSession()
-    return { path: null }
+    const session = handle ? sessionInfo(handle) : await findSession(id)
+    if (!session) throw new Error('Session not found')
+    if (trashingProjectCwds.has(session.cwd)) throw new Error('Session deletion is in progress.')
+    if (handle) await discardRuntimeHandle(handle)
+    return await moveSessionToTrash(session, trashStamp(), Boolean(handle))
+  } finally {
+    trashingSessionIds.delete(id)
   }
-
-  if (handle) await discardRuntimeHandle(handle)
-  await removeVisionAttachments(session.id)
-
-  return { path: trashPath }
 }
 
 async function trashProject(cwd) {
   if (!cwd) throw new Error('Project cwd is required')
-
-  const persisted = await listSessionsForProject(cwd)
-  const runtimeOnly = [...runtimeHandles.values()]
-    .map(sessionInfo)
-    .filter((session) => session.cwd === cwd
-      && !persisted.some((item) => item.id === session.id))
-  const sessions = [...runtimeOnly, ...persisted]
-  if (!sessions.length) return { count: 0, path: '' }
-
-  for (const session of sessions) {
-    const handle = runtimeHandles.get(session.id)
-    if (!handle) continue
-    if (handle.runtime.session.isStreaming) {
-      throw new Error('Wait for the current response to finish before deleting.')
-    }
-    if (handle.runtime.session.isCompacting) {
-      throw new Error('Wait for compaction to finish before deleting.')
-    }
+  requireSessionAvailable({ cwd })
+  if ([...runtimeInitializations].some((options) => options.cwd === cwd)) {
+    throw new Error('Wait for session initialization to finish.')
   }
-
-  const stamp = trashStamp()
-  const moved = []
-  for (const session of sessions) {
-    const handle = runtimeHandles.get(session.id)
-    if (handle && !existsSync(session.path)) {
-      await discardRuntimeHandle(handle)
-      continue
+  const handles = [...runtimeHandles.values(), ...hiddenRuntimeHandles]
+    .filter((handle) => handle.runtime.cwd === cwd)
+  for (const handle of handles) requireSessionMutation(handle)
+  trashingProjectCwds.add(cwd)
+  try {
+    const stopped = Promise.allSettled(handles.map(interruptSession))
+    const persisted = await listSessionsForProject(cwd)
+    const sessions = new Map(persisted.map((session) => [session.id, session]))
+    for (const handle of handles) sessions.set(handle.sessionId, sessionInfo(handle))
+    if ([...sessions.keys()].some((id) => trashingSessionIds.has(id))) {
+      throw new Error('Session deletion is in progress.')
     }
-    if (!handle && !existsSync(session.path)) continue
+    const interruptions = await stopped
+    const failures = interruptions.filter((result) => result.status === 'rejected')
+    if (failures.length) {
+      throw new AggregateError(failures.map((result) => result.reason), 'Could not stop project sessions')
+    }
+    const results = await Promise.allSettled(handles.map(discardRuntimeHandle))
+    const errors = results.filter((result) => result.status === 'rejected')
+    if (errors.length) {
+      throw new AggregateError(errors.map((result) => result.reason), 'Could not dispose project sessions')
+    }
+    const stamp = trashStamp()
+    const moved = []
+    for (const session of sessions.values()) {
+      const result = await moveSessionToTrash(session, stamp, true)
+      if (result.path) moved.push(result.path)
+    }
+    return { count: moved.length, path: moved[0] || '' }
+  } finally {
+    trashingProjectCwds.delete(cwd)
+  }
+}
 
+async function moveSessionToTrash(session, stamp, allowMissing) {
+  let path = null
+  if (session.path && existsSync(session.path)) {
     const trashPath = trashSessionPath(session, stamp)
     await mkdir(dirname(trashPath), { recursive: true })
     try {
       await rename(session.path, trashPath)
-      moved.push(trashPath)
+      path = trashPath
     } catch (error) {
-      if (!isActiveSession(session.id) || error?.code !== 'ENOENT') throw error
-      await discardActiveSession()
+      if (!allowMissing || error?.code !== 'ENOENT') throw error
     }
-
-    if (handle) await discardRuntimeHandle(handle)
-    await removeVisionAttachments(session.id)
+  } else if (!allowMissing) {
+    throw new Error('Session file not found')
   }
-
-  return { count: moved.length, path: moved[0] || '' }
-}
-
-async function discardActiveSession() {
-  if (!activeHandle) return
-  await discardRuntimeHandle(activeHandle)
+  await removeVisionAttachments(session.id)
+  return { path }
 }
 
 function disposeRuntime(runtime) {
@@ -1479,8 +1613,9 @@ function discardRuntimeHandle(handle) {
   }
   settlePromptHandoff(handle, handle.pendingPromptHandoff)
   handle.unsubscribe?.()
-  handle.disposalPromise = (async () => {
+  handle.disposalPromise = Promise.resolve().then(async () => {
     try {
+      await interruptSession(handle)
       await disposeRuntime(handle.runtime)
     } finally {
       hiddenRuntimeHandles.delete(handle)
@@ -1489,7 +1624,7 @@ function discardRuntimeHandle(handle) {
       }
       if (activeHandle === handle) setActiveHandle(undefined)
     }
-  })()
+  })
   return handle.disposalPromise
 }
 
@@ -1541,32 +1676,23 @@ function trashStamp() {
 }
 
 const reloadSession = trackRuntimeCreation(async (handle) => {
-  requireInitializedSession(handle)
+  requireSessionMutation(handle)
   const session = handle.runtime.session
-  if (session.isStreaming) {
-    throw new Error('Wait for the current response to finish before reloading.')
-  }
-  if (session.isCompacting) {
-    throw new Error('Wait for compaction to finish before reloading.')
-  }
-
-  if (handle.pendingPromptControllers?.size) {
-    throw new Error('Wait for the pending message to finish sending before reloading.')
-  }
-  if (handle.promptQueue?.snapshot().items.length) handle.promptQueue.hold()
-  const previousSessionFile = session.sessionFile
-  const previousLeafId = session.sessionManager.getLeafId()
-  const sessionManager = previousSessionFile && existsSync(previousSessionFile)
-    ? SessionManager.open(previousSessionFile)
-    : session.sessionManager
-  if (previousLeafId) sessionManager.branch(previousLeafId)
-  else sessionManager.resetLeaf()
-
   handle.reloading = true
-  providerSettingsRuntimes.invalidate(handle.runtime.cwd)
   let replacement
   let applied = false
   try {
+    await interruptSession(handle)
+    if (runtimeShuttingDown || handle.disposalPromise) throw new Error('Session is closed')
+    if (handle.runtime.session !== session) throw new Error('Session changed before reloading')
+    const previousSessionFile = session.sessionFile
+    const previousLeafId = session.sessionManager.getLeafId()
+    const sessionManager = previousSessionFile && existsSync(previousSessionFile)
+      ? SessionManager.open(previousSessionFile)
+      : session.sessionManager
+    if (previousLeafId) sessionManager.branch(previousLeafId)
+    else sessionManager.resetLeaf()
+    providerSettingsRuntimes.invalidate(handle.runtime.cwd)
     replacement = await createAgentSessionRuntime(createRuntime, {
       cwd: sessionManager.getCwd(),
       agentDir: handle.runtime.services.agentDir,
@@ -1603,11 +1729,13 @@ const reloadSession = trackRuntimeCreation(async (handle) => {
     throw error
   } finally {
     handle.reloading = false
+    handle.promptQueue?.schedule()
   }
 })
 
-async function setSessionUltrafast(handle, enabled, signal) {
+async function setSessionUltrafast(handle, enabled, signal, editing = false) {
   requireInitializedSession(handle)
+  if (handle.changingBranch && !editing) throw new Error('Wait for the branch change to finish.')
   if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean')
   if (handle.settingModel) throw new Error('Wait for the model change to finish.')
   if (handle.settingUltrafast) throw new Error('Wait for the Ultrafast change to finish.')
@@ -1622,19 +1750,16 @@ async function setSessionUltrafast(handle, enabled, signal) {
   ))) {
     throw new Error('Ultrafast is not available for this model and authentication method.')
   }
-  if (!session.isIdle || handle.pendingPromptControllers?.size || handle.interruptPromise) {
-    throw new Error('Wait for the current run to finish before changing Ultrafast.')
-  }
   if (signal?.aborted) return
 
   handle.settingUltrafast = true
-  const release = await lockPromptSubmission(handle)
+  const release = session.isCompacting ? undefined : await lockPromptSubmission(handle)
   try {
     requireInitializedSession(handle)
     if (signal?.aborted || handle.runtime.session !== session) return
     await session.prompt(`/${ULTRAFAST_COMMAND} ${enabled ? 'on' : 'off'}`, { source: 'api' })
   } finally {
-    release()
+    release?.()
     handle.settingUltrafast = false
     handle.promptQueue?.schedule()
   }
@@ -1642,21 +1767,17 @@ async function setSessionUltrafast(handle, enabled, signal) {
 
 async function setSessionModel(handle, provider, id) {
   requireInitializedSession(handle)
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   if (handle.settingModel) throw new Error('Wait for the model change to finish.')
   if (handle.settingUltrafast) throw new Error('Wait for the Ultrafast change to finish.')
   if (!provider || !id) throw new Error('provider and id are required')
 
   const session = handle.runtime.session
-  if (!session.isIdle || handle.pendingPromptControllers?.size || handle.interruptPromise) {
-    throw new Error('Wait for the current run to finish before changing models.')
-  }
   handle.settingModel = true
-  const release = await lockPromptSubmission(handle)
+  const release = session.isCompacting ? undefined : await lockPromptSubmission(handle)
   try {
     requireInitializedSession(handle)
-    if (handle.runtime.session !== session || !session.isIdle || handle.interruptPromise) {
-      throw new Error('Wait for the current run to finish before changing models.')
-    }
+    if (handle.runtime.session !== session) throw new Error('Session changed before changing models')
     const model = session.modelRuntime.getModel(provider, id)
     if (!model) throw new Error('Model not found')
     await session.setModel(model, { persist: true })
@@ -1680,13 +1801,15 @@ async function setSessionModel(handle, provider, id) {
     }
     broadcastActiveSession(handle)
   } finally {
-    release()
+    release?.()
     handle.settingModel = false
     handle.promptQueue?.schedule()
   }
 }
 
 function setSessionThinkingLevel(handle, level) {
+  requireInitializedSession(handle)
+  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   if (handle.settingModel) throw new Error('Wait for the model change to finish.')
   if (!level) throw new Error('level is required')
 
@@ -1726,9 +1849,10 @@ const createNewSession = trackRuntimeCreation(async (cwd, kind = 'session') => {
     unsubscribe: undefined,
     extensionUiState: emptyExtensionUiState(),
   }
-  runtimeHandles.set(handle.sessionId, handle)
-  forceOneAtATime(runtime.session)
   try {
+    requireSessionAvailable({ id: handle.sessionId, cwd: runtime.cwd })
+    runtimeHandles.set(handle.sessionId, handle)
+    forceOneAtATime(runtime.session)
     await bindRuntimeHandle(handle)
     setActiveHandle(handle)
     return activeSessionDto(handle)
@@ -1779,6 +1903,7 @@ async function bindRuntimeHandle(handle) {
   ensurePromptQueue(handle)
   try {
     await bindRuntimeHandleExtensions(handle, events)
+    handle.runtime.services.requestEvents?.emit('leyline:request-boundary-ready')
     if (runtimeShuttingDown) throw new Error('Runtime is shutting down')
   } finally {
     handle.bindingExtensions = false
@@ -1881,6 +2006,7 @@ const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, 
       subagentController: controller,
     }
     if (runtimeShuttingDown) throw new Error('Runtime is shutting down')
+    requireSessionAvailable({ id: childId, cwd })
     if (signal?.aborted) throw new Error('Subagent cancelled')
     if (promptImages.length && !session.model?.input?.includes('image')) {
       throw new Error(

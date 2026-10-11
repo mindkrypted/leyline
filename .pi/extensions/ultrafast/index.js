@@ -8,9 +8,11 @@ import {
 export default function (pi) {
   let enabled = false
   let enabledModel
-  let compacting = false
   let resetPending = false
-  let request
+  let cleanupPending = false
+  let requestBoundaryAvailable = false
+  let compacting = false
+  let headerRequest
   const responses = new Map()
 
   function available(ctx, model) {
@@ -24,15 +26,24 @@ export default function (pi) {
     ctx.ui.setStatus(ULTRAFAST_STATUS_KEY, enabled ? 'on' : 'off')
   }
 
+  function flushCleanup(ctx) {
+    if (!cleanupPending) return
+    cleanupPending = false
+    cleanupSessionResources(ctx.sessionManager.getSessionId())
+  }
+
+  function requestCleanup(ctx) {
+    cleanupPending = true
+    if (ctx.isIdle()) flushCleanup(ctx)
+  }
+
   function disable(ctx) {
     const cleanup = enabled || enabledModel
     enabled = false
     enabledModel = undefined
     resetPending = false
-    request = undefined
-    responses.clear()
     publish(ctx)
-    if (cleanup) cleanupSessionResources(ctx.sessionManager.getSessionId())
+    if (cleanup) requestCleanup(ctx)
   }
 
   function reset(_event, ctx) {
@@ -46,46 +57,61 @@ export default function (pi) {
   pi.on('session_start', (_event, ctx) => {
     enabled = false
     enabledModel = undefined
-    compacting = false
     resetPending = false
-    request = undefined
+    cleanupPending = false
+    compacting = false
+    headerRequest = undefined
     responses.clear()
     publish(ctx)
   })
   pi.on('model_select', reset)
   pi.on('session_before_compact', () => { compacting = true })
-  pi.on('session_compact', () => { compacting = false })
-  pi.on('session_compact_failed', () => { compacting = false })
+  function finishCompaction(_event, ctx) {
+    compacting = false
+    flushCleanup(ctx)
+  }
+  pi.on('session_compact', finishCompaction)
+  pi.on('session_compact_failed', finishCompaction)
   pi.on('session_tree', reset)
   pi.on('turn_start', (_event, ctx) => {
     if (resetPending) disable(ctx)
+    flushCleanup(ctx)
   })
   pi.on('turn_end', (_event, ctx) => {
     if (resetPending) disable(ctx)
+    headerRequest = undefined
+    flushCleanup(ctx)
   })
   pi.on('agent_settled', (_event, ctx) => {
     if (resetPending) disable(ctx)
+    headerRequest = undefined
+    flushCleanup(ctx)
   })
   pi.on('session_shutdown', () => {
     enabled = false
     enabledModel = undefined
-    compacting = false
     resetPending = false
-    request = undefined
+    cleanupPending = false
+    requestBoundaryAvailable = false
+    compacting = false
+    headerRequest = undefined
     responses.clear()
   })
 
   pi.registerCommand(ULTRAFAST_COMMAND, {
     description: 'Set Ultrafast from the Leyline composer',
     handler: async (args, ctx) => {
-      if (!ctx.isIdle()) return
       if (!['on', 'off'].includes(args)
         || (args === 'on' && !available(ctx, ctx.model))) return
       if (args === 'off') {
         disable(ctx)
         return
       }
-      if (!enabled) cleanupSessionResources(ctx.sessionManager.getSessionId())
+      if (!requestBoundaryAvailable) {
+        ctx.ui.notify('Ultrafast requires the Leyline request boundary.', 'warning')
+        return
+      }
+      if (!enabled) requestCleanup(ctx)
       enabled = true
       enabledModel = ctx.model
       resetPending = false
@@ -98,42 +124,63 @@ export default function (pi) {
   })
 
   pi.on('before_provider_headers', ({ headers }, ctx) => {
-    if (resetPending) {
-      disable(ctx)
-      return
-    }
-    if (!enabled || !enabledModel || compacting || !ctx.signal) return
-    if (enabledModel.provider === 'openai-codex') {
-      headers['x-codex-routing-hint'] = `model=${enabledModel.id};tier=ultrafast`
-    } else if (enabledModel.id === 'gpt-6-astra') {
+    if (!headerRequest?.enabled || compacting || ctx.signal !== headerRequest.signal) return
+    const { model } = headerRequest
+    if (model.provider === 'openai-codex') {
+      headers['x-codex-routing-hint'] = `model=${model.id};tier=ultrafast`
+    } else if (model.id === 'gpt-6-astra') {
       headers['OpenAI-Service-Tier'] = 'ultrafast'
     }
   })
 
-  pi.on('before_provider_request', ({ payload }, ctx) => {
-    request = undefined
-    const model = enabled ? enabledModel : ctx.model
-    if (compacting || !ctx.signal || !available(ctx, model)
-      || payload?.model !== model.id) return
-    request = { model, tier: enabled ? 'ultrafast' : payload.service_tier }
-    if (enabled) return { ...payload, service_tier: 'ultrafast' }
+  pi.events.on('leyline:request-boundary-ready', () => {
+    requestBoundaryAvailable = true
   })
-
-  pi.on('provider_stream_event', ({ provider, model, data }) => {
-    if (!request || request.model.provider !== provider || request.model.id !== model
-      || !['response.completed', 'response.done', 'response.incomplete'].includes(data?.type)
-      || !data.response?.id) return
-    const tier = data.response.service_tier
-    const ultrafast = tier === 'ultrafast'
-      || (provider === 'openai-codex' && request.tier === 'ultrafast'
-        && (!tier || tier === 'default'))
-    if (!ultrafast) return
-    responses.set(data.response.id, request.model)
-    if (responses.size > 16) responses.delete(responses.keys().next().value)
+  pi.events.on('leyline:provider-request', ({ model, options, ctx }) => {
+    if (!requestBoundaryAvailable || !options.signal) return
+    if (resetPending) disable(ctx)
+    flushCleanup(ctx)
+    headerRequest = undefined
+    if (!available(ctx, model)) return
+    const request = {
+      model: { ...model, cost: { ...model.cost } },
+      signal: options.signal,
+      enabled: enabled && enabledModel?.provider === model.provider
+        && enabledModel?.id === model.id,
+    }
+    headerRequest = request
+    const onPayload = options.onPayload
+    options.onPayload = async (payload, requestModel) => {
+      const replacement = await onPayload?.(payload, requestModel)
+      const current = replacement === undefined ? payload : replacement
+      if (ctx.signal !== request.signal || requestModel.provider !== model.provider
+        || requestModel.id !== model.id || current?.model !== model.id) return current
+      request.tier = request.enabled ? 'ultrafast' : current.service_tier
+      return request.enabled ? { ...current, service_tier: 'ultrafast' } : current
+    }
+    const onProviderStreamEvent = options.onProviderStreamEvent
+    options.onProviderStreamEvent = async (data, requestModel) => {
+      if (requestBoundaryAvailable && ctx.signal === request.signal
+        && requestModel.provider === model.provider
+        && requestModel.id === model.id
+        && ['response.completed', 'response.done', 'response.incomplete'].includes(data?.type)
+        && data.response?.id) {
+        const tier = data.response.service_tier
+        const ultrafast = tier === 'ultrafast'
+          || (model.provider === 'openai-codex' && request.tier === 'ultrafast'
+            && (!tier || tier === 'default'))
+        if (ultrafast) {
+          responses.set(data.response.id, request.model)
+          if (responses.size > 16) responses.delete(responses.keys().next().value)
+        }
+      }
+      await onProviderStreamEvent?.(data, requestModel)
+    }
   })
 
   pi.on('message_end', ({ message }) => {
     if (message.role !== 'assistant') return
+    headerRequest = undefined
     const model = responses.get(message.responseId)
     responses.delete(message.responseId)
     if (!model || message.provider !== model.provider || message.model !== model.id
