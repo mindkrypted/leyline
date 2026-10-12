@@ -20,174 +20,6 @@ connections to other Leyline backends.
 
 See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls.
 
-## Features
-
-Browse and run pi sessions in a focused workspace. Keep one project in focus,
-search across projects with **Go to**, and supervise background work through
-**Activity**. Read live transcripts, direct runs with steering or **Up next**
-tasks, and inspect tools, System changes, and local files. Pi's native MCP
-integration supplies configured tools, and extension confirmation cards let you
-approve or cancel requests.
-
-Model controls include the optional `ultrafast` chip for supported OpenAI
-Responses models. It is off by default and uses premium pricing. See
-[Runtime controls](docs/user-guide/runtime-controls.md#use-ultrafast).
-Memory, subagents, HTML export, and an embedded terminal support session work.
-Each window can use the native backend or a saved backend connection.
-
-Embedded Elune tracing records new runs by default. **Session traces** opens the
-selected session's inspector. **Open workspace** shows its timeline, and the
-sidebar **Trace explorer** button browses all projects on the selected backend.
-Capture controls are in the trace footer. Traces can contain private prompts
-and tool results. Turning capture off, deleting a session, or resetting history
-does not delete existing traces. See [Tracing](docs/user-guide/tracing.md).
-
-Settings includes provider sign-in, custom endpoints, model definitions and
-overrides, and MCP server configuration. Find a starting configuration in the
-backend catalog, review the fields to copy, then adjust model limits, thinking
-maps, and developer-role compatibility. Provider costs and connection settings
-stay separate. Changes use pi's files on the selected backend. See
-[Model settings](docs/user-guide/settings.md#find-a-configuration-in-the-catalog).
-Project and session details hold their own agent overrides.
-
-Deep research sessions divide a question into parallel, source-backed threads.
-Leyline keeps the plan and worker sessions inspectable and validates numbered
-report citations. Each citation opens a source preview. The research ledger
-keeps cited, supporting, and excluded source records.
-
-On desktop, Git Review keeps its header summary current while the pane is
-closed. It prepares the selected diff before opening, separates staged and
-working-tree changes, and can expand across the workspace.
-
-When the active model cannot receive images, Leyline can send each attachment
-to a configured vision model in a hidden child session. The parent model
-receives the descriptions while the transcript keeps the original images.
-
-For the reasoning behind the project, see [Motivations](docs/motivations.md).
-
-## Requirements
-
-- macOS or Linux (see the tested setup below)
-- Node.js 22.19.0, as specified in `.nvmrc`
-- npm and Git, with GitHub access during dependency installation
-- A configured pi coding-agent environment
-
-Leyline is used on macOS and Linux. The Linux reference setup is x86-64
-Omarchy (Arch-based), running Hyprland on Wayland. Other Linux distributions
-and architectures have not been validated. Windows is not supported.
-
-For a user-local Linux desktop app and CLI, follow the
-[Linux installation guide](docs/getting-started/linux-installation.md).
-
-## Setup
-
-```sh
-npm install
-```
-
-This installs `@elune/embedded` from GitHub through the `spmurrayzzz/elune`
-dependency. No sibling Elune checkout, npm publication, or standalone Go server
-is required.
-
-## Development
-
-```sh
-npm run dev
-```
-
-Open the Vite URL shown in the terminal, usually:
-
-```txt
-http://localhost:5173/
-```
-
-The Vite server also serves the documentation at
-`http://localhost:5173/docs/`. To run only the documentation server, use
-`npm run docs:dev`.
-
-## Backend connections
-
-The sidebar footer shows the backend for the current window. Open **Settings →
-Connections** to add, test, edit, remove, or select a named connection. The **Native backend**
-is the server that supplied the current Leyline app.
-
-Saved connections and the configured default are app-wide. Each browser or
-Electron window keeps its active connection separately. A fresh window uses the
-default. A new Electron window inherits the source window's active connection.
-
-Leyline sends runtime HTTP commands, runtime events, terminal WebSocket traffic,
-trace requests, and exports to the active backend. Traces and capture settings
-stay on that backend, without aggregation across connections. Connection
-management stays on the native backend. See [Settings](docs/user-guide/settings.md) for
-connection setup and [Environment variables](docs/reference/environment.md) for
-packaged server and origin settings.
-
-## Optional Electron app
-
-The browser and Vite workflow is the primary development path. Leyline can also
-run as a local Electron desktop app.
-
-For Electron development, start Vite in one terminal:
-
-```sh
-npm run dev
-```
-
-Then launch Electron in another terminal:
-
-```sh
-npm run electron:dev
-```
-
-To build a packaged desktop app:
-
-```sh
-npm run electron:build
-```
-
-The packaged app is written to `release/`. The build creates the Vite `dist/`
-output and then packages Electron. It unpacks the native terminal files that
-`node-pty` needs and the embedded Elune library and SQLite worker. The packaged
-backend runs in an Electron utility process. Rebuild and restart the installed
-app after dependency or backend updates.
-
-On Linux, follow the [Linux installation guide](docs/getting-started/linux-installation.md)
-to install `release/Leyline-linux-x64/`, a launcher, and an application-menu entry.
-The repository's `bin/leyline` and `local-publish` script are still macOS-only.
-
-On Apple silicon macOS, install the packaged app and expose `leyline` with:
-
-```sh
-npm run local-publish
-```
-
-This command copies `Leyline.app` to `/Applications/`. It also links the CLI to
-`~/.local/bin/leyline`. Make sure that `~/.local/bin` is on your `PATH`.
-
-```sh
-cd /path/to/project
-leyline
-```
-
-The CLI opens or focuses Leyline and creates a session for the current shell
-directory. Use `leyline -n` to open a new window at the home workspace without
-creating a session.
-
-## Electron shortcuts (macOS)
-
-- `Command+N`: create a session in the current session CWD
-- `Command+Shift+N`: open Home in a new window without creating a session
-- `Command+W`: close the current window
-- `Command+E`: show or hide the sidebar
-- `Command+,`: open global Settings
-- `Command+Shift+E`: show or hide Session details
-- `Command+Shift+M`: show or hide Memory
-- `Command+Shift+T`: show or hide the terminal
-- `Escape`: close open surfaces first. With none open, stop the active run
-
-When focus is in the terminal, Escape stays in the shell unless another surface
-is open.
-
 ## Documentation
 
 - [Getting started](docs/getting-started/index.md)
@@ -208,6 +40,184 @@ is open.
 - [Commands](docs/reference/commands.md)
 - [Troubleshooting](docs/reference/troubleshooting.md)
 
+## Features
+
+You can browse and run pi sessions in one workspace. You can search across
+projects with **Go to** and monitor work through **Activity**. You can read
+live transcripts, use steering or **Up next** tasks, and examine tools, System
+changes, and local files. Pi's native MCP integration supplies configured
+tools, and extension confirmation cards let you accept or cancel requests.
+
+Model controls include the optional `ultrafast` chip for supported OpenAI
+Responses models. It is off by default. OpenAI charges more for `ultrafast`. See
+[Runtime controls](docs/user-guide/runtime-controls.md#use-ultrafast).
+Memory, subagents, HTML export, and an embedded terminal help you complete
+session work.
+Each window can use the native backend or a saved backend connection.
+
+Embedded Elune tracing records new runs by default. **Session traces** opens the
+selected session's inspector. **Open workspace** shows its timeline, and the
+**Trace explorer** button in the sidebar shows all projects on the selected
+backend. Capture controls are in the trace footer.
+
+Traces can contain private prompts and tool results. Leyline keeps existing
+traces if you stop capture, delete a session, or reset the history. See
+[Tracing](docs/user-guide/tracing.md).
+
+Settings includes provider sign-in, custom endpoints, model definitions and
+overrides, and MCP server configuration. Select a configuration from the
+backend catalog. Examine the fields to use. Adjust the model limits, thinking
+maps, and developer-role compatibility.
+
+Provider costs are different from connection settings. Changes use pi's files
+on the selected backend. See
+[Model settings](docs/user-guide/settings.md#find-a-configuration-in-the-catalog).
+Project and session details hold their own agent overrides.
+
+Deep research sessions divide a question into parallel, source-backed threads.
+You can examine the plan and the worker sessions. Leyline validates numbered
+report citations. Each citation opens a source preview. The research ledger
+keeps records for sources that Leyline cited, used, or excluded.
+
+On desktop, Git Review updates its header summary when the pane is closed.
+Git Review prepares the selected diff before you open the pane. Git Review
+separates staged and working-tree changes. Git Review can expand across the
+workspace.
+
+When the parent model cannot receive images, Leyline can send each attachment
+to a configured vision model in a hidden child session. The parent model
+receives the descriptions while the transcript keeps the original images.
+
+Read [Motivations](docs/motivations.md) for more information about the project.
+
+## Requirements
+
+- macOS or Linux (see the tested setup below)
+- Node.js 22.19.0, as specified in `.nvmrc`
+- npm and Git, with GitHub access during dependency installation
+- A configured pi coding-agent environment
+
+Leyline operates on macOS and Linux. The Linux reference setup is x86-64
+Omarchy (Arch-based). The setup runs Hyprland on Wayland. Leyline did not
+validate other Linux distributions or architectures. Do not use Leyline on
+Windows.
+
+For a Linux desktop app and CLI that installs for one user, follow the
+[Linux installation guide](docs/getting-started/linux-installation.md).
+
+## Setup
+
+```sh
+npm install
+```
+
+This installs `@elune/embedded` from GitHub through the `spmurrayzzz/elune`
+dependency. A sibling Elune checkout, an npm publication, and a standalone Go
+server are not necessary.
+
+## Development
+
+```sh
+npm run dev
+```
+
+Open the Vite URL that the terminal shows. The usual URL is:
+
+```txt
+http://localhost:5173/
+```
+
+The Vite server also serves the documentation at
+`http://localhost:5173/docs/`. To run only the documentation server, use
+`npm run docs:dev`.
+
+## Backend connections
+
+The sidebar footer shows the backend for the current window. Open **Settings →
+Connections**. You can add, test, edit, remove, or select a named connection
+there. The **Native backend** is the server that supplied the current Leyline
+app.
+
+Saved connections and the configured default are app-wide. Each browser or
+Electron window keeps its active connection independently. A new window uses
+the default. A new Electron window inherits the source window's active
+connection.
+
+Leyline sends runtime HTTP commands, runtime events, terminal WebSocket traffic,
+trace requests, and exports to the active backend. Leyline does not combine
+traces or capture settings across connections. Traces and capture settings stay
+on the active backend. Connection management stays on the native backend. See
+[Settings](docs/user-guide/settings.md) for
+connection setup and [Environment variables](docs/reference/environment.md) for
+packaged server and origin settings.
+
+## Optional Electron app
+
+The browser and Vite workflow is the primary development path. Leyline can also
+run as a local Electron desktop app.
+
+For Electron development, start Vite in one terminal:
+
+```sh
+npm run dev
+```
+
+Then launch Electron in another terminal:
+
+```sh
+npm run electron:dev
+```
+
+Run this command to build a packaged desktop app:
+
+```sh
+npm run electron:build
+```
+
+The build writes the packaged app to `release/`. The build creates the Vite
+`dist/` output and then packages Electron. The build unpacks the native
+terminal files that `node-pty` needs and the embedded Elune library and SQLite
+worker. The packaged backend runs in an Electron utility process. Rebuild and
+restart the packaged app after dependency or backend updates.
+
+On Linux, follow the [Linux installation guide](docs/getting-started/linux-installation.md)
+to install `release/Leyline-linux-x64/`, a launcher, and an application-menu entry.
+The repository's `bin/leyline` and `local-publish` script are still macOS-only.
+
+On Apple silicon macOS, run this command to install the packaged app and
+expose `leyline`:
+
+```sh
+npm run local-publish
+```
+
+This command puts `Leyline.app` in `/Applications/`. The command also links the
+CLI to `~/.local/bin/leyline`. Make sure that `~/.local/bin` is on your `PATH`.
+
+```sh
+cd /path/to/project
+leyline
+```
+
+The CLI opens or focuses Leyline and creates a session for the current shell
+directory. Use `leyline -n` to open a new window at the home workspace. The
+command does not create a session.
+
+## Electron shortcuts (macOS)
+
+- `Command+N`: create a session in the current session CWD
+- `Command+Shift+N`: open Home in a new window. This does not create a session
+- `Command+W`: close the current window
+- `Command+E`: show or hide the sidebar
+- `Command+,`: open global Settings
+- `Command+Shift+E`: show or hide Session details
+- `Command+Shift+M`: show or hide Memory
+- `Command+Shift+T`: show or hide the terminal
+- `Escape`: close open surfaces first. If no surface is open, stop the active run
+
+When focus is in the terminal, Escape stays in the shell unless another surface
+is open.
+
 ## Useful commands
 
 ```sh
@@ -223,6 +233,6 @@ npm run screenshot
 npm run video
 ```
 
-The capture commands require the dev server. `npm run screenshot` writes a
+The capture commands require the Vite development server. `npm run screenshot` writes a
 live local capture to `screenshots/current.png`. `npm run docs:screenshots`
 refreshes sanitized tracked images with intercepted fixture data.
