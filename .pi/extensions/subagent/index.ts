@@ -216,6 +216,8 @@ async function runSubagentViaApi(params: {
   task: string;
   cwd: string;
   parentSessionPath: string | null;
+  parentSessionId: string;
+  _toolCallId: string;
   model: string | { provider: string; id: string } | undefined;
   thinkingLevel: ThinkingLevel | undefined;
   tools?: string[];
@@ -238,6 +240,8 @@ async function runSubagentViaApi(params: {
       task: params.task,
       cwd: params.cwd,
       parentSessionPath: params.parentSessionPath,
+      parentSessionId: params.parentSessionId,
+      _toolCallId: params._toolCallId,
       model: params.model || undefined,
       thinkingLevel: params.thinkingLevel,
       tools: params.tools,
@@ -474,7 +478,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
       if (mode === "single") {
         const result = await executeSingle(
           agent!, params.task, baseCwd, parentPath, params.model, params.thinking,
-          parentThinkingLevel, signal, ctx, (started) => {
+          parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
             onUpdate?.({
               content: [{ type: "text", text: `${started.agent} subagent running` }],
               details: {
@@ -542,7 +546,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
               ? await executeSingle(
                 childAgent, task.task, task.cwd || baseCwd, parentPath,
                 task.model ?? params.model, task.thinking ?? params.thinking,
-                parentThinkingLevel, signal, ctx, (started) => {
+                parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
                   progress[resultIndex] = started;
                   publishProgress();
                 },
@@ -610,7 +614,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
           const result = await executeSingle(
             a, taskWithPrev, step.cwd || baseCwd, parentPath,
             step.model ?? params.model, step.thinking ?? params.thinking,
-            parentThinkingLevel, signal, ctx, (started) => {
+            parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
               onUpdate?.({
                 content: [{ type: "text", text: `${started.agent} chain step running` }],
                 details: {
@@ -732,6 +736,7 @@ async function executeSingle(
   modelOverride: string | undefined,
   thinkingOverride: string | undefined,
   parentThinkingLevel: ThinkingLevel,
+  toolCallId: string,
   signal: AbortSignal | undefined,
   ctx: ExtensionContext,
   onStart?: (result: SingleResult) => void,
@@ -747,6 +752,8 @@ async function executeSingle(
       task,
       cwd,
       parentSessionPath,
+      parentSessionId: ctx.sessionManager.getSessionId(),
+      _toolCallId: toolCallId,
       model: selectedAgentModel(agent, selectedModel, ctx),
       thinkingLevel: selectedAgentThinking(agent, selectedThinking, parentThinkingLevel),
       tools: agent.tools.length ? agent.tools : undefined,

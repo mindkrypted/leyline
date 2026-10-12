@@ -460,6 +460,8 @@ function finiteCount(value) {
 }
 
 function coalesceKey(type, data) {
+  if (type === 'trace_updated' && data?.traceId) return `trace:${data.traceId}`
+  if (type === 'trace_config') return 'trace:config'
   if (type === 'active_session' && data?.id) return `active:${data.id}`
   if (type === 'extension_ui' && data?.activeSessionId) {
     return `extension:${data.activeSessionId}`

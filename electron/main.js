@@ -5,6 +5,7 @@ import { userInfo } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { BACKEND_SHUTDOWN_TIMEOUT_MS } from '../server/shutdown-deadlines.js'
 import {
   app,
   BrowserWindow,
@@ -25,7 +26,7 @@ const ENV_DUMP_COMMAND = existsSync('/usr/bin/env')
   ? '/usr/bin/env -0'
   : 'env -0'
 const PACKAGED_SERVER_START_TIMEOUT_MS = 15000
-const PACKAGED_SERVER_STOP_TIMEOUT_MS = 2000
+const PACKAGED_SERVER_STOP_TIMEOUT_MS = BACKEND_SHUTDOWN_TIMEOUT_MS
 const packagedServerProcessPath = fileURLToPath(
   new URL('./leyline-server-process.js', import.meta.url),
 )

@@ -223,6 +223,8 @@ export default function visionAgentExtension(pi: ExtensionAPI) {
           question: params.question || "Describe this image in detail so an agent that cannot see it understands what it shows.",
           cwd,
           parentSessionPath,
+          parentSessionId: ctx.sessionManager.getSessionId(),
+          _toolCallId,
           model: selectedModel,
           thinking: selectedThinking,
           image: { type: "image", data: imageData, mimeType },

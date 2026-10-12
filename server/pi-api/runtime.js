@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import {
@@ -10,12 +10,14 @@ import {
   resolve,
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { RUNTIME_SHUTDOWN_TIMEOUT_MS } from '../shutdown-deadlines.js'
 import {
   exportFilename,
   exportShareMeta,
   renderSessionExportHtml,
 } from './export-renderer.js'
 import { createEventHub } from './events.js'
+import { createTracing, TRACING_EXTENSION_PATH } from './tracing.js'
 import { createPromptQueue } from './prompt-queue.js'
 import { shutdownSettingsOperations, waitForSettings, withProviderSettingsLock } from './settings-operations.js'
 import { settingsError } from './pi-config.js'
@@ -227,6 +229,11 @@ const events = createEventHub({
 })
 
 
+const tracing = createTracing({
+  broadcastEvent: events.broadcastEvent,
+  getChildMarker: manager => manager ? childSessionMarker(manager) : undefined,
+})
+
 process.env.PI_CODING_AGENT ??= 'true'
 
 const ONE_AT_A_TIME = 'one-at-a-time'
@@ -255,11 +262,27 @@ function extensionNames(extension) {
     if (name) names.add(name)
   }
   const normalized = extension.resolvedPath.replaceAll('\\', '/')
+  add([...normalized.matchAll(/\/node_modules\/(?:@[^/]+\/)?([^/]+)\//g)].at(-1)?.[1])
   const marker = '/extensions/'
   const markerIndex = normalized.lastIndexOf(marker)
   if (markerIndex !== -1) {
     add(normalized.slice(markerIndex + marker.length).split('/')[0])
   }
+
+  try {
+    let directory = dirname(realpathSync(extension.resolvedPath))
+    for (;;) {
+      const manifestPath = join(directory, 'package.json')
+      if (existsSync(manifestPath)) {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+        if (typeof manifest.name === 'string') add(manifest.name.split('/').at(-1))
+        break
+      }
+      const parent = dirname(directory)
+      if (parent === directory) break
+      directory = parent
+    }
+  } catch {}
 
   const file = basename(extension.resolvedPath)
   add(/^index\.[^.]+$/.test(file)
@@ -281,6 +304,7 @@ function extensionNames(extension) {
 
 function preferBundledExtensions(result) {
   const specifications = [
+    { path: TRACING_EXTENSION_PATH, name: 'pi-elune' },
     { path: BUNDLED_OUTPUT_BUDGET_EXTENSION, name: 'output-budget' },
     { path: BUNDLED_ULTRAFAST_EXTENSION, name: 'ultrafast', command: ULTRAFAST_COMMAND },
     { path: BUNDLED_GOAL_EXTENSION, name: 'goal', command: 'goal' },
@@ -323,6 +347,7 @@ function isolateRuntimeExtensions(result) {
     ...result,
     extensions: result.extensions.filter((extension) => {
       return extension.resolvedPath === BUNDLED_OUTPUT_BUDGET_EXTENSION
+        || extension.resolvedPath === TRACING_EXTENSION_PATH
     }),
   }
 }
@@ -355,7 +380,7 @@ async function createRuntimeResult(...args) {
 
 async function buildRuntimeResult(
   { cwd, agentDir, sessionManager, sessionStartEvent, reloadServices },
-  { model, thinkingLevel } = {},
+  { model, thinkingLevel, captureTracing = true } = {},
 ) {
   if (runtimeShuttingDown) throw new Error('Runtime is shutting down')
   let child = childSessionMarker(sessionManager)
@@ -372,58 +397,69 @@ async function buildRuntimeResult(
     ...(child ? [SUBAGENT_DELEGATION_TOOL] : []),
   ])]
   const requestEvents = reloadServices?.requestEvents || createEventBus()
-  const services = reloadServices ? {
-    ...reloadServices,
-    modelRuntime: await ModelRuntime.create({
-      authPath: join(agentDir, 'auth.json'), modelsPath: join(agentDir, 'models.json'),
-    }),
-    diagnostics: [],
-  } : await createAgentSessionServices({
-    cwd,
-    agentDir,
-    resourceLoaderOptions: {
-      eventBus: requestEvents,
-      extensionFactories: systemPrompt ? [] : [
-        {
-          name: 'tool-search',
-          factory: (pi) => {
-            createToolSearchExtension()(pi)
-            pi.on('session_start', () => {
-              if (pi.getSettings().defaultTools?.includes('-tool_search')) return
-              pi.setActiveTools([...pi.getActiveTools(), 'tool_search'])
-            })
-          },
-          builtin: true,
-          replaceable: true,
-        },
-        { name: 'mcp', factory: createMcpExtension(), builtin: true, replaceable: true },
-      ],
-      additionalExtensionPaths: [
-        BUNDLED_OUTPUT_BUDGET_EXTENSION,
-        BUNDLED_ULTRAFAST_EXTENSION,
-        BUNDLED_GOAL_EXTENSION,
-        BUNDLED_MEMORY_EXTENSION,
-        BUNDLED_SUBAGENT_EXTENSION,
-        BUNDLED_RESEARCH_EXTENSION,
-        BUNDLED_VISION_EXTENSION,
-      ],
-      extensionsOverride: systemPrompt
-        ? isolateRuntimeExtensions
-        : preferBundledExtensions,
-      ...(systemPrompt
-        ? {
-            noContextFiles: true,
-            noSkills: true,
-            systemPromptOverride: () => systemPrompt,
-            appendSystemPromptOverride: () => [],
-          }
-        : { appendSystemPromptOverride: appendLeylineSystemPrompt }),
-    },
-  })
-  services.requestEvents = requestEvents
-  const previousExtensions = reloadServices && services.resourceLoader.getExtensions()
+  const tracingBinding = captureTracing
+    ? reloadServices?.tracingBinding || tracing.createBinding()
+    : undefined
+  const captureCheckpoint = tracingBinding?.checkpoint()
+  let services
+  let previousExtensions
   let runtime
   try {
+    services = reloadServices ? {
+      ...reloadServices,
+      modelRuntime: await ModelRuntime.create({
+        authPath: join(agentDir, 'auth.json'), modelsPath: join(agentDir, 'models.json'),
+      }),
+      diagnostics: [],
+    } : await createAgentSessionServices({
+      cwd,
+      agentDir,
+      resourceLoaderOptions: {
+        eventBus: requestEvents,
+        extensionFactories: [
+          ...(tracingBinding ? [{ name: 'leyline-elune', factory: tracingBinding.factory }] : []),
+          ...(systemPrompt ? [] : [
+            {
+              name: 'tool-search',
+              factory: (pi) => {
+                createToolSearchExtension()(pi)
+                pi.on('session_start', () => {
+                  if (pi.getSettings().defaultTools?.includes('-tool_search')) return
+                  pi.setActiveTools([...pi.getActiveTools(), 'tool_search'])
+                })
+              },
+              builtin: true,
+              replaceable: true,
+            },
+            { name: 'mcp', factory: createMcpExtension(), builtin: true, replaceable: true },
+          ]),
+        ],
+        additionalExtensionPaths: systemPrompt ? [BUNDLED_OUTPUT_BUDGET_EXTENSION] : [
+          BUNDLED_OUTPUT_BUDGET_EXTENSION,
+          BUNDLED_ULTRAFAST_EXTENSION,
+          BUNDLED_GOAL_EXTENSION,
+          BUNDLED_MEMORY_EXTENSION,
+          BUNDLED_SUBAGENT_EXTENSION,
+          BUNDLED_RESEARCH_EXTENSION,
+          BUNDLED_VISION_EXTENSION,
+        ],
+        extensionsOverride: systemPrompt
+          ? isolateRuntimeExtensions
+          : preferBundledExtensions,
+        ...(systemPrompt
+          ? {
+              noExtensions: true,
+              noContextFiles: true,
+              noSkills: true,
+              systemPromptOverride: () => systemPrompt,
+              appendSystemPromptOverride: () => [],
+            }
+          : { appendSystemPromptOverride: appendLeylineSystemPrompt }),
+      },
+    })
+    services.requestEvents = requestEvents
+    services.tracingBinding = tracingBinding
+    previousExtensions = reloadServices && services.resourceLoader.getExtensions()
     if (reloadServices) {
       await services.resourceLoader.reload()
       const registrations = services.resourceLoader.getExtensions().runtime
@@ -466,6 +502,7 @@ async function buildRuntimeResult(
       services,
       diagnostics: services.diagnostics,
     }
+    tracingBinding?.bindSession(runtime.session)
     forceOneAtATime(runtime.session)
     installVisionDelegationContext(runtime.session, systemPrompt ? undefined : (images, signal, requestModel) => {
       return prepareVisionDelegation(runtime.session, images, signal, requestModel)
@@ -480,15 +517,20 @@ async function buildRuntimeResult(
           options: requestOptions,
           ctx: runtime.session.extensionRunner.createContext(),
         })
+        tracing.observe(runtime.session, { type: 'provider_request', model: requestModel })
       }
       return streamFunction(requestModel, context, requestOptions)
     }
     requestEvents.emit('leyline:request-boundary-ready')
     return runtime
   } catch (error) {
-    if (runtime || services.resourceLoader.getExtensions() !== previousExtensions) {
-      const session = runtime?.session || await createResourceSession(services)
-      await disposeRuntime(new AgentSessionRuntime(session, services, createRuntime))
+    try {
+      if (services && (runtime || services.resourceLoader.getExtensions() !== previousExtensions)) {
+        const session = runtime?.session || await createResourceSession(services)
+        await disposeRuntime(new AgentSessionRuntime(session, services, createRuntime))
+      }
+    } finally {
+      await tracingBinding?.dispose(captureCheckpoint)
     }
     throw error
   }
@@ -1596,6 +1638,7 @@ function disposeRuntime(runtime) {
         session.dispose()
         throw error
       } finally {
+        tracing.closeSession(session)
         providerSessions.delete(session)
       }
     }
@@ -1631,7 +1674,7 @@ function discardRuntimeHandle(handle) {
 function shutdownRuntime() {
   if (runtimeShutdownPromise) return runtimeShutdownPromise
   runtimeShuttingDown = true
-  runtimeShutdownPromise = Promise.resolve().then(async () => {
+  runtimeShutdownPromise = waitForSettings(Promise.resolve().then(async () => {
     await Promise.all([closeSessionSummaryWorkers(), shutdownSettingsOperations()])
     await providerSettingsRuntimes.dispose()
     const interruptions = [
@@ -1650,7 +1693,8 @@ function shutdownRuntime() {
     if (errors.length) {
       throw new AggregateError(errors.map((result) => result.reason), 'Runtime shutdown failed')
     }
-  }).finally(() => {
+  }), AbortSignal.timeout(RUNTIME_SHUTDOWN_TIMEOUT_MS)).finally(async () => {
+    await tracing.close()
     runtimeShuttingDown = false
     runtimeShutdownPromise = undefined
   })
@@ -1874,14 +1918,17 @@ const runtimeState = trackRuntimeCreation(async (cwd, { refresh = false } = {}) 
   const targetCwd = cwd || activeRuntime?.cwd || process.cwd()
   if (!refresh && activeRuntime?.cwd === targetCwd) return activeSessionDto()
 
-  const result = await createAgentSessionRuntime(createRuntime, {
-    cwd: targetCwd,
-    agentDir: getAgentDir(),
-    sessionManager: SessionManager.create(
-      targetCwd,
-      configuredSessionDir(targetCwd),
-    ),
-  })
+  const result = await createAgentSessionRuntime(
+    options => createRuntimeResult(options, { captureTracing: false }),
+    {
+      cwd: targetCwd,
+      agentDir: getAgentDir(),
+      sessionManager: SessionManager.create(
+        targetCwd,
+        configuredSessionDir(targetCwd),
+      ),
+    },
+  )
 
   try {
     return {
@@ -1938,7 +1985,24 @@ async function exportSessionDetail(id) {
   return detail
 }
 
-const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, model, thinkingLevel, tools, excludeTools, systemPrompt, isolatedSystemPrompt, images, allowImages = false, signal, onStart }) => {
+function parentTracingContext(parentSessionId, parentSessionPath, toolCallId) {
+  const handles = [...runtimeHandles.values(), ...hiddenRuntimeHandles]
+  const parent = handles.find(handle => {
+    if (parentSessionId && handle.sessionId !== parentSessionId) return false
+    return parentSessionPath
+      ? handle.runtime.session.sessionFile === parentSessionPath
+      : Boolean(parentSessionId)
+  })
+  if (!parent) return undefined
+  const callId = typeof toolCallId === 'string' && toolCallId.length <= 512 ? toolCallId : undefined
+  return tracing.parentContext(parent.runtime.session, callId) || {
+    sessionId: parent.sessionId,
+    sessionFile: parent.runtime.session.sessionFile,
+    toolCallId: callId || null,
+  }
+}
+
+const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinkingLevel, tools, excludeTools, systemPrompt, isolatedSystemPrompt, images, allowImages = false, signal, onStart }) => {
   if (!cwd) throw new Error('cwd is required')
   if (!task) throw new Error('task is required')
   if (tools !== undefined && !Array.isArray(tools)) {
@@ -1974,6 +2038,7 @@ const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, 
   sessionManager.appendCustomEntry(SUBAGENT_SESSION_CUSTOM_TYPE, {
     sessionId: childId,
     parentSessionPath: parentSessionPath || null,
+    tracingParent: parentTracingContext(parentSessionId, parentSessionPath, _toolCallId),
     toolPolicy: {
       ...(tools !== undefined ? { tools } : {}),
       excludeTools: [...new Set([...(excludeTools || []), SUBAGENT_DELEGATION_TOOL])],
@@ -2117,12 +2182,14 @@ const VISION_AGENT_PROMPT =
   'If the user asked a specific question, answer it directly first, then give ' +
   'the surrounding detail the parent needs.'
 
-async function runVision({ question, cwd, parentSessionPath, model, thinking, image, signal }) {
+async function runVision({ question, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinking, image, signal }) {
   if (!image) throw new Error('image is required')
   return runSubagent({
     task: question || 'Describe this image in detail.',
     cwd,
     parentSessionPath,
+    parentSessionId,
+    _toolCallId,
     model,
     thinkingLevel: thinking,
     tools: [],
@@ -2177,6 +2244,7 @@ function extractMessageText(content) {
 
 export function createPiRuntimeApi() {
   return {
+  tracing,
   activeRuntimeCwd: () => activeRuntime?.cwd,
   activeSessionDto,
   assertProviderRoutes,

@@ -3,9 +3,11 @@ import { compactSessionDetailDto } from './dtos.js'
 import { replyExtensionConfirmation } from './extension-ui.js'
 import { getFileSettings, performFileAction, setFileSettings } from './files.js'
 import { createPiSettingsHandler } from './pi-settings-routes.js'
+import { createTracingHandler } from './tracing-routes.js'
 
 export function createPiApiHandler(api) {
   const settingsHandler = createPiSettingsHandler(api)
+  const tracingHandler = createTracingHandler(api.tracing)
   const {
     activeSessionDto,
     bashSession,
@@ -94,11 +96,13 @@ async function piApiHandler(req, res) {
             terminal: true,
             fileLinks: true,
             piSettings: true,
+            tracing: true,
           },
         })
       }
 
       if (url.pathname.startsWith('/settings/')) return settingsHandler(req, res, url)
+      if (url.pathname === '/traces' || url.pathname.startsWith('/traces/')) return tracingHandler(req, res, url)
 
       if (url.pathname === '/files/settings') {
         if (req.method === 'GET') return json(res, await getFileSettings())
@@ -526,6 +530,8 @@ async function piApiHandler(req, res) {
             task: body.task,
             cwd: body.cwd,
             parentSessionPath: body.parentSessionPath,
+            parentSessionId: body.parentSessionId,
+            _toolCallId: body._toolCallId,
             model: body.model,
             thinkingLevel: body.thinkingLevel,
             tools: body.tools,
@@ -610,6 +616,8 @@ async function piApiHandler(req, res) {
             question: body.question,
             cwd: body.cwd,
             parentSessionPath: body.parentSessionPath,
+            parentSessionId: body.parentSessionId,
+            _toolCallId: body._toolCallId,
             model: body.model,
             thinking: body.thinking,
             image: body.image,

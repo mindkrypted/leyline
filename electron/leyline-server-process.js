@@ -2,6 +2,7 @@ import { startLeylineServer } from '../server/leyline-server.js'
 
 const parentPort = process.parentPort
 let leylineServer
+let starting
 let stopping
 
 if (!parentPort) {
@@ -10,25 +11,33 @@ if (!parentPort) {
 
 parentPort.on('message', (event) => {
   if (event.data?.type !== 'close') return
-  void stopServer().finally(() => process.exit(0))
+  void stopServer().then(() => process.exit(0), error => {
+    console.error('Could not stop the Leyline backend', error)
+    process.exit(1)
+  })
 })
 
 try {
-  leylineServer = await startLeylineServer()
-  parentPort.postMessage({ type: 'ready', url: leylineServer.url })
+  starting = startLeylineServer().then(server => { leylineServer = server })
+  await starting
+  if (!stopping) parentPort.postMessage({ type: 'ready', url: leylineServer.url })
 } catch (error) {
+  console.error('Could not start the Leyline backend', error)
   parentPort.postMessage({
     type: 'startup-error',
-    message: error?.message || String(error),
+    message: 'Could not start the Leyline backend. Check the backend log.',
   })
   setTimeout(() => process.exit(1), 0)
 }
 
 function stopServer() {
   if (stopping) return stopping
-  if (!leylineServer) return Promise.resolve()
-
-  stopping = leylineServer.close()
-  leylineServer.server.closeAllConnections?.()
+  stopping = (async () => {
+    await starting?.catch(() => {})
+    if (!leylineServer) return
+    const closing = leylineServer.close()
+    leylineServer.server.closeAllConnections?.()
+    await closing
+  })()
   return stopping
 }

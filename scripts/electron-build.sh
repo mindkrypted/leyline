@@ -8,6 +8,6 @@ electron-packager . Leyline \
   --overwrite \
   --prune=true \
   --icon assets/icon \
-  --asar.unpack='**/{*.node,spawn-helper}' \
+  --asar.unpack='**/{*.node,spawn-helper,@elune/embedded/**}' \
   --ignore='^/(screenshots|src|scripts)(/|$)' \
   --ignore='^/vite.config.js$'
