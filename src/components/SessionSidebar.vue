@@ -13,6 +13,8 @@ const props = defineProps({
     default: null,
   },
   agentRunning: Boolean,
+  tracingAvailable: Boolean,
+  tracesOpen: Boolean,
   backendConnectionBusyId: {
     type: String,
     default: '',
@@ -116,6 +118,7 @@ const emit = defineEmits([
   'open-project-browser',
   'open-project-detail',
   'open-settings',
+  'open-traces',
   'reload-session',
   'request-delete-project',
   'request-delete-session',
@@ -1309,6 +1312,18 @@ const vFocusSelect = {
       </div>
 
       <div class="sidebar-action-buttons">
+        <button
+          v-if="tracingAvailable"
+          class="settings-button sidebar-traces-button"
+          :class="{ active: tracesOpen }"
+          type="button"
+          title="Trace explorer"
+          aria-label="Trace explorer"
+          :aria-pressed="tracesOpen"
+          @click="emit('open-traces', $event)"
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 3h4M2 8h8M2 13h12M6 1v4M10 6v4M14 11v4" /></svg>
+        </button>
         <button
           class="settings-button"
           type="button"

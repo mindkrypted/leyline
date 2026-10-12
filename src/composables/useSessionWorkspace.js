@@ -464,9 +464,11 @@ export function useSessionWorkspace({
       updateSessionRoute(session.id, options)
       const elapsed = Date.now() - switchStarted
       if (elapsed < 150) await wait(150 - elapsed)
+      if (!isCurrentSessionSelection(token, session.id)) return
       sessionLoading.value = false
       sessionSwitching.value = false
-      await scrollToLatest?.()
+      if (!options.shouldScroll || options.shouldScroll()) await scrollToLatest?.()
+      if (!isCurrentSessionSelection(token, session.id)) return
 
       sessionActivating.value = true
       await activateSelectedSession(token, data.session || session)
@@ -1221,7 +1223,7 @@ export function useSessionWorkspace({
     if (!entry?.id || !selectedSession.value || !canBranchFromEntry()) return
 
     const sessionId = selectedSessionId.value
-    const token = sessionSelectionToken
+    const token = invalidateSessionNavigation()
     resettingEntryId.value = entry.id
     sessionError.value = ''
     liveTurn?.setActivity?.('Resetting session…')
@@ -1396,6 +1398,15 @@ export function useSessionWorkspace({
     liveTurn?.selectSession?.(detail.session.id)
     liveTurn?.setPersistedDetail?.(detail)
     updateSessionRoute(detail.session.id, routeOptions)
+  }
+
+  function invalidateSessionNavigation() {
+    sessionSelectionToken += 1
+    invalidateSessionRefresh()
+    sessionLoading.value = false
+    sessionSwitching.value = false
+    sessionActivating.value = false
+    return sessionSelectionToken
   }
 
   function isCurrentSessionSelection(token, id) {
@@ -1818,12 +1829,14 @@ export function useSessionWorkspace({
     finishStartupRun,
     forkingEntryId,
     forkSession,
+    getSessionNavigationRevision: () => sessionSelectionToken,
     handleNativeNewSession,
     handleRouteChange,
     highlightedText,
     hydrateSessions,
     initPhase,
     initializing,
+    invalidateSessionNavigation,
     invalidateSessionRefresh,
     loadHomeProjects,
     loadRoutedSession,

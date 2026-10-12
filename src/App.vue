@@ -11,6 +11,7 @@ import {
 } from 'vue'
 const TranscriptEntry = defineAsyncComponent(() => import('./components/TranscriptEntry.vue'))
 const SystemPromptInspector = defineAsyncComponent(() => import('./components/SystemPromptInspector.vue'))
+const TracePanel = defineAsyncComponent(() => import('./components/TracePanel.vue'))
 const LiveAssistantMessage = defineAsyncComponent(() => import('./components/LiveAssistantMessage.vue'))
 const PierrePreview = defineAsyncComponent(() => import('./components/PierrePreview.vue'))
 const FilePreview = defineAsyncComponent(() => import('./components/FilePreview.vue'))
@@ -44,6 +45,7 @@ import { useTranscriptPreferences } from './composables/useTranscriptPreferences
 import { useWorkbenchScroll } from './composables/useWorkbenchScroll'
 import { backendDisplayAddress, backendHttpUrl } from './lib/backend'
 import { fuzzyScore } from './lib/fuzzy'
+import { createTraceClient } from './lib/trace-client'
 import {
   eventTime,
   formatMode,
@@ -120,6 +122,20 @@ const reviewDesktopAvailable = ref(false)
 const reviewRefreshToken = ref(0)
 const reviewSummary = ref(defaultReviewSummary())
 const researchSourcesOpen = ref(false)
+const traceMode = ref('')
+const traceOrigin = ref('')
+const traceClient = shallowRef(null)
+const tracePane = ref(null)
+const traceNavigationError = ref('')
+const inspectorTraceState = shallowRef(emptyTraceState())
+const explorerTraceState = shallowRef(emptyTraceState())
+const workspaceTraceState = shallowRef(emptyTraceState())
+const traceState = computed(() => traceMode.value === 'workspace'
+  ? workspaceTraceState.value
+  : traceMode.value === 'explorer' ? explorerTraceState.value : inspectorTraceState.value)
+const traceWorkbenchCovered = computed(() => ['workspace', 'explorer'].includes(traceMode.value))
+let traceOpener = null
+let traceViewRevision = 0
 const systemPromptEntry = shallowRef(null)
 const systemPromptPane = ref(null)
 const systemPromptSelection = ref(0)
@@ -209,6 +225,7 @@ const reviewEnabled = computed(() => {
 const reviewWatchEnabled = computed(() => {
   return activeBackendConnectionInfo.value?.capabilities?.reviewWatch === true
 })
+const tracingAvailable = computed(() => activeBackendConnectionInfo.value?.capabilities?.tracing === true)
 const researchEnabled = computed(() => {
   return activeBackendConnectionInfo.value?.capabilities?.research === true
 })
@@ -310,13 +327,16 @@ const pendingInitialSessionPath = ref('')
 const requiredInitialBackendConnectionId = ref('')
 let composerScannerSettlingTimer = null
 let composerCommitTimer = null
-const workbenchScroll = useWorkbenchScroll({ workbench, composerRef })
+const workbenchScroll = useWorkbenchScroll({ workbench, composerRef, isActive: () => !traceWorkbenchCovered.value })
 const {
   composerHeight,
   stickToBottom,
   hasNewOutput,
   composerReservedHeight,
   scrollToLatest,
+  scrollToEntry,
+  pauseScroll,
+  resumeScroll,
   jumpToLatest,
   scheduleLiveScroll,
   handleWorkbenchScroll,
@@ -390,12 +410,12 @@ const {
   finishStartupRun,
   forkingEntryId,
   forkSession,
-  handleNativeNewSession,
-  handleRouteChange,
+  handleNativeNewSession: workspaceHandleNativeNewSession,
+  handleRouteChange: workspaceHandleRouteChange,
   hydrateSessions,
   initPhase,
   initializing,
-  invalidateSessionRefresh,
+  invalidateSessionNavigation,
   loadHomeProjects,
   loadRoutedSession,
   loadSessions,
@@ -687,6 +707,7 @@ const {
   available: fileLinksAvailable,
   copyText: copyTranscriptItem,
   openEditorTerminal: async (...args) => {
+    await closeTrace(false)
     const opened = await openEditorTerminal(...args)
     if (opened) closeToolFullscreen()
     return opened
@@ -741,6 +762,7 @@ const {
   openEventStream,
   runtimeEvents,
   setEventSessionId,
+  subscribeTraces,
 } = useRuntimeEvents({
   onActiveSession(activeSession) {
     if (activeSession.id && activeSession.cwd) {
@@ -1092,6 +1114,7 @@ watch(selectedSessionId, (sessionId, previousSessionId) => {
     && (composerMotionState.value.kind === 'session' || previousSessionId)) {
     cancelComposerMotion()
   }
+  resetTracing()
   setEventSessionId(sessionId)
   emptySessionKind.value = 'session'
   if (!selectedSessionId.value) {
@@ -1111,7 +1134,18 @@ watch(selectedSessionId, (sessionId, previousSessionId) => {
   resetWorkbenchScrollState()
 })
 
-watch(activeBackendConnectionId, () => closeSystemPrompt(false))
+watch([activeBackendConnectionId, () => activeBackendConnection.value?.url], () => {
+  resetTracing()
+  closeSystemPrompt(false)
+}, { flush: 'sync' })
+watch(tracingAvailable, (available) => { if (!available) resetTracing() })
+watch(traceWorkbenchCovered, (covered) => {
+  if (covered) pauseScroll()
+  else resumeScroll()
+}, { flush: 'sync' })
+watch([reviewOpen, researchSourcesOpen, systemPromptEntry, memoryOpen, eventLogOpen, settingsOpen, projectDetailCwd, sessionDetailsOpen], (values) => {
+  if (traceMode.value && values.some(Boolean)) void closeTrace(false)
+})
 
 watch([sessionDetail, liveFlowItems], () => {
   const id = systemPromptEntry.value?.id
@@ -1193,6 +1227,7 @@ onUnmounted(() => {
   window.removeEventListener('leyline:toggle-memory', handleNativeToggleMemory)
   window.removeEventListener('leyline:toggle-sidebar', handleNativeToggleSidebar)
   closeResearchCitationPreview()
+  resetTracing()
   delete window.__leylineBackendConnectionId
   disposeTerminalResize()
   closeEventStream()
@@ -1306,6 +1341,7 @@ function selectStartProjectTarget(cwd, event) {
     return
   }
   clearPendingWorkspaceTargets()
+  resetTracing()
   selectStartProject(cwd)
 }
 
@@ -1317,6 +1353,7 @@ function selectSidebarProject(project, event) {
   }
   if (memoryDirty.value && !confirmDiscardMemoryChanges()) return
   clearPendingWorkspaceTargets()
+  resetTracing()
   workspaceNavigateHome()
   selectStartProject(project.cwd)
   closeReview(true)
@@ -1364,6 +1401,7 @@ function selectBackendTarget(connection, event) {
 }
 
 async function createSession(project, options = {}) {
+  resetTracing()
   sidebarNavigator.value = ''
   await workspaceCreateSession(project, options)
   projectBrowserOpen.value = false
@@ -1372,6 +1410,7 @@ async function createSession(project, options = {}) {
 }
 
 async function createSessionForCwd(cwd, options = {}) {
+  resetTracing()
   const session = await workspaceCreateSessionForCwd(cwd, options)
   projectBrowserOpen.value = false
   projectDetailCwd.value = ''
@@ -1379,8 +1418,9 @@ async function createSessionForCwd(cwd, options = {}) {
   return session
 }
 
-async function selectSession(session, options) {
+async function selectSession(session, options, traceRevision) {
   if (memoryDirty.value && !confirmDiscardMemoryChanges()) return
+  if (traceRevision !== traceViewRevision) resetTracing()
   sidebarNavigator.value = ''
   await workspaceSelectSession(session, options)
   projectDetailCwd.value = ''
@@ -1510,7 +1550,27 @@ async function handleNativeToggleTerminal() {
   if (settingsOpen.value || filePreview.value || fileMenu.value) return
   if (!selectedSession.value || initializing.value) return
 
+  await toggleForegroundTerminal()
+}
+
+async function toggleForegroundTerminal() {
+  await closeTrace(false)
   await toggleTerminal(selectedSessionId.value)
+}
+
+function openMobileSidebar() {
+  void closeTrace(false)
+  sidebarOpen.value = true
+}
+
+function handleRouteChange() {
+  resetTracing()
+  return workspaceHandleRouteChange()
+}
+
+function handleNativeNewSession(event) {
+  resetTracing()
+  return workspaceHandleNativeNewSession(event)
 }
 
 function handleNativeOpenSettings() {
@@ -1531,7 +1591,8 @@ function handleNativeToggleMemory() {
 function handleNativeToggleSidebar() {
   if (settingsOpen.value || filePreview.value || fileMenu.value) return
   if (window.matchMedia('(max-width: 760px)').matches) {
-    sidebarOpen.value = !sidebarOpen.value
+    if (sidebarOpen.value) sidebarOpen.value = false
+    else openMobileSidebar()
     return
   }
 
@@ -1589,6 +1650,124 @@ function researchPhaseClass(phase) {
 
 function researchPhaseLabel(phase) {
   return phase.charAt(0).toUpperCase() + phase.slice(1)
+}
+
+function emptyTraceState() {
+  return { selection: { traceId: null, observationId: null, tab: 'output' }, listState: { q: '', status: '', cwd: '', page: 1, limit: 20 }, sessionId: '' }
+}
+
+function updateTraceState(field, value) {
+  const state = traceMode.value === 'workspace' ? workspaceTraceState
+    : traceMode.value === 'explorer' ? explorerTraceState : inspectorTraceState
+  state.value = { ...state.value, [field]: { ...value } }
+}
+
+function openTrace(mode, event) {
+  if (!tracingAvailable.value || mode === 'inspector' && !selectedSessionId.value) return
+  if (memoryDirty.value && !confirmDiscardMemoryChanges()) return
+  if (traceMode.value === mode || traceMode.value === 'workspace' && traceOrigin.value === mode) {
+    void closeTrace()
+    return
+  }
+  closeSystemPrompt(false)
+  closeReview(true)
+  closeResearchSources()
+  closeResearchCitationPreview()
+  if (memoryOpen.value) closeMemoryDrawer()
+  closePickerMenus()
+  eventLogOpen.value = false
+  sessionDetailsOpen.value = false
+  projectDetailCwd.value = ''
+  sidebarOpen.value = false
+  sidebarNavigator.value = ''
+  traceOpener = event?.currentTarget || document.activeElement
+  traceViewRevision++
+  traceOrigin.value = ''
+  if (!traceClient.value) traceClient.value = createTraceClient(activeBackendConnection.value, subscribeTraces)
+  if (mode === 'inspector') inspectorTraceState.value = { ...inspectorTraceState.value, sessionId: selectedSessionId.value }
+  traceNavigationError.value = ''
+  traceMode.value = mode
+}
+
+function openTraceWorkspace(payload) {
+  if (!traceMode.value || traceMode.value === 'workspace' || !payload?.selection?.traceId) return
+  traceViewRevision++
+  traceOrigin.value = traceMode.value
+  workspaceTraceState.value = {
+    ...emptyTraceState(),
+    selection: { ...payload.selection },
+    sessionId: payload.sessionId || '',
+    listState: traceMode.value === 'inspector' ? { ...inspectorTraceState.value.listState } : emptyTraceState().listState,
+  }
+  traceMode.value = 'workspace'
+}
+
+async function closeTrace(restoreFocus = true) {
+  if (!traceMode.value) return
+  if (traceMode.value === 'workspace' && restoreFocus && traceOrigin.value) {
+    traceViewRevision++
+    const state = traceOrigin.value === 'explorer' ? explorerTraceState : inspectorTraceState
+    state.value = { ...state.value, selection: { ...workspaceTraceState.value.selection } }
+    traceMode.value = traceOrigin.value
+    traceOrigin.value = ''
+    return
+  }
+  const opener = traceOpener
+  const focused = tracePane.value?.$el?.contains(document.activeElement)
+  const revision = ++traceViewRevision
+  traceMode.value = ''
+  traceOrigin.value = ''
+  traceOpener = null
+  traceClient.value?.dispose()
+  traceClient.value = null
+  await nextTick()
+  if (restoreFocus && focused && revision === traceViewRevision && !traceMode.value) {
+    const rect = opener?.isConnected && !opener.closest('[inert]') ? opener.getBoundingClientRect() : null
+    const visible = rect && rect.width > 0 && rect.height > 0 && rect.right > 0 && rect.left < window.innerWidth
+      && rect.bottom > 0 && rect.top < window.innerHeight && getComputedStyle(opener).visibility !== 'hidden'
+      && (!opener.closest('.sidebar') || !systemPromptMobile.value || sidebarOpen.value)
+    const target = visible ? opener : document.querySelector('.mobile-sidebar-button')
+    target?.focus({ preventScroll: true })
+  }
+}
+
+function resetTracing() {
+  if (traceMode.value) void closeTrace(false)
+  else traceViewRevision++
+  traceNavigationError.value = ''
+  inspectorTraceState.value = emptyTraceState()
+  explorerTraceState.value = emptyTraceState()
+  workspaceTraceState.value = emptyTraceState()
+}
+
+async function openTraceSession(target) {
+  if (!target?.sessionId || !traceMode.value) return
+  if (memoryDirty.value && !confirmDiscardMemoryChanges()) return
+  const connection = activeBackendConnection.value
+  const previousSessionId = selectedSessionId.value
+  const navigationRevision = sessionWorkspace.getSessionNavigationRevision()
+  const revision = traceViewRevision + 1
+  const session = sessions.value.find(item => item.id === target.sessionId)
+    || { id: target.sessionId, path: target.sessionFile || '', cwd: '' }
+  await closeTrace(false)
+  if (connection !== activeBackendConnection.value || traceViewRevision !== revision
+    || selectedSessionId.value !== previousSessionId || traceMode.value
+    || sessionWorkspace.getSessionNavigationRevision() !== navigationRevision) return
+  const switching = selectedSessionId.value !== session.id
+  const expectedRevision = revision + (switching ? 1 : 0)
+  const ownedNavigationRevision = navigationRevision + (switching ? 1 : 0)
+  const ownsNavigation = () => connection === activeBackendConnection.value
+    && sessionWorkspace.getSessionNavigationRevision() === ownedNavigationRevision
+    && traceViewRevision === expectedRevision && selectedSessionId.value === session.id && !traceMode.value
+  if (switching) await selectSession(session, { shouldScroll: ownsNavigation }, revision)
+  if (!ownsNavigation() || sessionError.value || sessionDetail.value?.session?.id !== session.id) return
+  if (target.entryId) {
+    const found = await scrollToEntry(target.entryId, ownsNavigation)
+    if (ownsNavigation() && !found) traceNavigationError.value = 'This trace entry is unavailable in the current session branch.'
+    return
+  }
+  await nextTick()
+  if (ownsNavigation()) composerRef.value?.focus()
 }
 
 function updateSystemPromptViewport() {
@@ -1794,6 +1973,7 @@ function toggleReviewExpanded() {
 }
 
 function navigateHome() {
+  resetTracing()
   clearPendingWorkspaceTargets()
   workspaceNavigateHome()
   closeSystemPrompt(false)
@@ -2603,7 +2783,7 @@ async function submitDraft(streamingBehavior) {
     && !selectedSessionHasMessages.value
     && emptySessionKind.value === 'research'
   if (editing) {
-    invalidateSessionRefresh()
+    invalidateSessionNavigation()
     resetLiveState()
     trimSessionToEntry(editing.id)
     stickToBottom.value = true
@@ -2820,6 +3000,7 @@ function startEditingEntry(entry) {
   }
   if (target.role !== 'user') return
 
+  invalidateSessionNavigation()
   editingEntry.value = target
   draft.value = target.text || textFromBlocks(messageBlocksFor(target))
   attachedImages.value = imageBlocksFor(target).map((image) => ({
@@ -2853,7 +3034,7 @@ async function retryEntry(entry) {
   const sessionId = selectedSessionId.value
   if (!await stopForPromptEdit(sessionId)) return
   const previousDetail = sessionDetail.value
-  invalidateSessionRefresh()
+  invalidateSessionNavigation()
   resetLiveState()
   trimSessionToEntry(target.id)
   stickToBottom.value = true
@@ -3311,6 +3492,7 @@ function anyEscapeTargetOpen(ignoreQueue = false) {
     || slashPickerOpen.value
     || researchSourcesOpen.value
     || systemPromptEntry.value
+    || traceMode.value
     || researchCitationPreview.value
     || (reviewPaneExpanded.value && window.innerWidth > 1120)
   )
@@ -3322,6 +3504,22 @@ function handleEscape(event) {
     event?.stopPropagation?.()
     if (fileMenu.value) closeFileMenu()
     else closeFilePreview()
+    return
+  }
+  if (sidebarNavigator.value || projectBrowserOpen.value || deleteConfirmActive.value || fullscreenImage.value || fullscreenTool.value) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    if (deleteConfirmActive.value) cancelConfirmDelete()
+    else if (projectBrowserOpen.value) closeProjectBrowser()
+    else if (fullscreenImage.value) closeImageFullscreen()
+    else if (fullscreenTool.value) closeToolFullscreen()
+    else sidebarNavigator.value = ''
+    return
+  }
+  if (traceMode.value) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    void closeTrace()
     return
   }
   if (systemPromptPane.value?.dismissMenu()) {
@@ -3433,6 +3631,7 @@ function closePickerMenus() {
         && isResearchSession
         && !!selectedSession,
       'system-prompt-open': !!systemPromptEntry,
+      'trace-workbench-covered': traceWorkbenchCovered,
     }"
     :style="{
       '--composer-height': `${composerHeight}px`,
@@ -3493,7 +3692,7 @@ function closePickerMenus() {
           class="mobile-sidebar-button"
           type="button"
           aria-label="Open sessions"
-          @click="sidebarOpen = true"
+          @click="openMobileSidebar"
         >☰</button>
         <div v-if="selectedSession" class="workbench-title-row">
           <button
@@ -3548,6 +3747,18 @@ function closePickerMenus() {
               : selectedResearch.phase }}</span>
         </div>
         <div v-if="selectedSession" class="topbar-meta">
+          <button
+            v-if="tracingAvailable"
+            class="topbar-icon-button trace-inspector-toggle"
+            :class="{ active: traceMode === 'inspector' || traceMode === 'workspace' && traceOrigin === 'inspector' }"
+            type="button"
+            title="Session traces"
+            aria-label="Session traces"
+            :aria-pressed="traceMode === 'inspector' || traceMode === 'workspace' && traceOrigin === 'inspector'"
+            @click="openTrace('inspector', $event)"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h4M2 8h8M2 13h12M6 1v4M10 6v4M14 11v4" /></svg>
+          </button>
           <button
             class="topbar-icon-button session-details-toggle"
             :class="{ active: sessionDetailsOpen }"
@@ -3707,6 +3918,9 @@ function closePickerMenus() {
       :sessions-hydration-error="sessionsHydrationError"
       :sessions-loading="sessionsLoading"
       :visible-projects="visibleProjects"
+      :tracing-available="tracingAvailable"
+      :traces-open="traceMode === 'explorer' || traceMode === 'workspace' && traceOrigin === 'explorer'"
+      @open-traces="openTrace('explorer', $event)"
       @begin-rename-session="beginRenameSession"
       @cancel-rename-session="cancelRenameSession"
       @commit-rename-session="commitRenameSession"
@@ -3725,7 +3939,7 @@ function closePickerMenus() {
       @update:navigator="setSidebarNavigator"
     />
 
-    <section class="main-pane" :inert="!!systemPromptEntry && systemPromptMobile">
+    <section class="main-pane" :inert="traceWorkbenchCovered || (!!systemPromptEntry || traceMode === 'inspector') && systemPromptMobile" :aria-hidden="traceWorkbenchCovered || undefined">
       <div v-if="runtimeChromeVisible" class="runtime-chrome">
 
         <section v-if="activeGoal" class="goal-control-plane">
@@ -3797,6 +4011,10 @@ function closePickerMenus() {
       </div>
 
 
+      <p v-if="traceNavigationError" class="trace-navigation-notice error-note" role="status">
+        {{ traceNavigationError }}
+        <button type="button" aria-label="Dismiss trace notice" @click="traceNavigationError = ''">Close</button>
+      </p>
       <div
         ref="workbench"
         class="workbench"
@@ -3997,6 +4215,7 @@ function closePickerMenus() {
           <TranscriptEntry
             v-for="entry in entries"
             :key="`${selectedSession.id}:${entry.id}`"
+            :data-entry-id="entry.id"
             :class="{ 'message-enter': isEnteringEntry(entry) }"
             :copied-entry-id="copiedEntryId"
             :entry="entry"
@@ -4032,6 +4251,7 @@ function closePickerMenus() {
             v-for="item in liveFlowItems"
             :key="item.id"
             class="live-item"
+            :data-entry-id="item.persistedEntry?.id || item.id"
             :class="liveItemClass(item)"
           >
             <TranscriptEntry
@@ -4348,12 +4568,30 @@ function closePickerMenus() {
             @submit="submitDraft"
             @toggle-picker="togglePicker"
             @toggle-research="toggleEmptySessionKind"
-            @toggle-terminal="toggleTerminal(selectedSessionId)"
+            @toggle-terminal="toggleForegroundTerminal"
             @toggle-ultrafast="toggleUltrafast"
           />
         </div>
       </div>
     </section>
+
+    <TracePanel
+      v-if="traceMode && traceClient && tracingAvailable"
+      ref="tracePane"
+      :mode="traceMode"
+      :client="traceClient"
+      :session-id="traceState.sessionId"
+      :selection="traceState.selection"
+      :list-state="traceState.listState"
+      :backend-name="activeBackendConnection?.name || 'Selected backend'"
+      :return-to="traceOrigin"
+      :projects="visibleProjects"
+      @update:selection="updateTraceState('selection', $event)"
+      @update:list-state="updateTraceState('listState', $event)"
+      @open-workspace="openTraceWorkspace"
+      @open-session="openTraceSession"
+      @close="closeTrace()"
+    />
 
     <ReviewPane
       v-if="reviewAvailable && selectedSession"

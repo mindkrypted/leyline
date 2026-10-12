@@ -6,7 +6,7 @@ const scrollAnimationMs = 220
 const scrollSettleMs = 900
 const userScrollIdleMs = 450
 
-export function useWorkbenchScroll({ workbench, composerRef }) {
+export function useWorkbenchScroll({ workbench, composerRef, isActive = () => true }) {
   const composerHeight = ref(0)
   const stickToBottom = ref(true)
   const userScrollActive = ref(false)
@@ -18,6 +18,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   let composerResizeObserver
   let workbenchResizeObserver
   let workbenchResizeFrame
+  let scrollRevision = 0
   let bottomScrollActive = false
   let resizePinActive = false
   let selectedSessionIdRef = null
@@ -41,6 +42,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function scheduleBottomScroll() {
+    if (!isActive()) return
     cancelAnimationFrame(scrollFrame)
     scrollFrame = requestAnimationFrame(() => {
       scrollToLatest()
@@ -52,7 +54,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
     if (activeSessionId !== selectedSessionIdRef.value) return
     if (!liveItemsRef.value.length) return
 
-    if (!stickToBottom.value || userScrollActive.value) {
+    if (!isActive() || !stickToBottom.value || userScrollActive.value) {
       hasNewOutput.value = true
       return
     }
@@ -90,12 +92,12 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function pinWorkbenchAfterResize() {
-    if (!workbench.value || !stickToBottom.value || userScrollActive.value) return
+    if (!isActive() || !workbench.value || !stickToBottom.value || userScrollActive.value) return
     cancelAnimationFrame(workbenchResizeFrame)
     resizePinActive = true
     let framesRemaining = 5
     const pin = () => {
-      if (!workbench.value
+      if (!isActive() || !workbench.value
         || !stickToBottom.value
         || userScrollActive.value) {
         resizePinActive = false
@@ -113,7 +115,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function handleWorkbenchScroll() {
-    if (!workbench.value) return
+    if (!isActive() || !workbench.value) return
     if (bottomScrollActive || resizePinActive) {
       stickToBottom.value = true
       hasNewOutput.value = false
@@ -142,6 +144,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function markUserScrolling() {
+    scrollRevision++
     bottomScrollActive = false
     resizePinActive = false
     userScrollActive.value = true
@@ -167,6 +170,8 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function resetWorkbenchScrollState() {
+    scrollRevision++
+    cancelAnimationFrame(scrollFrame)
     clearTimeout(userScrollTimer)
     cancelAnimationFrame(scrollAnimationFrame)
     cancelAnimationFrame(scrollSettleFrame)
@@ -200,7 +205,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
     }
     const startedAt = performance.now()
     const tick = (now) => {
-      if (!workbench.value) return
+      if (!isActive() || !workbench.value) return
       const target = workbenchBottom()
       const progress = Math.min(1, (now - startedAt) / scrollAnimationMs)
       const eased = 1 - Math.pow(1 - progress, 3)
@@ -220,7 +225,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
     bottomScrollActive = true
     const startedAt = performance.now()
     const settle = (now) => {
-      if (!workbench.value
+      if (!isActive() || !workbench.value
         || !stickToBottom.value
         || userScrollActive.value) {
         bottomScrollActive = false
@@ -237,10 +242,46 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   async function scrollToLatest() {
+    if (!isActive()) {
+      markNewOutput()
+      return
+    }
     resetWorkbenchScrollState()
+    const revision = scrollRevision
     await nextTick()
     await new Promise(requestAnimationFrame)
-    setWorkbenchScrollToBottom()
+    if (isActive() && revision === scrollRevision) setWorkbenchScrollToBottom()
+  }
+
+  function pauseScroll() {
+    scrollRevision++
+    clearTimeout(userScrollTimer)
+    cancelAnimationFrame(scrollFrame)
+    cancelAnimationFrame(scrollAnimationFrame)
+    cancelAnimationFrame(scrollSettleFrame)
+    cancelAnimationFrame(workbenchResizeFrame)
+    bottomScrollActive = false
+    resizePinActive = false
+    userScrollActive.value = false
+  }
+
+  function resumeScroll() {
+    if (stickToBottom.value) scheduleBottomScroll()
+  }
+
+  async function scrollToEntry(entryId, isCurrent = () => true) {
+    const sessionId = selectedSessionIdRef?.value
+    await nextTick()
+    await new Promise(requestAnimationFrame)
+    if (!isActive() || !isCurrent() || sessionId !== selectedSessionIdRef?.value) return false
+    const entry = workbench.value?.querySelector(`[data-entry-id="${CSS.escape(String(entryId))}"]`)
+    if (!entry) return false
+    pauseScroll()
+    stickToBottom.value = false
+    workbench.value.scrollTop += entry.getBoundingClientRect().top - workbench.value.getBoundingClientRect().top - 20
+    entry.setAttribute('tabindex', '-1')
+    entry.focus({ preventScroll: true })
+    return true
   }
 
   async function jumpToLatest() {
@@ -248,7 +289,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function shouldFollowOutput() {
-    return stickToBottom.value
+    return isActive() && stickToBottom.value
   }
 
   function markNewOutput() {
@@ -256,6 +297,7 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
   }
 
   function dispose() {
+    scrollRevision++
     clearTimeout(userScrollTimer)
     composerResizeObserver?.disconnect()
     workbenchResizeObserver?.disconnect()
@@ -271,6 +313,9 @@ export function useWorkbenchScroll({ workbench, composerRef }) {
     hasNewOutput,
     composerReservedHeight,
     scrollToLatest,
+    scrollToEntry,
+    pauseScroll,
+    resumeScroll,
     jumpToLatest,
     scheduleBottomScroll,
     scheduleLiveScroll,

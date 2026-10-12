@@ -26,6 +26,16 @@ export function useRuntimeEvents({
   let eventSource
   let eventSessionId = ''
   let streamOpened = false
+  const traceSubscribers = new Set()
+
+  function publishTraceNotice(notice) {
+    for (const listener of traceSubscribers) listener(notice)
+  }
+
+  function subscribeTraces(listener) {
+    traceSubscribers.add(listener)
+    return () => traceSubscribers.delete(listener)
+  }
 
   function openEventStream() {
     eventSource?.close()
@@ -48,11 +58,27 @@ export function useRuntimeEvents({
       if (eventSource !== source) return
       const data = parseEvent(event, 'runtime')
       if (!data) return
+      if (data.event?.type === 'trace_updated' || data.event?.type === 'trace_config') {
+        publishTraceNotice({ ...data.event, activeSessionId: data.event.sessionId })
+        return
+      }
       if (!transientRuntimeEventTypes.has(data.event?.type)) {
         appendRuntimeEvent(data)
       }
       onRuntimeEvent?.(data)
     })
+
+    for (const type of ['trace_updated', 'trace_config']) {
+      source.addEventListener(type, (event) => {
+        if (eventSource !== source || !traceSubscribers.size) return
+        try {
+          const data = JSON.parse(event.data)
+          publishTraceNotice({ ...data, type, activeSessionId: data.sessionId })
+        } catch (error) {
+          console.warn(`Invalid ${type} notice: ${error.message}`)
+        }
+      })
+    }
 
     source.addEventListener('runtime_roster', (event) => {
       if (eventSource !== source) return
@@ -89,7 +115,10 @@ export function useRuntimeEvents({
       eventStreamConnected.value = true
       eventStreamError.value = ''
       appendRuntimeEvent({ type: 'connected' })
-      if (reconnected) onReconnect?.()
+      if (reconnected) {
+        publishTraceNotice({ type: 'reconnect' })
+        onReconnect?.()
+      }
     }
 
     source.onerror = () => {
@@ -141,5 +170,6 @@ export function useRuntimeEvents({
     openEventStream,
     runtimeEvents,
     setEventSessionId,
+    subscribeTraces,
   }
 }
