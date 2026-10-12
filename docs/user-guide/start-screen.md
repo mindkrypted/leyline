@@ -57,6 +57,12 @@ Leyline creates a research session and starts its planning phase. The control ap
 
 Shell mode always creates a normal session. See [Deep research](./deep-research) for phases, source evidence, citations, and reports.
 
+## Check trace capture before a run
+
+Select the **Trace explorer** icon button at the bottom of the sidebar. The explorer opens without a selected session and lists recorded runs on the selected backend.
+
+Capture starts on for new runs. Expand **Capture new runs** in the trace footer to change it before submitting private data. Traces can retain prompts and tool results. See [Tracing](./tracing).
+
 ## Send the first prompt
 
 1. Select a project.

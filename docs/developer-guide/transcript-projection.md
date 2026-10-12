@@ -83,7 +83,7 @@ HTML export renders the same divider and inspector content through `renderExport
 
 `useLiveTurnProjection.js` keeps live System rows beside user, assistant, and tool rows in sequence order. System `message_start` and `message_end` events use the shared projection.
 
-A reactive `liveTurnAnchorLength` limits the persisted list during a turn. Covered persisted entries stay hidden while their live counterparts remain visible.
+`liveTurnAnchorId` stores the last saved entry ID at turn start. Projection merges the saved tail in branch order with retained live rows keyed by `persistedEntry.id`. Unsaved rows appear before their next matched live neighbor. Saved-only rows, including compaction summaries, remain in that tail after settlement.
 
 Settlement waits for System rows to match persisted entries, as well as user, assistant, tool, and activity state. It then releases the anchor.
 
@@ -106,6 +106,8 @@ Syntax colors live in `src/styles/tokens.css`. Highlight rules live in `src/styl
 ## Preview rendering
 
 `PierrePreview.vue` uses `@pierre/diffs` for file, diff, and patch data. Inline file previews show at most 400 lines.
+
+Trace observations are separate records from transcript projection. Their entry anchors can open the related transcript, but branch changes can make those targets unavailable. Trace notices do not create transcript rows. See [Elune integration](../integrations/elune).
 
 Fullscreen previews use the complete projected data. Markdown reads open as rendered content. Users can switch to the Pierre source view. Image previews use session data URLs.
 

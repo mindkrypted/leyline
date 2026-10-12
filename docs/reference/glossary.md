@@ -2,7 +2,9 @@
 
 - **Active run**: Work that a pi runtime is currently generating or executing.
 - **Backend connection**: A named Leyline server URL that a window can use for
-  sessions, runtime events, terminal traffic, and exports.
+  sessions, runtime events, terminal traffic, traces, and exports.
+- **Capture new runs**: The trace-footer control that enables or disables capture
+  for future runs on the selected backend. It does not delete existing traces.
 - **Compaction**: A pi operation that replaces older context with a shorter
   summary to reduce context use.
 - **Confirmation card**: An extension request above the composer with **Confirm**
@@ -11,6 +13,8 @@
   commands, steering, and **Up next** tasks.
 - **Context usage**: The current number and percentage of model context tokens.
 - **Deep research session**: A pi session whose lead agent plans parallel source work and writes a cited report.
+- **Elune**: The embedded library that stores and displays Leyline run traces.
+  Leyline does not require the standalone Elune server.
 - **File preview**: A view of the current local file on the session's backend,
   separate from saved tool output.
 - **Follow-up**: An input that pi has accepted to run after the active turn.
@@ -29,6 +33,8 @@
 - **Native backend**: The backend that supplied the current Leyline app.
 - **Memory Inspector**: The **Memory** drawer for creating, editing, archiving,
   restoring, and deleting visible memory.
+- **Observation**: A recorded operation within a trace, such as a model call or
+  tool call, with available input, output, timing, usage, and metadata.
 - **Pi session**: A persisted, tree-structured JSONL conversation log managed by
   pi.
 - **Project**: A working directory that groups sessions in Leyline.
@@ -40,7 +46,7 @@
 - **Runtime**: The live pi session object that runs prompts, tools, shell
   commands, and model operations.
 - **Runtime events**: The **Events** drawer data from the selected backend's
-  event stream.
+  event stream. This temporary page list is separate from durable traces.
 - **Sent to agent**: Waiting inputs that pi has already accepted. These inputs
   cannot be edited, reordered, or removed from the queue tray.
 - **Source ledger**: The persisted research list that maps citation numbers to cited, supporting, or excluded sources.
@@ -57,6 +63,15 @@
   model reasoning output.
 - **Tool row**: A collapsed or expanded transcript row for a tool call and its
   result.
+- **Trace**: A durable record of a captured agent run on one backend. It can
+  retain private prompts and tool results independently of session history.
+- **Trace explorer**: The view across projects on the selected backend, with
+  project, search, and status filters. Open it through the sidebar's
+  **Trace explorer** icon button.
+- **Trace inspector**: The **Session traces** view for recorded runs in the
+  selected session.
+- **Tracing workspace**: The expanded timeline and detail view opened through
+  **Open workspace**. **Back** returns to its inspector or explorer.
 - **Transcript**: The selected branch of a pi session as Leyline displays it.
 - **ultrafast**: A premium service tier for supported OpenAI Responses models.
   Its composer chip is off by default and applies to the current runtime/session.

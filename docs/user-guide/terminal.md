@@ -12,7 +12,7 @@ Select **Open terminal** in the composer context row. The drawer opens and conne
 
 In Electron on macOS, press **Command+Shift+T** to open or close the terminal.
 
-The terminal requires a selected session. It is not available on the start screen.
+The terminal requires a selected session. It is not available on the start screen. Opening it closes any trace view without stopping trace capture.
 
 ## Check the connection
 

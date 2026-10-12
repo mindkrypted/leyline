@@ -2,6 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { chromium } from 'playwright'
+import { docsTraceTimeline, docsTraceEntryTimestamp, docsTraces, tracePage } from './fixtures/docs-traces.js'
 import { THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
 import { projectTranscriptEntries } from '../lib/transcript-projection.js'
 import {
@@ -15,6 +16,9 @@ const screenshotFilter = (process.env.DOCS_SCREENSHOT_FILTER || '')
   .split(',').map((value) => value.trim()).filter(Boolean)
 const docsOutputDir = path.resolve('docs/assets/screenshots')
 const readmeOutputDir = path.resolve('assets/readme')
+const eluneOutputDir = process.env.ELUNE_DOCS_SCREENSHOT_DIR
+  ? path.resolve(process.env.ELUNE_DOCS_SCREENSHOT_DIR)
+  : null
 const fixedNow = Date.parse('2026-08-06T16:00:00.000Z')
 const visionAlertImage = {
   type: 'image',
@@ -90,6 +94,7 @@ const backendInfo = {
     terminal: true,
     fileLinks: true,
     piSettings: true,
+    tracing: true,
   },
 }
 const providerSettings = {
@@ -540,7 +545,7 @@ const baseEntries = [
     role: 'user',
     label: 'You',
     text: 'Review `scripts/release.js` and make validation run before publication.',
-    timestamp: '2026-08-06T15:43:00.000Z',
+    timestamp: docsTraceTimeline.timestamp,
   }),
   messageEntry({
     id: 'assistant-1',
@@ -548,7 +553,7 @@ const baseEntries = [
     label: 'Agent',
     text: 'The script publishes before it checks the build. I will reverse those operations and keep failures visible.',
     thinking: 'I need to inspect the release order, preserve the existing error path, and make the smallest safe change.',
-    timestamp: '2026-08-06T15:44:00.000Z',
+    timestamp: docsTraceEntryTimestamp('model1'),
   }),
   toolEntry({
     id: 'tool-read',
@@ -561,7 +566,7 @@ const baseEntries = [
       path: 'scripts/release.js',
       content: "export async function release() {\n  await publish()\n  await verify()\n}\n",
     },
-    timestamp: '2026-08-06T15:45:00.000Z',
+    timestamp: docsTraceEntryTimestamp('read'),
   }),
   toolEntry({
     id: 'tool-edit',
@@ -575,14 +580,14 @@ const baseEntries = [
       oldText: "export async function release() {\n  await publish()\n  await verify()\n}\n",
       newText: "export async function release() {\n  await verify()\n  await publish()\n}\n",
     },
-    timestamp: '2026-08-06T15:46:00.000Z',
+    timestamp: docsTraceEntryTimestamp('edit'),
   }),
   messageEntry({
     id: 'assistant-2',
     role: 'assistant',
     label: 'Agent',
     text: 'Updated `scripts/release.js`. Verification now finishes before publication begins.',
-    timestamp: '2026-08-06T15:47:00.000Z',
+    timestamp: docsTraceEntryTimestamp('model3'),
     rolloutFeedback: 'helpful',
   }),
 ]
@@ -619,10 +624,10 @@ const systemEntries = projectTranscriptEntries([
   {
     id: 'system-delta',
     type: 'message',
-    timestamp: '2026-08-06T15:46:30.000Z',
+    timestamp: docsTraceEntryTimestamp('edit'),
     message: {
       role: 'system',
-      timestamp: Date.parse('2026-08-06T15:46:30.000Z'),
+      timestamp: Date.parse(docsTraceEntryTimestamp('edit')),
       sections: { project_context: fixtureDeltaContext },
       toolsAdded: [{ name: 'grep', description: 'Search project files for matching text.' }],
     },
@@ -899,12 +904,102 @@ const goal = {
   updatedAt: fixedNow,
 }
 
+const traceFixtures = docsTraces(baseEntries, sessions)
+const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
+const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
+const allowedNames = new Set([
+  ...await fs.readdir(docsOutputDir),
+  ...await fs.readdir(readmeOutputDir),
+  ...traceAssetNames,
+  ...(eluneOutputDir ? embeddedAssetNames : []),
+])
+for (const name of screenshotFilter) {
+  if (path.basename(name) !== name || !name.endsWith('.png') || !allowedNames.has(name)) {
+    throw new Error(`Unknown screenshot basename: ${name}`)
+  }
+}
 await ensureServer()
 await fs.mkdir(docsOutputDir, { recursive: true })
 await fs.mkdir(readmeOutputDir, { recursive: true })
+if (eluneOutputDir) await fs.mkdir(eluneOutputDir, { recursive: true })
 
 const browser = await chromium.launch()
 try {
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'trace-inspector.png'),
+    embeddedFile: eluneOutputDir && path.join(eluneOutputDir, 'embedded-inspector.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'trace',
+    interact: openTraceInspector,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'trace-workspace.png'),
+    embeddedFile: eluneOutputDir && path.join(eluneOutputDir, 'embedded-workspace.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'trace',
+    interact: openTraceWorkspace,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'trace-explorer.png'),
+    embeddedFile: eluneOutputDir && path.join(eluneOutputDir, 'embedded-explorer.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'trace',
+    interact: async (page) => {
+      await page.getByRole('button', { name: 'Trace explorer', exact: true }).click()
+      await waitForTrace(page)
+      await page.locator('.elune-table tbody tr').nth(4).waitFor()
+      await page.locator('[data-observation-id="release-edit"]').click()
+      await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+      await page.locator('.elune-table').getByText('field-notes', { exact: true }).first().waitFor()
+      if (await page.getByRole('combobox', { name: 'Trace project', exact: true }).inputValue()) throw new Error('Explorer project filter is not clear')
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'trace-capture.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'trace',
+    interact: async (page) => {
+      await openTraceInspector(page)
+      await page.locator('[data-observation-id="release-model-3"]').click()
+      await page.locator('.elune-detail-heading h3').filter({ hasText: 'Summarize the change' }).waitFor()
+      await page.locator('.trace-host-footer summary').click()
+      await assertTraceContentReachable(page)
+      await page.locator('.elune-selected').evaluate(element => { element.scrollTop = 0 })
+      await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = 0 })
+      await page.locator('[data-observation-id="release-model-3"]').scrollIntoViewIfNeeded()
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'trace-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-label',
+    viewport: { width: 390, height: 844 },
+    scenario: 'trace',
+    interact: async (page) => {
+      await openTraceInspector(page)
+      await page.locator('.elune-pane-switch button[data-panel="detail"]').filter({ hasText: 'Selected detail' }).waitFor()
+      await assertTraceContentReachable(page)
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(readmeOutputDir, 'tracing.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    viewport: { width: 1503, height: 818 },
+    scenario: 'trace',
+    interact: openTraceWorkspace,
+    macWindow: true,
+  })
   await capture({
     browser,
     file: path.join(docsOutputDir, 'home.png'),
@@ -1489,6 +1584,58 @@ try {
 
 console.log('Screenshot capture complete')
 
+async function waitForTrace(page) {
+  await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: 'Verify before publication' }).waitFor()
+  await page.locator('[data-observation-id="release-edit"]').waitFor()
+  await page.locator('.trace-host-footer').getByText('New runs will be captured.', { exact: false }).waitFor()
+  await page.locator('.elune-observations > .elune-pagination').getByText('1–8 of 8 loaded observations', { exact: false }).waitFor()
+}
+
+async function openTraceInspector(page) {
+  await page.getByRole('button', { name: 'Session traces', exact: true }).click()
+  await waitForTrace(page)
+  await page.locator('[data-observation-id="release-edit"]').click()
+  await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+  await page.locator('.elune-payload').filter({ hasText: 'await verify()' }).waitFor()
+  const geometry = await page.locator('.elune-run-select').evaluate(element => {
+    const select = element.querySelector('select').getBoundingClientRect()
+    const arrow = element.querySelector('svg').getBoundingClientRect()
+    return { inset: select.right - arrow.right, center: arrow.y + arrow.height / 2 - select.y - select.height / 2 }
+  })
+  if (geometry.inset !== 10 || geometry.center !== 0) throw new Error('Run picker chevron is not centered at its 10px inset')
+}
+
+async function openTraceWorkspace(page) {
+  await openTraceInspector(page)
+  await page.getByRole('button', { name: 'Open workspace', exact: true }).click()
+  await page.locator('.trace-panel-workspace .elune-ui[aria-busy="false"]').waitFor()
+  await page.locator('.elune-timeline .elune-span.tool').first().waitFor()
+  await page.locator('[data-observation-id="release-edit"][aria-pressed="true"]').waitFor()
+  await page.locator('.elune-tabs button[aria-pressed="true"]').filter({ hasText: 'output' }).waitFor()
+  await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+  await assertTraceContentReachable(page)
+}
+
+async function assertTraceContentReachable(page) {
+  await page.locator('.elune-selected').evaluate(element => { element.scrollTop = element.scrollHeight })
+  const payload = page.locator('.elune-payload')
+  await payload.scrollIntoViewIfNeeded()
+  await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = element.scrollHeight })
+  const reachable = await payload.evaluate(element => {
+    const node = element.firstChild
+    const range = document.createRange()
+    const end = node.textContent.trimEnd().length
+    range.setStart(node, end - 1)
+    range.setEnd(node, end)
+    const line = range.getBoundingClientRect()
+    const footer = document.querySelector('.trace-host-footer').getBoundingClientRect()
+    const port = element.closest('.elune-payload-scroll').getBoundingClientRect()
+    const hit = document.elementFromPoint(line.x + 2, line.y + line.height / 2)
+    return line.top >= port.top && line.bottom <= Math.min(port.bottom, footer.top) && (hit === element || element.contains(hit)) && footer.bottom <= innerHeight
+  })
+  if (!reachable) throw new Error('Trace payload last line or capture footer is inaccessible')
+}
+
 async function waitForResearchSources(page) {
   const pane = page.locator('aside[aria-label="Research sources"].open')
   await pane.waitFor()
@@ -1795,8 +1942,11 @@ async function capture({
   padding = 0,
   preserveHover = false,
   macWindow = false,
+  embeddedFile,
 }) {
-  if (screenshotFilter.length && !screenshotFilter.includes(path.basename(file))) return
+  const selected = !screenshotFilter.length || screenshotFilter.includes(path.basename(file))
+  const embeddedSelected = embeddedFile && (!screenshotFilter.length || screenshotFilter.includes(path.basename(embeddedFile)) || selected)
+  if (!selected && !embeddedSelected) return
   const runtime = runtimeFor(scenario)
   const runtimeFixtures = runtimeFixturesFor(scenario, runtime)
   const context = await browser.newContext({
@@ -1818,6 +1968,14 @@ async function capture({
   })
   const page = await context.newPage()
   const unexpected = []
+  let captureConfig = { enabled: true, error: '' }
+  const capturedTraces = structuredClone(traceFixtures)
+  await page.route('**/*', (request) => {
+    const origin = new URL(request.request().url()).origin
+    if (origin === new URL(baseUrl).origin || origin === 'https://esm.sh') return request.continue()
+    unexpected.push(`external request: ${origin}`)
+    return request.abort()
+  })
   page.on('console', (message) => {
     const blockedPreview = exportPage && message.location().url.startsWith('https://esm.sh/')
     if (message.type() === 'error' && !blockedPreview && !message.text().includes('esm.sh')) {
@@ -1868,6 +2026,29 @@ async function capture({
     }
     if (key === 'GET /api/pi/settings/mcp') return json(mcpSettings)
     if (key === 'GET /api/pi/info') return json(backendInfo)
+    if (key === 'GET /api/pi/traces/config') return json(captureConfig)
+    if (key === 'PUT /api/pi/traces/config' && typeof req.postDataJSON()?.enabled === 'boolean') {
+      captureConfig = { enabled: req.postDataJSON().enabled, error: '' }
+      return json(captureConfig)
+    }
+    if (key === 'GET /api/pi/traces') {
+      const page = Number(url.searchParams.get('page') || 1)
+      const limit = Number(url.searchParams.get('limit') || 20)
+      const matches = capturedTraces.filter(trace => {
+        return (!url.searchParams.has('sessionId') || trace.sessionId === url.searchParams.get('sessionId'))
+          && (!url.searchParams.get('cwd') || trace.metadata.cwd === url.searchParams.get('cwd'))
+          && (!url.searchParams.get('status') || trace.status === url.searchParams.get('status'))
+          && (!url.searchParams.get('q') || `${trace.name} ${trace.metadata.sessionName}`.toLowerCase().includes(url.searchParams.get('q').toLowerCase()))
+      })
+      return json({ traces: matches.slice((page - 1) * limit, page * limit).map(({ observations, scores, input, output, ...summary }) => summary), total: matches.length, page, limit })
+    }
+    const trace = capturedTraces.find(item => url.pathname === `/api/pi/traces/${item.id}`)
+    if (trace && method === 'GET') return json({ trace: tracePage(trace, url.searchParams) })
+    if (trace && method === 'PATCH' && typeof req.postDataJSON()?.bookmarked === 'boolean') {
+      trace.bookmarked = req.postDataJSON().bookmarked
+      trace.revision += 1
+      return json({ trace: tracePage(trace, url.searchParams) })
+    }
     if (key === 'GET /api/pi/files/settings') return json(fileSettings)
     if (key === 'GET /api/pi/projects') return json({ projects })
     if (key === 'GET /api/pi/fs') return json(projectDirectory)
@@ -1948,7 +2129,14 @@ async function capture({
     const clip = clipSelectors
       ? await unionClip(page, clipSelectors, padding, viewport)
       : undefined
+    if (embeddedSelected) {
+      await assertPrivateDataAbsent(page)
+      await page.locator('.trace-panel > .elune-ui').screenshot({ path: embeddedFile, animations: 'disabled' })
+      console.log(`Saved ${path.relative(process.cwd(), embeddedFile)}`)
+    }
+    if (!selected) return
     if (macWindow) {
+      await assertPrivateDataAbsent(page)
       const image = await page.screenshot({ clip, animations: 'disabled' })
       await saveMacWindowScreenshot({
         browser,
@@ -1957,6 +2145,7 @@ async function capture({
         contentSize: clip || viewport,
       })
     } else {
+      await assertPrivateDataAbsent(page)
       await page.screenshot({ path: file, clip, animations: 'disabled' })
     }
     console.log(`Saved ${path.relative(process.cwd(), file)}`)
@@ -2070,6 +2259,7 @@ async function saveMacWindowScreenshot({ browser, file, image, contentSize }) {
       element.src = source
       await element.decode()
     }, `data:image/png;base64,${image.toString('base64')}`)
+    await assertPrivateDataAbsent(page)
     await page.screenshot({ path: file, animations: 'disabled', omitBackground: true })
   } finally {
     await context.close()
@@ -2129,6 +2319,7 @@ async function assertPrivateDataAbsent(page) {
   const captureHost = new URL(baseUrl).host
   const forbidden = [
     '/Users/',
+    '/home/',
     os.homedir(),
     os.userInfo().username,
     process.cwd(),
@@ -2136,6 +2327,9 @@ async function assertPrivateDataAbsent(page) {
   ].filter((value) => value && value.length > 2)
   const found = forbidden.find((value) => text.includes(value))
   if (found) throw new Error(`Private text found before capture: ${found}`)
+  if (/\b[\w.-]+\.(?:local|internal)\b/.test(text)) {
+    throw new Error('Private hostname found before capture')
+  }
   if (/\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b/.test(text)) {
     throw new Error('Email address found before capture')
   }

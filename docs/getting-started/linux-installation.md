@@ -49,7 +49,11 @@ mise exec "node@$node_version" -- npm run electron:build
 If you already have a checkout, use it instead of cloning again. The repository
 does not track a package lock; `--no-package-lock` avoids creating one locally.
 
-The build includes the Vue app, documentation, backend, and Electron runtime.
+npm also fetches the embedded Elune tracing library from GitHub. No sibling
+checkout or standalone Elune server is required.
+
+The build includes the Vue app, documentation, backend, embedded Elune library
+and SQLite worker, and Electron runtime.
 On x86-64 Linux, the output is `release/Leyline-linux-x64/`. Check it before
 installing:
 
@@ -188,6 +192,10 @@ external terminal to see startup errors:
 Check that you can select a project, submit a prompt with a configured model,
 and use the embedded terminal. Then try `leyline` from a project directory and
 `leyline -n` to verify the launcher behavior described above.
+
+Open **Session traces** to inspect a captured run. Capture starts on for new
+runs. Use the trace footer's **Capture new runs** control to change it. Traces
+can contain private prompts and tool results. See [Tracing](../user-guide/tracing).
 
 Electron loads your interactive login-shell environment on Linux, including
 provider credentials and tool paths. See [Environment handling](../electron/environment)

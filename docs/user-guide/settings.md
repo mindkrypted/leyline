@@ -19,6 +19,8 @@ The modal has these categories:
 
 **Files**, **Models & providers**, and **MCP servers** appear only when the selected backend supports them. On narrow screens, use **Category** to select a page.
 
+Trace capture has no category in this modal. Open **Session traces** or the sidebar **Trace explorer** button, then expand **Capture new runs** in the footer. See [Tracing](./tracing#control-capture).
+
 Global pi configuration stays in pi's files. Leyline stores its display preferences, connections, and subagent/vision overrides separately. See [Configuration storage](../reference/environment#pi-configuration-storage).
 
 ## Manage backend connections
@@ -54,6 +56,8 @@ When you select another backend in the current window, Leyline reloads that wind
 ::: warning
 The Leyline backend API does not have authentication. Do not expose the server to an untrusted network. Settings routes can change credentials and execute configured commands.
 :::
+
+Traces and their capture setting also belong to the selected backend. The trace explorer does not combine data across connections. Trace input and output can contain private data, so protect access to the backend. See [Trace privacy](./tracing#keep-trace-data-private).
 
 For remote browser access, configure the server to allow the frontend origin. See [Environment variables](../reference/environment).
 

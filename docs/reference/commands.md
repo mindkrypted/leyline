@@ -6,7 +6,7 @@
 | --- | --- |
 | `npm install` | Install project dependencies in `node_modules/`. |
 
-The repository does not include a package lock.
+The repository does not include a package lock. `@elune/embedded` uses the bare GitHub dependency `spmurrayzzz/elune`. No npm registry publication or sibling checkout is required. See [Elune integration](../integrations/elune).
 
 ## Run the app and documentation
 
@@ -46,6 +46,14 @@ publish script and `bin/leyline` do not install or launch Linux packages.
 The screenshot and video commands require a running app. The documentation
 capture uses intercepted fixture data. See [Environment variables](./environment#capture-variables)
 for URL, path, and video size overrides.
+
+Refresh only the tracing images with:
+
+```bash
+DOCS_SCREENSHOT_FILTER=trace-inspector.png,trace-workspace.png,trace-explorer.png,trace-capture.png,trace-mobile.png,tracing.png npm run docs:screenshots
+```
+
+This command uses sanitized fixtures, including capture status and trace pagination. It does not request real traces or run a model. See [Screenshots and video](../developer-guide/screenshots-and-video#trace-captures) for output paths and dimensions.
 
 ## Use the packaged CLI
 

@@ -70,6 +70,10 @@ You can also double-click the session name. Press **Escape** to cancel the renam
 
 To rename the selected session, select its name in the workbench header.
 
+## Inspect recorded runs
+
+Select **Session traces** in the workbench header. Use **Session run** to select a captured run, then inspect its observations. Capture starts on for new runs. Older session logs are not backfilled. See [Tracing](./tracing).
+
 ## Delete a session
 
 **Delete** moves the session JSONL file to Leyline trash. The session then disappears from Leyline.
@@ -81,9 +85,11 @@ To rename the selected session, select its name in the workbench header.
 
 You can also start deletion from **Project settings → Sessions**. Leyline does not provide a trash restore control in the interface.
 
+Session deletion does not delete its Elune traces. Trace data can retain prompts and tool results after the session leaves the sidebar. See [Trace privacy](./tracing#keep-trace-data-private).
+
 ## Open a subagent session
 
-Subagent child sessions do not appear in the sidebar. Open a child session from its subagent card.
+Subagent child sessions do not appear in the sidebar. Open a child session from its subagent card or an available **Child sessions** link in a trace observation.
 
 The child-session header shows **← parent session**. Select it to return to the
 parent session. Use a modified click on either session target to open it in a

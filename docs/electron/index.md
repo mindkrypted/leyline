@@ -13,6 +13,10 @@ Electron adds these functions:
 - Independent backend selection in each window
 - The `leyline` command after local publication
 
+[Elune tracing](../user-guide/tracing) uses the same inspector, workspace, and
+explorer as the browser app. The package includes the library and SQLite worker.
+No separate Elune server is needed. Traces stay on the selected backend.
+
 Dictation is not available in Electron. Use a compatible browser when you need
 dictation.
 

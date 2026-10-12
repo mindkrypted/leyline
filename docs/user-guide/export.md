@@ -43,6 +43,8 @@ A deep research export also includes the styled report, research-thread results,
 
 Tool rows render their previews when you expand them. Exported runtime event rows are omitted.
 
+Elune traces are separate from the transcript and are not included in the HTML. Leyline currently has no trace export control or API. See [Tracing](./tracing).
+
 Images and transcript data are embedded in the HTML. File, diff, and patch previews in tool rows load their renderer from `esm.sh` when expanded. Those tool previews require network access.
 
 ## Use the responsive layout

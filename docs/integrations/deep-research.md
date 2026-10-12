@@ -42,6 +42,8 @@ Each worker returns a bounded `<research_result>` block. The block contains its 
 
 Parallel execution runs up to four workers at one time. Additional tasks wait for a later batch.
 
+The lead and workers use inline Elune capture independently of trace views. Worker markers retain available parent trace and tool anchors. See [Elune integration](./elune#usage-and-child-accounting) for child usage and duplicate-counting rules.
+
 ## Persisted state
 
 `lib/research-state.js` folds `leyline-research` custom entries from the active branch. Each event includes the research session ID.

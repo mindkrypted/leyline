@@ -18,6 +18,7 @@ A research session shows its phase or **report ready** beside the title. Its sou
 
 The right side of the header contains these controls:
 
+- **Session traces** opens the selected session's [trace inspector](./tracing). It appears when the selected backend supports tracing.
 - **Review changes** opens the desktop [Git review pane](./git-review). It appears when the selected backend supports review.
 - **Session details** opens runtime information, session metadata, and session-level agent overrides.
 - **Memory** opens the Memory Inspector. Its count shows active visible memories.
@@ -62,6 +63,8 @@ The workbench expands into the available space while the sidebar is hidden.
 
 **Memory**, **Events**, **Project settings**, and **Session details** use focused drawers. Opening one closes conflicting drawers. The sidebar gear opens the global **Settings** modal. Subagent and vision controls appear within their applicable settings scope.
 
-Git review, research sources, and the prompt inspector share the desktop right rail. Opening one closes the others. You can resize Git review or expand it across the workspace.
+Git review and research sources use the desktop right rail. The prompt inspector and trace inspector overlay the transcript. Opening one of these views closes the others. You can resize Git review or expand it across the workspace.
+
+The tracing workspace and explorer cover the workbench while keeping the selected conversation session unchanged. **Back** returns from the workspace to its inspector or explorer. Opening Settings, another workbench drawer, or the terminal closes traces. See [Tracing](./tracing) for selection and capture behavior.
 
 The terminal is a bottom drawer. It can remain open while you use the transcript and composer.

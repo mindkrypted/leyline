@@ -20,6 +20,8 @@ The server sends these event types:
 | `runtime_event` | `{ activeSessionId, event, handoffId? }` from the pi session subscription |
 | `extension_ui` | `{ activeSessionId, state, goal }` after an extension UI change |
 | `extension_error` | `{ activeSessionId, error }` after an extension binding error |
+| `trace_updated` | `{ traceId, sessionId, revision, activeSessionId }` after a trace storage commit |
+| `trace_config` | `{ enabled, error? }` after capture configuration changes or capture failures |
 
 `extension-ui.js` binds each runtime handle to its pi session subscription. It broadcasts every pi event as `runtime_event`.
 
@@ -35,13 +37,21 @@ Research updates change the extension status after they append state. The result
 
 `useRuntimeEvents.js` creates one `EventSource` for `/api/pi/events` on the
 active backend. It handles `active_session`, `runtime_roster`, `runtime_removed`,
-`runtime_event`, `extension_ui`, and `extension_error`. Session changes close the old stream before opening its replacement.
+`runtime_event`, `extension_ui`, `extension_error`, `trace_updated`, and `trace_config`. Session changes close the old stream before opening its replacement.
 
 Connection open and error callbacks update the visible stream status. EventSource performs its standard reconnect behavior after a disconnection.
 
 The adapter keeps the latest 100 local log items. The Runtime Events drawer displays the newest 20.
 
 The adapter logs extension errors. Composer error handling filters expected cancellations without removing their raw event records.
+
+## Trace notices
+
+Trace notices reuse the runtime EventSource. They do not open another SSE connection or include full trace payloads. `trace_updated` follows a storage commit and carries the trace revision. `trace_config` reports backend capture status and optional controlled errors.
+
+`useRuntimeEvents.js` routes these notices to dedicated subscribers, without adding them to the Runtime Events log or transcript projection. Notices for background sessions remain available to Explorer. Open views fetch only the required summary or detail page and ignore older revisions.
+
+The event hub coalesces queued notices by trace ID and capture configuration. Reconnect tells subscribers to refresh because the stream has no replay history. Closing traces removes view subscriptions without stopping backend capture. See [Elune integration](../integrations/elune).
 
 ## Runtime state updates
 
@@ -65,7 +75,7 @@ If the snapshot belongs to the selected session, `App.vue` also updates `activeR
 
 Settlement, reconnect, and manual compaction schedule immediate session-detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming message and tool events do not fetch detail individually.
 
-Live user, assistant, System, and tool rows reconcile with projected persisted entries after refresh. The reactive anchor waits for System persistence before release. The next turn clears matched rows from the previous turn, so branch order remains intact.
+Live user, assistant, System, and tool rows reconcile with projected persisted entries after refresh. The last saved entry ID anchors the merged saved tail. Saved-only rows, including compaction summaries, keep branch order beside matched live rows. The next turn clears matched rows from the previous turn.
 
 See [Live reconciliation and settlement](./transcript-projection#live-reconciliation-and-settlement) for matching and expansion keys.
 

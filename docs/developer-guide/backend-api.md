@@ -16,7 +16,7 @@ Vite and the packaged server route `/api/leyline/*` to `server/backend-connectio
 Successful JSON responses use explicit envelopes such as `{ sessions }`,
 `{ active }`, or `{ ok: true }`.
 
-The router returns JSON for HTTP errors. It uses explicit 400, 404, 405, and 409 responses in some branches. Its outer handler maps other errors to 500.
+The router returns JSON for HTTP errors. It uses explicit 400, 404, 405, and 409 responses in some branches. Its outer handler maps other errors to 500. Trace routes use their own controlled validation and availability errors. See [Trace routes](../reference/api#trace-routes).
 
 The terminal does not use the HTTP router. It uses a WebSocket upgrade at `/api/pi/terminal`.
 
@@ -46,6 +46,8 @@ The terminal does not use the HTTP router. It uses a WebSocket upgrade at `/api/
 | `server/pi-api/sessions.js` | Session discovery, configured session directories, list metadata, and subagent markers |
 | `server/pi-api/dtos.js` | Runtime, session state, session detail, model, command, and transcript DTOs |
 | `server/pi-api/events.js` | SSE clients and event serialization |
+| `server/pi-api/tracing.js` | Lazy embedded Elune store, capture bindings, usage reconciliation, and backend capture configuration |
+| `server/pi-api/tracing-routes.js` | Trace summary, paged detail, bookmark, and capture configuration routes |
 | `server/pi-api/extension-ui.js` | Browser-compatible extension UI context and runtime event binding |
 | `server/pi-api/goal-state.js` | Goal custom-entry projection |
 | `server/pi-api/fs-browser.js` | Local directory browsing and path normalization |
@@ -70,6 +72,7 @@ The router has these main route groups:
 - read-only Git review and review-change SSE
 - Memory Inspector operations
 - rollout feedback
+- selected-backend trace summaries, paged detail, bookmarks, and capture configuration
 - subagent configuration and subagent execution
 - vision configuration, resolution, and child execution
 - global pi provider/model/MCP configuration and private authentication operations
@@ -83,7 +86,7 @@ The frontend uses `/sessions/:id/<action>` for most runtime operations. The serv
 
 Legacy routes such as `/prompt`, `/bash`, and `/compact` use `requireActiveHandle()`. Keep them for compatibility, but do not use them for new frontend work.
 
-Fork uses a session-scoped route and creates a separate runtime. Reset to here still uses an active-session route. Leyline terminal connections resolve the requested session ID. Unscoped terminal requests use the active runtime CWD for compatibility.
+Fork uses a session-scoped route and creates a separate runtime. Reset to here also uses a session-scoped route. Both retain legacy active-session routes for compatibility. Leyline terminal connections resolve the requested session ID. Unscoped terminal requests use the active runtime CWD for compatibility.
 
 This distinction matters when windows use the same backend. Scoped operations and Leyline terminal connections select the requested handle. Active operations depend on the latest selection in that backend process.
 
@@ -109,7 +112,11 @@ Normal runtimes load the bundled output-budget, ultrafast, goal, memory, subagen
 
 `preferBundledExtensions()` filters conflicts by extension name and designated command or tool names. It puts the bundled Ultrafast extension last, so later hooks cannot overwrite its enabled tier.
 
-Children with an isolated custom system prompt retain only output-budget. They omit context files, skills, native extension factories, and the Leyline prompt. Vision children use this isolated path.
+Conversation runtimes also install the named inline Elune capture factory. Home previews use `captureTracing: false`. Settings runtimes and private probes do not install this factory.
+
+Children with an isolated custom system prompt retain output-budget and inline Elune capture. They omit context files, skills, MCP, tool search, and the Leyline prompt. Vision children use this isolated path.
+
+Conflict filtering removes discovered legacy `pi-elune` extensions while inline capture is present. Construction and explicit reload apply the filter. See [Elune integration](../integrations/elune) for capture lifecycle, usage, durability, and shutdown limits.
 
 `services.modelRuntime` wraps pi's public `ModelRuntime` through `custom-providers.js`. It supplies model lookup, available snapshots, authentication state, and streaming with optional credentials. The wrapper uses public SDK methods and native providers, without patching SDK internals.
 
@@ -285,6 +292,8 @@ and `vision.js` share `~/.local/share/leyline/memory.sqlite`.
 
 Backend connection definitions, the default connection, and display preferences belong to the native app backend. A window stores its active connection ID in `sessionStorage`. File editor settings, memory, feedback, and agent overrides belong to the selected backend.
 
+Trace capture configuration also belongs to the selected backend. Its `tracing.enabled` key uses `leyline_settings`, while trace records use a separate `elune/elune.db`. See [Elune integration](../integrations/elune#storage-and-configuration).
+
 Global Agent defaults, Project settings, and Session details fix the override scope in the UI. They use the existing subagent and vision routes. Pi provider/model/MCP configuration remains in pi-owned global files, not these SQLite tables.
 
 Memory operations enforce global, project, and session visibility. The Memory Inspector can create, update, archive, restore, and permanently delete visible rows.
@@ -295,7 +304,7 @@ Subagent configuration discovers definitions in `~/.pi/agent/agents` and the nea
 
 Subagent model precedence is session, project, global, then the agent definition. Vision-model precedence is session, project, then global. Session overrides for both features copy to a new fork.
 
-The subagent and vision execution routes create child pi sessions. They write an explicit marker before they start each child runtime. Normal subagents retain the normal runtime resources and their tool policy. Vision children use an isolated prompt, output-budget only, an empty tool allowlist, and a session-local image setting override.
+The subagent and vision execution routes create child pi sessions. They write an explicit marker before they start each child runtime. Normal subagents retain the normal runtime resources and their tool policy. Vision children use an isolated prompt, output-budget and inline capture, an empty tool allowlist, and a session-local image setting override.
 
 ## Goal and research state projection
 
@@ -317,7 +326,9 @@ calls and request field names. `src/lib/pi-settings-api.js` owns selected-backen
 
 `src/lib/leyline-api.js` manages the native connection registry and app settings. It also checks `GET /api/pi/info` before a switch.
 
-The backend information response gates the research control with `research`. It gates Git review with `review` and automatic watching with `reviewWatch`. Models & providers and MCP servers require `piSettings`.
+`src/lib/trace-client.js` binds trace requests to the selected backend and subscribes to notices through the existing runtime SSE adapter. It aborts owned requests and removes subscriptions when the view closes. Trace capture settings use `/api/pi/traces/config`, not the native app settings routes.
+
+The backend information response gates trace views with `tracing`. It gates the research control with `research`. It gates Git review with `review` and automatic watching with `reviewWatch`. Models & providers and MCP servers require `piSettings`.
 
 `ReviewPane.vue` loads review data through `src/lib/pi-api.js` and opens the review stream through `backendHttpUrl()`.
 

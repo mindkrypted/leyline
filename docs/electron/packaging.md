@@ -17,10 +17,19 @@ The package uses icon files under `assets/icon`. The build unpacks native
 `node-pty` files and `spawn-helper`. The packaged terminal can fail with
 `ENOTDIR` if these files stay inside the Electron archive.
 
+The build also places `@elune/embedded`, including its SQLite worker, in
+`app.asar.unpacked`. The native backend runs in an Electron utility process.
+The package needs no sibling Elune checkout or standalone Go server. See
+[Elune integration](../integrations/elune).
+
+After dependency or backend updates, rebuild, install, and restart the app.
+A browser refresh cannot update files in an installed Electron package.
+
 The packaging flow uses these files:
 
 - `scripts/electron-build.sh`
 - `electron/main.js`
+- `electron/leyline-server-process.js`
 - `server/leyline-server.js`
 - `server/pi-api/`
 

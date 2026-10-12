@@ -26,6 +26,12 @@ Each row shows a tool label, target when available, and status. Common labels in
 
 Shell rows also show **in context** or **not in context**. This label tells you whether pi received the command output as session context.
 
+## Inspect recorded operations
+
+Open **Session traces** in the header for a run's model calls, tools, timing, and usage. Select an observation, then use **Input**, **Output**, or **Metadata**. **Open workspace** shows the timeline. See [Tracing](./tracing) for capture and content limits.
+
+Trace data is separate from the transcript. Earlier pi logs are not backfilled, and a trace can omit or truncate content.
+
 ## Inspect System changes
 
 ![System rows in the transcript with a recorded change open in the prompt inspector](../assets/screenshots/system-message.png)
@@ -48,7 +54,7 @@ For a saved event, the **System event actions** menu offers **Fork from here** a
 
 The inspector overlays the right side below the header. The transcript stays visible and interactive beside it. On mobile, the inspector fills the width below the header and blocks interaction with the transcript.
 
-The inspector cannot stay open beside **Review** or **Sources**. Select **Close prompt inspector** to close it. Escape closes the actions menu first, then the inspector. Selection stays open when a live event becomes a saved entry. The inspector closes when you change sessions or backends, or the event leaves the selected branch.
+The prompt inspector cannot stay open beside **Review**, **Sources**, or a trace view. Select **Close prompt inspector** to close it. Escape closes the actions menu first, then the inspector. Selection stays open when a live event becomes a saved entry. The inspector closes when you change sessions or backends, or the event leaves the selected branch.
 
 ## Use MCP tools and confirmations
 

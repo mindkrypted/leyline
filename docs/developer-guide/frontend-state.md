@@ -17,7 +17,8 @@
 | `useSettingsOperation.js` | Private operation polling, answers, cancellation, and backend-bound cleanup |
 | `useLiveTurnProjection.js` | Optimistic user entries, live assistant blocks, System rows, tools, compaction activity, and live-to-persisted reconciliation |
 | `PromptQueue.vue` | Queue expansion, active edit, action menus, queue mutations, and tray width measurement |
-| `useRuntimeEvents.js` | EventSource lifecycle, connection state, and the local event log |
+| `useRuntimeEvents.js` | EventSource lifecycle, connection state, the local event log, and dedicated trace notice subscribers |
+| `App.vue` / `TracePanel.vue` | Trace surface mode, small selection and return state, selected-backend client, capture controls, and view cleanup |
 | `useMemoryInspector.js` | Visible Memory data, loading, optimistic mutations, dirty-state guards, and drawer state |
 | `useProjectBrowser.js` | Project picker state, folder expansion, and project-browser visibility |
 | `useToolExpansion.js` | Tool and skill expansion, copy state, and fullscreen previews |
@@ -52,6 +53,22 @@ It stores the active ID in window `sessionStorage` and configures
 A backend switch verifies `GET /api/pi/info` and reloads the window. `App.vue` then opens SSE and loads sessions from the selected backend.
 
 Retry uses the same connection flow. Transcript preferences always use the native backend, not the selected runtime backend.
+
+## Trace surfaces
+
+`capabilities.tracing` enables session traces and the sidebar Explorer. `App.vue` loads `TracePanel.vue` asynchronously and mounts only one Inspector, Workspace, or Explorer at a time. The components come from optional `@elune/embedded/vue` bindings with an explicit style import.
+
+Inspector scopes its list to the selected session. Workspace retains that session and the selected trace. Explorer searches across projects on the selected backend. It does not merge saved connections.
+
+`src/lib/trace-client.js` receives the selected connection and the existing SSE subscription adapter. Views receive the client through props. Display and connection settings still use the native backend, while capture settings use this trace client's selected backend.
+
+The host retains selection, tab, observation offset and limit, list filters, page, and return origin. It preserves selection between Inspector or Explorer and Workspace without retaining complete trace trees. Backend and ordinary session navigation reset trace state.
+
+Closing traces unmounts the surface, aborts requests, and removes subscriptions. Closed views make no trace queries. Document visibility pauses requests and subscriptions. Native hidden Electron windows can still report visible documents.
+
+A hidden narrow-layout Explorer preview pauses detail requests. Hidden observation detail does not mount its renderer. Workspace and Explorer make the covered workbench inert and pause scroll following. Capture continues regardless of view lifetime.
+
+Trace notices bypass transcript projection and the Runtime Events log. See [Elune integration](../integrations/elune) for the capture boundary and [Trace routes](../reference/api#trace-routes) for pagination.
 
 ## Session selection
 
@@ -118,7 +135,7 @@ A queued request retains its original handoff ID through dispatch. If user event
 
 The composable matches live items to refreshed persisted entries. It keeps matched live rows until visual timing and persistence conditions settle.
 
-A reactive anchor length prevents duplicate or reordered transcript rows during a live turn. The anchor releases after user, assistant, System, tool, and activity state settles.
+An anchor stores the last saved entry ID at turn start. Projection merges the saved tail in branch order with retained live rows keyed by `persistedEntry.id`. Saved-only rows, including compaction summaries, remain in that merged tail after settlement.
 
 At the next turn start, the composable clears the previous turn's matched live rows. They then render from the persisted list in branch order. See [Live reconciliation and settlement](./transcript-projection#live-reconciliation-and-settlement).
 
@@ -242,7 +259,9 @@ A selected-session change resets scroll state. The terminal height and composer 
 
 `App.vue` coordinates global Settings, Project settings, Session details, Runtime events, Memory, research sources, and sidebar navigators. Opening global Settings closes contextual drawers and conflicting overlays. Opening a navigator closes conflicting drawers and configuration surfaces. Subagent and vision controls belong to the fixed-scope settings surfaces, not separate drawers.
 
-Git review, research sources, and the prompt inspector share the desktop third rail. Opening one closes the others. The rail can remain open with contextual drawer state.
+Git review and research sources use the desktop third rail. The prompt inspector overlays the workbench. Opening one closes the others.
+
+Trace surfaces also close conflicting inspectors, drawers, previews, and settings surfaces. Inspector overlays the right side. Workspace and Explorer cover the workbench after the sidebar. Mobile traces fill the width below the header. Closing Workspace returns to its originating trace surface.
 
 The terminal is independent and can remain open below the workbench. Session changes reconnect it so the PTY uses the selected session CWD.
 

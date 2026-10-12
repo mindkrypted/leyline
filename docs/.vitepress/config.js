@@ -42,6 +42,7 @@ export default defineConfig({
           { text: 'Start screen', link: '/user-guide/start-screen' },
           { text: 'Sessions', link: '/user-guide/sessions' },
           { text: 'Workbench', link: '/user-guide/workbench' },
+          { text: 'Tracing', link: '/user-guide/tracing' },
           { text: 'Git review', link: '/user-guide/git-review' },
           { text: 'Composer', link: '/user-guide/composer' },
           { text: 'Deep research', link: '/user-guide/deep-research' },
@@ -123,6 +124,7 @@ export default defineConfig({
         items: [
           { text: 'Overview', link: '/integrations/' },
           { text: 'pi SDK integration', link: '/integrations/pi-sdk' },
+          { text: 'Elune tracing', link: '/integrations/elune' },
           { text: 'Goal extension', link: '/integrations/goal-extension' },
           { text: 'Memory', link: '/integrations/memory-integration' },
           { text: 'Subagents', link: '/integrations/subagents' },

@@ -48,6 +48,10 @@ Each window can select a different saved backend. A new window inherits the
 active backend from its source window unless the selected target specifies a
 backend.
 
+Trace views use each window's selected backend. Windows on the same backend
+share its trace records and capture setting. Windows on different backends do
+not combine traces. See [Tracing](../user-guide/tracing).
+
 ## Saved window state
 
 Electron saves window bounds, maximized state, and full-screen state in

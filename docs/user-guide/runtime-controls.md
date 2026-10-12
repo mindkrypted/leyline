@@ -62,6 +62,10 @@ Point to the indicator to see the percentage. Before a response reports usage, t
 
 The context control is an indicator. It does not open a popover.
 
+## Inspect recorded usage
+
+Select **Session traces** in the header to inspect timing, tokens, and costs for a captured run or operation. These records are separate from the composer's current context usage. Available values depend on provider usage reports. See [Tracing](./tracing).
+
 ## Stage controls for a new session
 
 The start screen loads runtime choices for the selected project. Model, thinking, and `ultrafast` choices remain staged until you create the session.

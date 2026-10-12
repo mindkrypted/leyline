@@ -79,6 +79,6 @@ Bulk **Delete** asks for confirmation and permanently removes all selected memor
 
 ## Apply changes to later turns
 
-Memory changes affect future turns only. Earlier transcript context can still contain memory text that pi already received.
+Memory changes affect future turns only. Earlier transcript context can still contain memory text that pi already received. [Traces](./tracing#keep-trace-data-private) can also retain memory text in recorded input or tool results. Deleting a memory does not remove it from those earlier records.
 
 Select **Refresh** to reload the visible memory list. The drawer also refreshes after an active turn ends while the drawer is open.

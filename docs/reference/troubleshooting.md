@@ -45,6 +45,46 @@ for JSONL files.
 
 Reload the page after you change the session directory variable.
 
+## Trace controls are missing
+
+**Session traces** and the sidebar **Trace explorer** button require the selected backend's `tracing` capability. Confirm that the window uses the intended backend. Update and restart that backend if it predates tracing.
+
+After a dependency update, restart Vite for browser development. For an installed Electron app, rebuild, install, and restart the package. Reloading its window does not replace the embedded library or worker.
+
+Leyline includes Elune. A standalone Go server or `PI_TRACE_URL` will not enable these controls. See [Tracing](../user-guide/tracing).
+
+## A session has no recorded runs
+
+Earlier pi JSONL files are not backfilled. Only new runs under capture produce traces.
+
+Check the backend name above the trace view. Expand **Capture new runs** in the footer to check its setting. Capture is on by default, but each backend keeps its own setting. Turning capture on does not reconstruct a previous run.
+
+In the explorer, clear search, status, and project filters if necessary. The explorer does not combine traces across backend connections.
+
+## Trace capture fails or a change is unconfirmed
+
+Read the error in the trace footer. Use **Retry** when available, then check the backend log. Confirm that the backend can access its trace database. See [Elune integration](../integrations/elune) for storage details.
+
+Agent work can continue when capture fails. A failed or partial capture is not a complete run record.
+
+If you close the view during a pending capture change, reopen traces on the same backend to check the result. A failed confirmation does not prove that the backend rejected the change.
+
+## A trace observation or payload appears incomplete
+
+Read the loaded range below the observations. Use **Previous batch** or **Next batch** to load another batch. **Find in loaded batch** searches only the current batch, not all observations or their payloads.
+
+Recording limits can omit observations or truncate content. The view reports these limits only when the trace producer includes the corresponding flags or markers. Storage or capture failures can leave partial traces without a stored warning. A temporary backend error can disappear after restart. The absence of a warning does not prove that a trace is complete.
+
+**Fields clipped on read** is a separate limit and does not change stored content. Long displayed payloads also use character pages.
+
+If a selected observation is outside the loaded batch, load its batch or select another observation. See [Partial records](../user-guide/tracing#read-partial-records).
+
+## A trace link cannot find a session entry
+
+A reset, branch change, or session deletion can make a trace target unavailable. **Open session** does not reconstruct missing history. Traces remain separate from the session file.
+
+Deleting a session, trashing a project, or resetting history does not delete its traces. Leyline has no trace deletion or export control or API. Turning capture off affects future runs only. See [Trace privacy](../user-guide/tracing#keep-trace-data-private).
+
 ## Prompt submission fails
 
 Check the selected session, model, provider credentials, and error text in the

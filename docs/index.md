@@ -27,6 +27,8 @@ features:
     details: Send images directly to compatible models or configure a vision agent to describe them for models without image support.
   - title: Supervise live work
     details: Follow background sessions in Activity and stop individual runs. Inspect native MCP tools and reply to extension confirmation cards.
+  - title: Inspect recorded runs
+    details: Open a session trace inspector, expand its timeline, or browse traces across projects on the selected backend. Control capture in the trace footer.
   - title: Review Git changes
     details: Keep the header summary current with the pane closed. Open a prepared diff to inspect staged and working-tree changes separately.
   - title: Connect backend hosts
@@ -47,6 +49,14 @@ features:
 
 ![Leyline workbench showing a sanitized pi session](./assets/screenshots/workbench.png)
 
+## Recorded runs
+
+![Elune tracing workspace with a run timeline and observation details](./assets/screenshots/trace-workspace.png)
+
+*Inspect model calls, tool activity, timing, and usage with [Tracing](/user-guide/tracing).*
+
+Capture is on for new runs. Traces stay on the selected backend and can contain private prompts and tool results. Earlier pi logs are not backfilled. Turning capture off or deleting a session does not delete existing traces.
+
 ## Browser first, Electron optional
 
 The browser and Vite workflow is the primary path. Electron is an optional desktop shell around the same app. It adds packaged use, desktop shortcuts, login-shell environment loading on macOS and Linux, multiple windows, and saved window state.
@@ -56,6 +66,7 @@ The browser and Vite workflow is the primary path. Electron is an optional deskt
 - [Install and run Leyline](/getting-started/)
 - [Install the Linux desktop app](/getting-started/linux-installation)
 - [Learn the UI](/user-guide/)
+- [Inspect traces](/user-guide/tracing)
 - [Read the motivations](/motivations)
 - [Understand the architecture](/developer-guide/)
 - [Review integrations](/integrations/)

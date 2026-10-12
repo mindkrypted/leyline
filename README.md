@@ -9,16 +9,16 @@ connections to other Leyline backends.
 
 <table>
   <tr>
-    <th>Start screen</th>
-    <th>Workbench</th>
-    <th>Deep research</th>
+    <td width="50%"><a href="assets/readme/home.png"><img alt="Leyline start screen with project, research, and runtime controls" src="assets/readme/home.png" /></a><br /><strong>Start screen</strong></td>
+    <td width="50%"><a href="assets/readme/workbench.png"><img alt="Leyline workbench with a sanitized agent session" src="assets/readme/workbench.png" /></a><br /><strong>Workbench</strong></td>
   </tr>
   <tr>
-    <td><a href="assets/readme/home.png"><img alt="Leyline start screen with project, research, and runtime controls" src="assets/readme/home.png" /></a></td>
-    <td><a href="assets/readme/workbench.png"><img alt="Leyline workbench with a sanitized agent session" src="assets/readme/workbench.png" /></a></td>
-    <td><a href="assets/readme/deep-research.png"><img alt="Leyline deep research report with phase progress and cited sources" src="assets/readme/deep-research.png" /></a></td>
+    <td><a href="assets/readme/deep-research.png"><img alt="Leyline deep research report with phase progress and cited sources" src="assets/readme/deep-research.png" /></a><br /><strong>Deep research</strong></td>
+    <td><a href="assets/readme/tracing.png"><img alt="Leyline tracing workspace with a run timeline and selected observation details" src="assets/readme/tracing.png" /></a><br /><strong>Tracing workspace</strong></td>
   </tr>
 </table>
+
+See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls.
 
 ## Features
 
@@ -34,6 +34,13 @@ Responses models. It is off by default and uses premium pricing. See
 [Runtime controls](docs/user-guide/runtime-controls.md#use-ultrafast).
 Memory, subagents, HTML export, and an embedded terminal support session work.
 Each window can use the native backend or a saved backend connection.
+
+Embedded Elune tracing records new runs by default. **Session traces** opens the
+selected session's inspector. **Open workspace** shows its timeline, and the
+sidebar **Trace explorer** button browses all projects on the selected backend.
+Capture controls are in the trace footer. Traces can contain private prompts
+and tool results. Turning capture off, deleting a session, or resetting history
+does not delete existing traces. See [Tracing](docs/user-guide/tracing.md).
 
 Settings includes provider sign-in, custom endpoints, model definitions and
 overrides, and MCP server configuration. Find a starting configuration in the
@@ -62,7 +69,7 @@ For the reasoning behind the project, see [Motivations](docs/motivations.md).
 
 - macOS or Linux (see the tested setup below)
 - Node.js 22.19.0, as specified in `.nvmrc`
-- npm
+- npm and Git, with GitHub access during dependency installation
 - A configured pi coding-agent environment
 
 Leyline is used on macOS and Linux. The Linux reference setup is x86-64
@@ -77,6 +84,10 @@ For a user-local Linux desktop app and CLI, follow the
 ```sh
 npm install
 ```
+
+This installs `@elune/embedded` from GitHub through the `spmurrayzzz/elune`
+dependency. No sibling Elune checkout, npm publication, or standalone Go server
+is required.
 
 ## Development
 
@@ -105,8 +116,9 @@ Electron window keeps its active connection separately. A fresh window uses the
 default. A new Electron window inherits the source window's active connection.
 
 Leyline sends runtime HTTP commands, runtime events, terminal WebSocket traffic,
-and exports to the active backend. Connection management stays on the native
-backend. See [Settings](docs/user-guide/settings.md) for
+trace requests, and exports to the active backend. Traces and capture settings
+stay on that backend, without aggregation across connections. Connection
+management stays on the native backend. See [Settings](docs/user-guide/settings.md) for
 connection setup and [Environment variables](docs/reference/environment.md) for
 packaged server and origin settings.
 
@@ -135,7 +147,9 @@ npm run electron:build
 
 The packaged app is written to `release/`. The build creates the Vite `dist/`
 output and then packages Electron. It unpacks the native terminal files that
-`node-pty` needs.
+`node-pty` needs and the embedded Elune library and SQLite worker. The packaged
+backend runs in an Electron utility process. Rebuild and restart the installed
+app after dependency or backend updates.
 
 On Linux, follow the [Linux installation guide](docs/getting-started/linux-installation.md)
 to install `release/Leyline-linux-x64/`, a launcher, and an application-menu entry.
@@ -186,6 +200,8 @@ is open.
 - [Memory](docs/user-guide/memory.md)
 - [Subagents](docs/user-guide/subagents.md)
 - [Settings, providers, and MCP](docs/user-guide/settings.md)
+- [Tracing](docs/user-guide/tracing.md)
+- [Elune integration](docs/integrations/elune.md)
 - [Goals and events](docs/user-guide/goals-and-events.md)
 - [Terminal](docs/user-guide/terminal.md)
 - [Electron](docs/electron/index.md)

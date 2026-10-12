@@ -72,7 +72,7 @@ At each model boundary, the wrapper reloads these records from the active branch
 
 ## Child runtime
 
-The server creates a vision child through the subagent runtime path when `vision_agent` runs. Its isolated custom system prompt loads only output-budget. It omits context files, skills, MCP, tool search, and the Leyline prompt.
+The server creates a vision child through the subagent runtime path when `vision_agent` runs. Its isolated custom system prompt retains output-budget and inline Elune capture. It omits context files, skills, MCP, tool search, and the Leyline prompt.
 
 The child has these constraints:
 
@@ -81,9 +81,12 @@ The child has these constraints:
 - Its thinking level uses the effective vision override when one is set.
 - Its session contains the `leyline-subagent-session` marker and stays hidden from the sidebar.
 - Its JSONL history keeps the vision prompt and image.
+- Its trace capture retains bounded text and usage, with image payloads and thinking content omitted.
 - A session-local settings override permits image input without changing the user's persisted pi image setting.
 
 The configured model provider receives the image and prompt. Provider authentication must be available to the Leyline server process. Leyline does not delete the hidden child session after execution.
+
+Bundled requests carry `parentSessionId` and `_toolCallId` so capture can link the child to its parent tool observation. Delayed committed child usage can reconcile parent totals. Capture continues while trace views are closed. See [Elune integration](./elune) for content and accounting limits.
 
 ## Cancellation
 

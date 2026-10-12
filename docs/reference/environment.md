@@ -15,7 +15,7 @@ variables come from the user's pi setup.
 | `PI_CODING_AGENT_SESSION_DIR` | Session directory for discovery and new sessions. Leyline expands `~` and searches subdirectories for JSONL files. |
 | `PI_CODING_AGENT_DIR` | Pi agent directory resolved by the SDK. Global provider/model/MCP configuration and native credentials use this directory. The default is `~/.pi/agent`. |
 | `PI_ENABLE_CREATE_GOAL` | Set to `1` to expose the goal extension's `create_goal` model tool. |
-| `LEYLINE_MEMORY_DIR` | Directory for shared app metadata and pasted-image attachments. Backend connections, display and file-editor settings, memory, rollout feedback, subagent overrides, and vision overrides use `memory.sqlite` in this directory. Vision delegation uses its `attachments` subdirectory. |
+| `LEYLINE_MEMORY_DIR` | Backend data directory. App metadata and `tracing.enabled` use `memory.sqlite`. Embedded trace records use `elune/elune.db`. Vision delegation uses `attachments/<session-id>/`. |
 | `SHELL` | Login shell used by Electron environment loading and the terminal backend. Electron falls back to the account shell; the terminal has additional shell fallbacks. |
 
 Without `PI_CODING_AGENT_SESSION_DIR`, Leyline uses the session directory from
@@ -26,11 +26,12 @@ Use an absolute path for `LEYLINE_MEMORY_DIR`. Without this variable, Leyline us
 ```text
 ~/.local/share/leyline/memory.sqlite
 ~/.local/share/leyline/attachments/<session-id>/
+~/.local/share/leyline/elune/elune.db
 ```
 
 The database can contain the `backend_connections`, `leyline_settings`, `memories`, `rollout_feedback`, `subagent_overrides`, and `vision_overrides` tables.
 
-The `leyline_settings` table contains the default backend ID, display preferences, and file-editor settings.
+The `leyline_settings` table contains the default backend ID, display preferences, file-editor settings, and `tracing.enabled`.
 
 Display and saved connections belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
 
@@ -40,7 +41,17 @@ must include its scheme and host. Add a port when the origin uses one.
 
 Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, and set of UI settings.
 
-It also selects different memory, rollout, subagent, and vision metadata, plus the attachment directory for delegated pasted images.
+It also selects different memory, rollout, subagent, vision, and capture metadata, plus the attachment directory and embedded trace database.
+
+## Embedded trace storage
+
+Capture configuration and trace records belong to the selected backend. Display preferences and connection records still use the native app backend. Each backend resolves `LEYLINE_MEMORY_DIR` in its own process environment.
+
+One lazy Elune worker owns `elune/elune.db` on that backend. The Elune directory uses private `0700` permissions. Its database, WAL, and shared-memory files use `0600`. The integration does not encrypt these files or guarantee complete secret redaction.
+
+Capture defaults to enabled for new runs. Change it through the trace view controls or `PUT /api/pi/traces/config`. It is not a supported `/api/leyline/settings/:key` setting. There is no `PI_TRACE_URL` to configure for embedded capture and no external Elune service to start.
+
+Existing standalone Elune records and pi JSONL history are not automatically imported. See [Elune integration](../integrations/elune) for content limits, legacy extension filtering, and errors.
 
 The backend API does not have authentication. Do not bind the packaged server
 to an untrusted network. The origin policy restricts browsers, but it does not
@@ -118,7 +129,7 @@ The live screenshot viewport is fixed at 1503 by 818 CSS pixels with a device
 scale factor of 2. Documentation captures use fixed desktop, mobile, and README
 viewports. A filter such as `composer-queue.png,activity.png` selects matching basenames in either output directory.
 
-See [Screenshots and video](../developer-guide/screenshots-and-video) for mocked coverage, model requirements, and focused Ultrafast and System captures.
+See [Screenshots and video](../developer-guide/screenshots-and-video) for mocked coverage, model requirements, and focused Ultrafast, System, and trace captures.
 
 ## Internal variables
 

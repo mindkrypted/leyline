@@ -9,6 +9,7 @@ an optional desktop shell around the same Vue app and API.
 | Native backend | `server/pi-api/index.js` as Vite middleware | Vite middleware or `server/leyline-server.js` in a packaged app |
 | Environment | Inherits the environment that starts Vite | Loads the login-shell environment |
 | Terminal | WebSocket connection to the selected backend | WebSocket connection to the selected backend |
+| Tracing | Embedded Elune storage and views on the selected backend | Same trace views, with the library and worker included in the package |
 | Windows | Browser-managed tabs and windows | Foreground native windows with saved state |
 | Dictation | Available when the browser supports the Web Speech API | Not supported |
 
@@ -37,6 +38,8 @@ Each window selects its active backend independently. A fresh window uses the
 default. A new Electron window inherits the source window's active backend
 unless the selected target specifies a backend.
 
-Runtime HTTP commands, runtime events, terminal traffic, and exports use the
-active backend. Connection management stays on the native backend. The native
-backend remains available when a window selects another connection.
+Runtime HTTP commands, runtime events, terminal traffic, trace requests, and
+exports use the active backend. Traces and capture settings remain on that
+backend, without aggregation across connections. See [Tracing](../user-guide/tracing).
+Connection management stays on the native backend. The native backend remains
+available when a window selects another connection.

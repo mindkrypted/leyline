@@ -19,6 +19,8 @@ server for the installed app.
 
 Leyline creates the pi session and sends the first prompt in one operation.
 
+Elune trace capture starts on for new runs. Traces stay on the selected backend and can contain private prompts and tool results. Open the sidebar **Trace explorer** button to inspect records or change **Capture new runs** in the footer. See [Tracing](../user-guide/tracing).
+
 Continue with these pages:
 
 - [Requirements](./requirements)
@@ -28,5 +30,6 @@ Continue with these pages:
 - [Browser vs Electron](./browser-vs-electron)
 - [Composer](../user-guide/composer)
 - [Sessions](../user-guide/sessions)
+- [Tracing](../user-guide/tracing)
 - [Terminal](../user-guide/terminal)
 - [Troubleshooting](../reference/troubleshooting)

@@ -17,7 +17,19 @@
 - The UI must use pi SDK and runtime state instead of reimplementing session management.
 - Browser development mounts the modular `server/pi-api/` backend through
   `vite.config.js`. Packaged Electron uses the same API through
-  `server/leyline-server.js`.
+  `server/leyline-server.js` in a shared Electron utility process started by
+  `electron/leyline-server-process.js`, not in the main process.
+- Embedded tracing uses the independent `@elune/embedded` GitHub dependency
+  `spmurrayzzz/elune`. Leyline owns capture bindings, routes, configuration,
+  and storage location. One lazy worker per backend owns `elune/elune.db`
+  under `LEYLINE_MEMORY_DIR` or the standard Leyline data directory.
+  `tracing.enabled` stays in `memory.sqlite`. Capture and views use the
+  selected backend. Explorer spans its projects, not all connections.
+- Inline capture applies to conversation, research, subagent, and isolated
+  vision runtimes, independently of trace view lifetime. Home previews and
+  Settings probes do not install it. Keep trace views lazy and mount only
+  one Inspector, Workspace, or Explorer. Reuse runtime SSE for small commit
+  and configuration notices without adding trace payloads to the event log.
 - Current pi SDK usage includes:
   - `SessionManager.listAll()` for standard session discovery.
   - `SessionManager.open(path)` and `getBranch()` for persisted transcripts.
@@ -40,6 +52,14 @@
 - Screenshot workflows assume the dev server is running at `http://localhost:5173/`:
   - `npm run screenshot` writes the current local state to `screenshots/current.png`.
   - `npm run docs:screenshots` refreshes sanitized tracked documentation assets.
+  - Trace documentation assets are `trace-inspector.png`,
+    `trace-workspace.png`, `trace-explorer.png`, `trace-capture.png`, and
+    `trace-mobile.png` under `docs/assets/screenshots/`, plus
+    `assets/readme/tracing.png`. Desktop documentation uses 1440x900,
+    mobile 390x844, and README 1503x818 CSS pixels, all at scale factor 2.
+    Use intercepted fixtures, never real app data or model requests. Keep
+    `local/minimax-m2.7` for general captures and preserve approved eligible
+    Ultrafast and image-capable vision fixture exceptions.
 - Build check:
   - `npm run build`
 - Do not add tests, docs, or broad refactors unless explicitly requested.

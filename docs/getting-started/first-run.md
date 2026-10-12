@@ -1,5 +1,8 @@
 # First run
 
+Trace capture starts on for new runs. Before submitting private data, check
+[Capture new runs](#check-trace-capture) in the trace footer.
+
 ## Start Leyline
 
 If you followed [Linux installation](./linux-installation), open **Leyline**
@@ -32,6 +35,12 @@ and model without a key. **Test connection** can check saved settings or
 unsaved editor values before the first prompt. See
 [Provider settings](../user-guide/settings#manage-models-and-providers).
 
+## Check trace capture
+
+Capture starts on for new agent runs. Traces can store raw prompts and tool results on the selected backend.
+
+Before the first prompt, select the **Trace explorer** icon button at the bottom of the sidebar. Expand **Capture new runs** in the footer. To prevent capture of new runs, clear the **Capture new runs** checkbox. Turning capture off does not delete existing traces or interrupt capture for an active run. See [Tracing](../user-guide/tracing).
+
 ## Use the workbench
 
 The workbench shows the project and session breadcrumb, transcript, live
@@ -49,6 +58,8 @@ Select the attached **Up next** tab to manage pending tasks. Use **Send options*
 beside the send arrow to queue or steer without keyboard shortcuts. If the
 queue is held, select **Resume** to continue queued work. See
 [Composer](../user-guide/composer) for editing and queue controls.
+
+Select **Session traces** to inspect a captured run. **Events** shows a temporary event list for the page connection, separate from durable traces.
 
 Use **Session details**, **Memory**, **Events**, and **Export transcript** in
 the workbench header. Use **Reload runtime** at the bottom of the sidebar when

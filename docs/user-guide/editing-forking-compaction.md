@@ -50,6 +50,8 @@ Leyline performs this action immediately. It does not show a confirmation dialog
 
 Reset is unavailable during a run or compaction. Use **Fork from here** first when you must keep the later history.
 
+Reset does not remove Elune trace data. Earlier prompts and tool results can remain in traces after their session records disappear. See [Trace privacy](./tracing#keep-trace-data-private).
+
 ## Copy an entry
 
 Select **Copy** in a message or tool header. Leyline copies message text or the available tool output.
@@ -61,5 +63,7 @@ Select **Copy** in a message or tool header. Leyline copies message text or the 
 3. Press **Enter**.
 
 Pi creates a **Compaction** summary in the transcript. Compaction reduces the context that later turns must carry.
+
+With capture on, manual compaction can also create a `pi-compaction` trace. Use **Session traces** to inspect its summary, outcome, and available usage. See [Tracing](./tracing).
 
 Compaction requires existing messages. It cannot run during a response, edit operation, or other compaction.

@@ -42,6 +42,7 @@ This command intercepts Leyline API calls and supplies sanitized fixtures. Mock 
 - Memory records, subagent configuration, and vision configuration
 - Queue, goal, research, shell, and image-delegation transcript states
 - SSE runtime snapshots and events, terminal WebSocket traffic, and exported HTML
+- Trace summaries, paged detail, bookmarks, capture configuration, and trace capability data
 
 Unrecognized API requests fail the capture instead of reaching live data.
 
@@ -49,7 +50,7 @@ The registry contains the native backend and a fictional saved connection. The t
 
 The visible native address is `localhost:5173`, even when the capture uses another server URL. The command does not change local data or model configuration.
 
-The command writes product images to `docs/assets/screenshots/`. It also refreshes the three README images in `assets/readme/`.
+The command writes product images to `docs/assets/screenshots/`. It also refreshes the four README images in `assets/readme/`, including `tracing.png`.
 
 Set a different app URL with:
 
@@ -118,6 +119,31 @@ These models and settings exist only in the capture fixtures. The command does n
 Each state uses a new browser context. The script uses a fixed date with increasing millisecond ticks, replaces SSE and terminal transports, and waits for a state selector. The tick prevents Vue's event timestamp guard from dropping interactions. The capture disables remaining motion.
 
 The script blocks unrecognized `/api/` requests instead of sending them to a live backend. Before capture, it checks visible text and form values for home paths, usernames, repository paths, email addresses, and common credential prefixes.
+
+## Trace captures
+
+Refresh the tracing set with:
+
+```bash
+DOCS_SCREENSHOT_FILTER=trace-inspector.png,trace-workspace.png,trace-explorer.png,trace-capture.png,trace-mobile.png,tracing.png npm run docs:screenshots
+```
+
+| Output | Captured state |
+| --- | --- |
+| `docs/assets/screenshots/trace-inspector.png` | Session Inspector with a selected observation and retained payload. |
+| `docs/assets/screenshots/trace-workspace.png` | Workspace timeline and detail for the same session run. |
+| `docs/assets/screenshots/trace-explorer.png` | Selected-backend Explorer across sanitized projects, with a selected preview. |
+| `docs/assets/screenshots/trace-capture.png` | Expanded capture controls and selected model observation. |
+| `docs/assets/screenshots/trace-mobile.png` | Mobile Inspector with reachable detail and capture footer. |
+| `assets/readme/tracing.png` | Workspace in the README frame. |
+
+Desktop documentation images use 1440 by 900 CSS pixels. Mobile uses 390 by 844. The README uses 1503 by 818. All captures use device scale factor 2.
+
+Trace fixtures supply summaries, observations, pagination, and capture status. Capture controls and bookmarks change only intercepted fixture state. Trace routes, runtime streams, and other API requests must never fall through to real backend data or model requests.
+
+Keep the general model label `local/minimax-m2.7`. Preserve the approved eligible Ultrafast model and image-capable vision fixture exceptions. Do not use local trace records, private paths, or operational performance reports as documentation fixtures.
+
+Review trace labels, usage, timing, omission markers, selected observations, mobile panel switches, and the capture footer. Check that Explorer identifies the selected backend and does not imply aggregation across connections. See [Tracing](../user-guide/tracing) and [Elune integration](../integrations/elune).
 
 ## Review documentation images
 

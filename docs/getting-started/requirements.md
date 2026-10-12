@@ -15,7 +15,7 @@ repository's CLI launcher remain Apple silicon macOS-specific; do not use
 ## Required software
 
 - Node.js 22.19.0, as specified in `.nvmrc`
-- npm
+- npm and Git, with GitHub access during dependency installation
 - A modern local browser
 - A configured pi coding-agent environment
 
@@ -25,6 +25,9 @@ Supply credentials only when the provider requires them. Custom compatible
 endpoints can work without an API key. Credentials can also come from pi's
 existing files or the backend environment. Your tools and extensions can
 require additional environment variables.
+
+The Elune tracing library installs with Leyline. A separate Elune checkout or
+Go server is not required. See [Installation](./installation).
 
 Electron is optional. Use Electron to test the desktop package, desktop
 shortcuts, login-shell environment loading, and window state.

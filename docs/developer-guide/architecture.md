@@ -27,7 +27,7 @@ process validates renderer-opened workspace URLs before it creates a foreground
 
 ## Packaged Electron flow
 
-A packaged app does not start Vite. `electron/main.js` starts `server/leyline-server.js` once in the Electron main process.
+A packaged app does not start Vite. `electron/main.js` starts one utility process through `electron/leyline-server-process.js`. That process runs `server/leyline-server.js`, the pi runtimes, and backend storage. The main process owns windows and supervises backend startup and exit.
 
 By default, the server listens on an ephemeral loopback port. The server host
 and port environment variables can change this address. It serves `dist/`,
@@ -49,6 +49,8 @@ standalone server adapters. `server/pi-api/router.js` handles HTTP routing.
 `server/pi-api/runtime.js` owns pi sessions and runtime handles. Other backend
 modules own DTOs, events, storage, export, filesystem access, Git review, and
 the terminal.
+
+`server/pi-api/tracing.js` owns the embedded Elune store, capture bindings, and backend capture configuration. `tracing-routes.js` exposes summary, detail, bookmark, and configuration operations. See [Elune integration](../integrations/elune).
 
 `src/lib/pi-api.js` is the frontend HTTP client. `useRuntimeEvents.js` owns the
 SSE connection, and `useTerminal.js` owns the terminal WebSocket.
@@ -83,7 +85,7 @@ Same-origin and loopback clients work by default. Other frontend origins must be
 
 ## Settings surfaces and ownership
 
-The global Settings modal groups settings by owner, not by one shared storage scope:
+Settings and trace surfaces use distinct owners and storage:
 
 | Surface | Owner and storage |
 | --- | --- |
@@ -94,6 +96,9 @@ The global Settings modal groups settings by owner, not by one shared storage sc
 | MCP servers | Selected backend's pi global `mcp.json` and native MCP authentication. |
 | Project settings | Selected backend, with project overrides and project/session metadata. |
 | Session details | Selected backend, with session overrides and read-only runtime/session metadata. |
+| Trace capture and views | Selected backend, with `tracing.enabled` in `memory.sqlite` and trace records in `elune/elune.db`. |
+
+Trace capture controls live in the trace footer, not a global Settings category.
 
 Models & providers and MCP servers require the backend capability `piSettings`. Provider targets select a cwd for extension discovery. They do not change global file ownership. The modal does not contain Global/Project/Session scope tabs.
 
@@ -178,7 +183,7 @@ The database currently contains these application tables:
 - `subagent_overrides`
 - `vision_overrides`
 
-`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, and backend file-editor settings.
+`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, backend file-editor settings, and `tracing.enabled`.
 
 The app reads connection records and display preferences from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
 
@@ -189,11 +194,11 @@ Pi provider/model configuration, MCP configuration, and native credentials do no
 Memory, subagent, and vision scopes use canonical project roots and hashed scope IDs. Rollout feedback uses the cwd, session path, session ID, and entry ID.
 
 These modules honor `LEYLINE_MEMORY_DIR`. When set, they use `memory.sqlite` in
-that directory.
+that directory. Elune records use a separate `elune/elune.db` under the same data directory. One lazy worker per backend owns that database. Trace records do not use the pi session directory.
 
 ## Bundled extensions and prompt
 
-Normal runtimes load output-budget, ultrafast, goal, memory, subagent, research, and vision-agent from `.pi/extensions/`. They also append `.pi/LEYLINE_SYSTEM.md` to the system prompt.
+Normal runtimes load output-budget, ultrafast, goal, memory, subagent, research, and vision-agent from `.pi/extensions/`. They load the inline Elune capture factory from `@elune/embedded/pi` and append `.pi/LEYLINE_SYSTEM.md` to the system prompt.
 
 Bundled conflict filtering removes other extensions with matching names or designated commands and tools. The bundled Ultrafast extension runs last, after other provider hooks.
 
@@ -201,7 +206,7 @@ Normal runtimes also load pi's native MCP and tool-search extensions. Leyline ex
 
 A new research session gets its marker before extension binding. The research extension exposes `research_update` only when the active branch contains a marker for that session ID.
 
-Children with an isolated custom system prompt load only the bundled output-budget extension. They omit context files, skills, MCP, tool search, and the Leyline prompt. Vision children use this path with no active tools. A session-local settings override permits image input without changing the user's persisted pi image setting.
+Children with an isolated custom system prompt retain the bundled output-budget extension and inline Elune capture. They omit context files, skills, MCP, tool search, and the Leyline prompt. Vision children use this path with no active tools. A session-local settings override permits image input without changing the user's persisted pi image setting.
 
 Reload creates replacement cwd-bound services. It then binds the new session, extensions, event subscription, and extension UI state to the existing handle.
 

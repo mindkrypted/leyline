@@ -5,6 +5,7 @@
 - `src/main.js`: Creates the Vue app and loads the CSS entry file.
 - `src/App.vue`: Composes the workspace and coordinates cross-feature state.
 - `src/components/`: Contains focused Vue surfaces for sessions, composers, transcript entries, drawers, pickers, and previews.
+- `src/components/TracePanel.vue`: Lazily mounts one embedded Elune surface and adds selected-backend capture controls.
 - `src/components/ReviewPane.vue`: Renders changed files and prepared Pierre diffs for the selected project.
 - `src/components/SystemPromptInspector.vue`: Renders prompt sections, tool changes, raw text, and actions for a selected System event.
 - `src/components/ResearchSourcesPane.vue`: Renders cited sources and the complete research ledger.
@@ -33,6 +34,7 @@
 - `src/lib/backend.js`: Builds runtime HTTP and WebSocket URLs for the active backend.
 - `src/lib/leyline-api.js`: Manages the native connection registry, app settings, and backend identity checks.
 - `src/lib/pi-api.js`: Contains frontend runtime API functions.
+- `src/lib/trace-client.js`: Supplies selected-backend trace requests, cancellation, and subscriptions through runtime SSE.
 - `src/lib/pi-settings-api.js`: Contains selected-backend provider/model/MCP requests and private operation transport.
 - `src/lib/transcript.js`: Configures Markdown and syntax highlighting, then re-exports shared projection helpers.
 - `src/lib/format.js`: Contains UI labels and value formatting.
@@ -88,7 +90,9 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/runtime.js`: Owns runtime handles and pi operations.
 - `server/pi-api/sessions.js`: Discovers session JSONL files and session metadata.
 - `server/pi-api/dtos.js`: Builds runtime and session DTOs.
-- `server/pi-api/events.js`: Broadcasts SSE events.
+- `server/pi-api/events.js`: Broadcasts SSE events, including small trace commit and configuration notices.
+- `server/pi-api/tracing.js`: Owns the lazy Elune store, inline capture bindings, backend configuration, and child usage reconciliation.
+- `server/pi-api/tracing-routes.js`: Routes trace summaries, paged detail, bookmarks, and capture configuration.
 - `server/pi-api/extension-ui.js`: Adapts extension UI state for the browser.
 - `server/pi-api/goal-state.js`: Projects goal extension state.
 - `server/pi-api/fs-browser.js`: Browses local directories.
@@ -102,10 +106,12 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/terminal.js`: Runs PTYs over WebSocket.
 - `server/pi-api/http.js`: Contains HTTP response helpers.
 - `server/leyline-server.js`: Serves the packaged frontend and native backend.
+- `server/shutdown-deadlines.js`: Shares runtime and packaged-backend shutdown deadlines.
 
 ## Electron and CLI
 
-- `electron/main.js`: Owns windows, internal target validation, native shortcuts, window state, and the packaged server.
+- `electron/main.js`: Owns windows, internal target validation, native shortcuts, window state, and backend utility-process supervision.
+- `electron/leyline-server-process.js`: Starts and closes the shared packaged backend in an Electron utility process.
 - `bin/leyline`: Opens a session in the installed macOS app, or opens the home workspace in a new window with `-n`.
 - `scripts/electron-build.sh`: Builds and packages the Electron app.
 - `scripts/local-publish.sh`: Installs a local Apple Silicon macOS build and CLI link.
@@ -121,7 +127,11 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `.pi/extensions/research/`: Implements research-session binding, state updates, orchestration protocol, and report checks.
 - `.pi/extensions/vision-agent/`: Implements image-file inspection through an isolated vision child.
 
-Normal runtimes load all seven bundled extensions. Isolated custom-prompt children retain only output-budget. Native MCP and tool search use SDK factories in `runtime.js`. Leyline does not load Codemode.
+Normal runtimes load all seven bundled extensions plus inline Elune capture. Isolated custom-prompt children retain output-budget and inline capture. Native MCP and tool search use SDK factories in `runtime.js`. Leyline does not load Codemode.
+
+## Embedded Elune dependency
+
+`@elune/embedded` uses the GitHub dependency `spmurrayzzz/elune`. Its independent package exports the core, `/pi`, `/vue`, and `/vue/style.css`. It needs no sibling checkout or separate service. See [Elune integration](../integrations/elune) for host ownership and worker storage.
 
 ## Capture and documentation
 

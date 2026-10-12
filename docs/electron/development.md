@@ -18,7 +18,12 @@ The script sets `LEYLINE_DEV_SERVER_URL=http://localhost:5173`. Electron loads
 that URL instead of starting the packaged static server.
 
 Restart Electron after changes to `electron/main.js` or the packaged server.
+Restart Vite after backend or dependency updates, including `@elune/embedded`.
 Vite applies normal frontend changes while it continues to run.
+
+Electron development uses Vite's backend for [tracing](../user-guide/tracing).
+A packaged app includes its own library and worker. Rebuild and restart that
+app to apply dependency or backend updates.
 
 ## Use desktop shortcuts
 

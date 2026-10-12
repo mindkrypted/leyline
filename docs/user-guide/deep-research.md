@@ -36,6 +36,12 @@ the worker's tool calls, source work, and final result.
 
 The sidebar marks each research session with a flask. During a run, the row can show its current phase or **gather N/N**. A selected completed session shows **ready**.
 
+## Inspect research traces
+
+Use **Session traces** to inspect the lead's recorded model calls, tools, timing, and usage. Available **Child sessions** links open worker transcripts. The trace explorer also lists captured worker runs on the selected backend.
+
+Traces are separate from the research ledger and report. Capture starts on for new runs and can retain source content and prompts. See [Tracing](./tracing) for controls and privacy.
+
 ## Direct an active run
 
 Enter a message and press **Option+Enter** to steer the lead. The lead receives steering at its next accepted checkpoint.

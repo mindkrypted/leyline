@@ -50,6 +50,8 @@ Leyline removes the session attachment directory when it moves a session or proj
 
 The configured model provider receives the image and prompt. The hidden child session also keeps its prompt and image in local pi session history. Hidden child sessions do not appear in the sidebar, but Leyline does not delete their JSONL files.
 
+When capture is on, Elune also records new vision child runs and the parent tool result. Traces can retain private prompts and results after session deletion. Leyline does not guarantee secret redaction. See [Tracing](./tracing#keep-trace-data-private).
+
 Use a provider and local storage policy that are appropriate for the image data.
 
 Agents can also use the `vision_agent` tool to inspect an image file from the project. See [Vision agent integration](../integrations/vision-agent).

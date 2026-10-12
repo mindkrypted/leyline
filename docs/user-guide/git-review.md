@@ -12,7 +12,7 @@ The desktop review pane shows uncommitted Git changes for the selected session's
 2. Select **Review changes** in the session header.
 3. Select a changed file to inspect its diff.
 
-The control appears when the viewport is wider than 1120 pixels and the selected backend supports Git review.
+The control appears when the viewport is wider than 1120 pixels and the selected backend supports Git review. Opening review closes any trace view. Opening traces closes review.
 
 Leyline prepares the file list and selected diff before it opens the pane. The header summary stays current while the pane is closed. It shows additions and deletions when available, or a changed-file count. Its description includes the branch and conflicts.
 

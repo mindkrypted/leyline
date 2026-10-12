@@ -12,7 +12,7 @@ The header shows the Leyline mark, **Open sessions**, the session title, and ava
 
 The project part of the breadcrumb is hidden. The session rename glyph is also hidden, but you can select the title to rename it.
 
-The **Session details**, **Memory**, **Events**, and **Export transcript** icons remain available. Numeric counts are hidden.
+The **Session traces**, **Session details**, **Memory**, **Events**, and **Export transcript** icons remain available when the session and backend support them. Numeric counts are hidden.
 
 A research session also shows its compact state and source control. The source count is hidden, but the control remains available.
 
@@ -94,6 +94,18 @@ A [deep research](./deep-research) source pane opens across the full viewport. I
 Select the source control in the header to open the pane. Select **×** to close the pane and return to the report.
 
 Select a report citation to open its source preview as a bottom sheet.
+
+## Inspect traces on mobile
+
+Select **Session traces** in the header for the current session. For all projects on the selected backend, open the sidebar and select the **Trace explorer** icon button.
+
+![Mobile trace view with the selected observation details](../assets/screenshots/trace-mobile.png)
+
+*Trace views fill the width below the header.*
+
+Use **Observations** or **Timeline** and **Selected detail** to switch panels. The explorer uses **Traces** and **Selected preview**. Expand **Capture new runs** in the footer to change capture for future runs.
+
+**Back** returns from the workspace to its inspector or explorer. Opening the sidebar or terminal closes traces. See [Tracing](./tracing) for batch limits and privacy.
 
 ## Use drawers and the terminal
 

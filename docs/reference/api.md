@@ -21,10 +21,11 @@ Status behavior is:
 
 - `400` is used for connection, setting, queue, file-action, or confirmation validation. Missing required query values on session lookup or Git review routes also return `400`.
 - `403` rejects a browser origin that the server does not allow.
-- `404` is used for an unknown runtime, native app route, setting key, or session.
+- `404` is used for an unknown runtime, native app route, setting key, session, or trace.
 - `405` is used when a known route receives an unsupported method.
 - `409` rejects stale queue or configuration revisions, expired confirmation replies, and conflicting Settings operations.
 - Pi Settings also uses `429` for its operation limit and `503` for unavailable or busy runtime resources. See [Pi Settings routes](#pi-settings-routes).
+- Trace routes use `400` for invalid requests and `503` for unavailable storage, configuration failures, or shutdown. See [Trace routes](#trace-routes).
 - `500` is used for thrown runtime errors. This includes malformed JSON on most runtime routes, SDK errors, missing memories, and some missing sessions.
 
 The current status codes do not distinguish all client errors from server
@@ -300,7 +301,8 @@ Response:
     reviewWatch: true,
     terminal: true,
     fileLinks: true,
-    piSettings: true
+    piSettings: true,
+    tracing: true
   }
 }
 ```
@@ -312,6 +314,8 @@ It shows the desktop review control only when `capabilities.review` is `true`. I
 Local file actions and the Files settings section require `capabilities.fileLinks: true`.
 
 Models & providers and MCP servers require `capabilities.piSettings: true`. These categories use the selected backend, even inside the global Settings modal.
+
+Trace views require `capabilities.tracing: true`. Capture configuration and records belong to the selected backend, not the native connection registry.
 
 ## Connection registry
 
@@ -1971,6 +1975,182 @@ Response:
 
 The route permanently deletes one visible record.
 
+## Trace routes
+
+These routes use embedded Elune on the selected backend. They do not require a separate service or a `PI_TRACE_URL`. Capture does not depend on an open view. See [Elune integration](../integrations/elune) for storage, content limits, and usage accounting.
+
+### `GET /api/pi/traces/config`
+
+Response:
+
+```text
+{ enabled: boolean, error?: string }
+```
+
+An absent `tracing.enabled` setting defaults to `true`. A configuration-read failure returns `enabled: false` with a controlled `error`. This GET still returns `200`. Reading configuration alone does not start the Elune worker.
+
+### `PUT /api/pi/traces/config`
+
+Request:
+
+```json
+{ "enabled": false }
+```
+
+Response: The same configuration object as GET. The setting applies to new runs on this backend. Turning capture off does not delete traces or interrupt an existing capture. Saving configuration broadcasts `trace_config` on the existing runtime stream.
+
+### `GET /api/pi/traces`
+
+Query:
+
+| Field | Behavior |
+| --- | --- |
+| `sessionId` | Exact session ID filter. An empty string applies no filter. |
+| `cwd` | Exact recorded project directory filter. An empty string applies no filter. |
+| `q` | Case-insensitive substring search with whitespace-separated terms. Every term must match a searched field or tag. Maximum 2,048 characters and 32 terms. |
+| `status` | `running`, `completed`, `error`, or `aborted`. An empty string applies no filter. |
+| `page` | Positive safe integer. Default `1`. |
+| `limit` | Positive safe integer. Default `50`, clamped to `200`. |
+
+String filters other than `q` permit at most 4,096 characters. Search checks ID, name, user ID, session ID, input, output, model, session name, cwd, and tags. It does not search observations. Results sort by descending timestamp, then ID. The computed page offset must remain a safe integer.
+
+Response:
+
+```text
+{
+  traces: TraceSummary[],
+  total: number,
+  page: number,
+  limit: number
+}
+```
+
+A `TraceSummary` contains these fields:
+
+```text
+{
+  id: string,
+  source: "pi",
+  status: "running" | "completed" | "error" | "aborted",
+  revision: number,
+  name: string,
+  timestamp: string,
+  environment: string,
+  userId: string,
+  sessionId: string,
+  latency: number,
+  totalTokens: number,
+  inputTokens: number,
+  outputTokens: number,
+  cost: number,
+  level: string,
+  tags: string[],
+  bookmarked: boolean,
+  model: string,
+  version: string,
+  metadata: {
+    cwd: string | null,
+    sessionName: string | null,
+    sessionFile: string | null,
+    branchId: string | null,
+    startEntryId: string | null,
+    endEntryId: string | null,
+    userEntryId: string | null,
+    parentSessionFile: string | null,
+    parent: {
+      traceId: string | null,
+      sessionId: string | null,
+      toolCallId: string | null
+    }
+  },
+  readTruncation?: object
+}
+```
+
+Summaries omit `input`, `output`, full metadata, observations, and scores. A synthetic empty result is:
+
+```json
+{ "traces": [], "total": 0, "page": 1, "limit": 50 }
+```
+
+### `GET /api/pi/traces/:id`
+
+A decoded ID must match `[a-zA-Z0-9_.:-]{1,160}`. For example, `/api/pi/traces/trace-demo` uses a safe placeholder ID.
+
+Query:
+
+| Field | Default | Allowed value |
+| --- | --- | --- |
+| `observationOffset` | `0` | Non-negative safe integer |
+| `observationLimit` | `200` | Positive safe integer, clamped to `200` |
+| `scoreOffset` | `0` | Non-negative safe integer |
+| `scoreLimit` | `200` | Positive safe integer, clamped to `200` |
+
+Response: `{ trace: Trace }`. A missing trace returns `404` with `{ "error": "Trace not found" }`.
+
+A detail trace includes the summary's scalar fields, `input`, `output`, full retained `metadata`, `observations`, `scores`, and `pagination`. Detail metadata can contain additional capture and usage fields. It is not restricted to summary metadata.
+
+Observation fields are `id`, `parentId`, `name`, `type`, `startTime`, `duration`, `level`, `status`, `model`, `input`, `output`, `inputTokens`, `outputTokens`, `cost`, and `metadata`. Each observation can also have `readTruncation`. `startTime` is relative to trace start. Durations and trace latency use seconds.
+
+Score fields are `id`, `traceName`, `name`, `value`, `comment`, `source`, `timestamp`, and `dataType`, plus optional `readTruncation`. The detail route exposes stored scores. Leyline has no score-create route or separate observation or score paging route.
+
+Collections use this pagination shape:
+
+```text
+pagination: {
+  observations: {
+    total: number,
+    offset: number,
+    limit: number,
+    nextOffset: number | null,
+    truncated: boolean
+  },
+  scores: {
+    total: number,
+    offset: number,
+    limit: number,
+    nextOffset: number | null,
+    truncated: boolean
+  }
+}
+```
+
+Follow each collection's `nextOffset` on another detail request. A null value marks the end. Read byte budgets can return fewer items than `limit`. `truncated` is true when more items remain or a returned item has shortened fields.
+
+Reads clip text fields to 32 KiB. Collection reads have an 8 MiB combined budget, with up to 2 MiB reserved for scores. A shortened field adds `readTruncation.fields` and `readTruncation.fieldBytes` to its record. A detail trace can also report `readTruncation.observations: true` or `readTruncation.scores: true` for incomplete collections. Capture-time omission and clipping are separate from these read signals.
+
+### `PATCH /api/pi/traces/:id`
+
+Request:
+
+```json
+{ "bookmarked": true }
+```
+
+Response: `{ trace: Trace }`, with the updated bookmark and revision. The response loads the first observation and score pages, each limited to 200 items. Bookmark changes publish a committed `trace_updated` notice.
+
+This route changes only the bookmark. There is no trace-delete or general trace-edit endpoint.
+
+### Trace errors
+
+Errors use `{ error: string }`. Unsupported methods return `405` with `Method not allowed`. Unknown trace subpaths return `404` with `Not found`.
+
+Explicit validation returns `400` with one of these messages:
+
+- `enabled must be a boolean`
+- `bookmarked must be a boolean`
+- `Invalid trace status`
+- `Invalid trace identifier`
+- `page must be a positive integer` or `limit must be a positive integer`
+- `<pagination key> must be a positive integer` for limits
+- `<pagination key> must be a non-negative integer` for offsets
+
+Malformed JSON, URI errors, and library type validation return `400` with `Invalid trace request`. Missing records return `404` with `Trace not found`.
+
+Storage and other capture failures return `503` with `Tracing is unavailable. Check the backend log.` Configuration failures use `Could not read or save trace settings. Check the backend log.` Shutdown uses `Tracing is shutting down`.
+
+A configuration response can return `200` with an `error`, even when `enabled` is true. Clients must show this error instead of treating enabled capture as healthy.
+
 ## Subagent routes
 
 These routes store Leyline overrides in SQLite on the selected backend. Agent defaults uses `global`, Project settings uses `project`, and Session details uses `session`. The UI surface fixes the scope. These overrides are separate from pi `models.json` definitions and overrides.
@@ -2092,6 +2272,8 @@ Request:
   task: string,
   cwd: string,
   parentSessionPath?: string,
+  parentSessionId?: string,
+  _toolCallId?: string,
   model?: string | { provider: string, id: string },
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
   tools?: string[],
@@ -2099,6 +2281,8 @@ Request:
   systemPrompt?: string
 }
 ```
+
+`parentSessionId` and `_toolCallId` supply capture linkage to the parent session and tool observation. The backend can also resolve the parent by `parentSessionPath`.
 
 `tools` sets an allowlist. `excludeTools` enables all tools discovered by the child runtime except the listed names. A request cannot contain both fields.
 
@@ -2243,6 +2427,8 @@ Request:
   question?: string,
   cwd: string,
   parentSessionPath?: string,
+  parentSessionId?: string,
+  _toolCallId?: string,
   model?: string | { provider: string, id: string },
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
   image: { type: "image", data: string, mimeType: string }
@@ -2250,6 +2436,8 @@ Request:
 ```
 
 Success response: The same object as `POST /api/pi/subagent`.
+
+`parentSessionId` and `_toolCallId` supply capture linkage, as on the subagent route. The isolated child retains output-budget and inline Elune capture.
 
 The route creates one hidden child with an empty tool allowlist. The selected model must exist, have provider authentication, and support image input. The image must be PNG, JPEG, GIF, or WebP.
 
@@ -2321,7 +2509,21 @@ extension_error: {
   activeSessionId: string,
   error: unknown
 }
+
+trace_updated: {
+  traceId: string,
+  sessionId: string,
+  revision: number,
+  activeSessionId: string
+}
+
+trace_config: {
+  enabled: boolean,
+  error?: string
+}
 ```
+
+Trace notices reuse this stream without full trace payloads. `trace_updated` follows a storage commit. Trace views refresh paged HTTP data after notices or reconnect. These notices do not enter the browser Runtime Events log or transcript projection.
 
 `runtime_event.event` is the pi SDK runtime event. Its nested fields depend on the event type. The connection stays open until the client or server closes it.
 

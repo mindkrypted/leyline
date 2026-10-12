@@ -71,6 +71,12 @@ Select the card to expand final output. Select **→ view session** to open a
 child session. Use Command-click, Ctrl-click, or middle-click to open the child
 in a new tab or window.
 
+## Inspect delegated runs
+
+Open **Session traces** in the parent header to inspect the subagent tool observation. Available **Child sessions** links open child transcripts. Captured child runs also appear in the selected backend's trace explorer, even though children stay hidden from the session sidebar.
+
+Trace capture starts on for new runs and can retain delegated prompts and results. See [Tracing](./tracing) for capture controls and privacy.
+
 ## Return to the parent session
 
 Child sessions are hidden from the sidebar. Their header shows **← parent session**.

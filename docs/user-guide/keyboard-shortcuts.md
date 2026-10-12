@@ -70,6 +70,10 @@ These shortcuts apply in **Add project**.
 
 Leaving the rename field also saves the current value.
 
+## Close trace views
+
+In the [tracing workspace](./tracing#open-the-tracing-workspace), **Escape** returns to the inspector or explorer that opened it. In the inspector or explorer, **Escape** closes traces. It does not stop an active run while a trace view is open.
+
 ## Resize Git review with keys
 
 Focus the **Resize review pane** handle first.

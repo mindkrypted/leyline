@@ -22,11 +22,19 @@ Forking opens a separate `SessionManager`, calls `createBranchedSession(entryId)
 
 Pi session logs are tree-structured JSONL records. Normal writes use runtime and session-manager primitives. Reset to here is an explicit exception. It rewrites the file so that the selected active branch ends at the target entry.
 
-Normal runtimes load output-budget, ultrafast, goal, memory, subagent, research, and vision-agent. They also append the Leyline system prompt. Isolated custom-prompt children retain only output-budget.
+Normal runtimes load output-budget, ultrafast, goal, memory, subagent, research, and vision-agent. They also append the Leyline system prompt. Conversation runtimes also install Elune through a named inline factory. Isolated custom-prompt children retain output-budget and inline capture.
 
 Bundled extensions replace matching conflicts, and Ultrafast runs last. See [Runtime construction](../developer-guide/backend-api#runtime-construction) and [Ultrafast](../developer-guide/backend-api#ultrafast) for the implementation contracts.
 
 Normal runtimes add native MCP and tool search through SDK factories. Leyline enables `tool_search` unless settings explicitly disable it. Codemode is not loaded and remains excluded.
+
+## Trace capture integration
+
+`@elune/embedded/pi` supplies `createPiTracingExtension()`. Leyline installs its factory through `resourceLoaderOptions.extensionFactories` and binds a subscription to the current `AgentSession`. Replacement sessions require fresh binding and capture cleanup.
+
+Capture uses extension hooks and runtime events for provider identity, finalized messages, nested tools, retries, settlement, and compaction. Host wrappers return without waiting for storage. A capture failure reports an error without blocking pi execution.
+
+Home preview runtimes disable capture. Provider Settings runtimes and private probes do not install the capture factory. Conversation, research, subagent, and isolated vision runtimes retain capture independently of trace view lifetime. See [Elune integration](./elune) for usage accounting and durability limits.
 
 ## Settings integration
 

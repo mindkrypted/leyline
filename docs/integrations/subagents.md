@@ -55,8 +55,10 @@ The server creates a pi session with `parentSession` set to the parent session f
 
 For older records without the marker, Leyline also finds child paths in parent `subagent` tool results. The transcript card links to each child session, and the child session links back to its parent.
 
-Normal subagents load all seven bundled extensions and native MCP and tool search. The server applies the selected model, thinking level, and tool allowlist. It excludes nested `subagent` delegation and `codemode`. The agent definition body precedes the task text. Provider authentication must be available to the server process.
+Normal subagents load all seven bundled extensions, inline Elune capture, and native MCP and tool search. The server applies the selected model, thinking level, and tool allowlist. It excludes nested `subagent` delegation and `codemode`. The agent definition body precedes the task text. Provider authentication must be available to the server process.
 
-Children with an isolated custom system prompt retain only output-budget. They have no active tools, context files, skills, native extension factories, or Leyline prompt. Vision children use this path. See [Runtime construction](../developer-guide/backend-api#runtime-construction).
+Children with an isolated custom system prompt retain output-budget and inline Elune capture. They have no active tools, context files, skills, MCP, tool search, or Leyline prompt. Vision children use this path. See [Runtime construction](../developer-guide/backend-api#runtime-construction).
+
+Bundled requests include `parentSessionId` and `_toolCallId` for trace linkage. The child marker retains available parent trace and observation anchors. Proven committed child usage can reconcile parent totals after the tool result. Unknown attribution remains explicit. See [Elune integration](./elune#usage-and-child-accounting).
 
 The child route waits for the child run to finish. If the caller disconnects before the response finishes, the server aborts the child run. See the [API reference](../reference/api#subagent-routes).

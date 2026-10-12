@@ -19,6 +19,7 @@ Use these pages for the main session tasks:
 - [Deep research](./deep-research): run parallel research threads and inspect cited reports and source evidence.
 - [Runtime controls](./runtime-controls): select a model, thinking level, and supported `ultrafast` mode, and inspect tools and context usage.
 - [Tools and thinking](./tools-and-thinking): inspect thoughts, System changes, MCP tools, confirmation cards, skills, and rollout feedback.
+- [Tracing](./tracing): inspect recorded runs, model calls, tool results, timing, and usage. Control capture on the selected backend.
 - [Editing, forking, resetting, and compaction](./editing-forking-compaction): change or branch session history.
 
 ## Use additional surfaces

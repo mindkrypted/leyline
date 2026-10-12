@@ -64,6 +64,12 @@ Activity warns when multiple sessions share one CWD and have active work or queu
 
 Use **Search active sessions** to match a session title, project, CWD, tool target, or error detail.
 
+## Search recorded runs
+
+Select the **Trace explorer** icon button at the bottom of the sidebar to [browse recorded runs](./tracing#browse-traces-across-projects). It covers all projects on the selected backend. Use its project, search, and status filters to narrow the list.
+
+Session search and **Go to** do not search trace data. The explorer does not combine traces across backend connections.
+
 ## Open Project settings
 
 ![Project settings drawer with project-scoped agent overrides](../assets/screenshots/project-details.png)
@@ -77,7 +83,7 @@ The **Settings** tab contains project-level subagent and vision overrides. It al
 
 Select the **Sessions** tab to filter, sort, create, open, rename, or delete sessions in the project.
 
-The **Project actions** menu also contains **Trash project**. This action moves all project sessions to Leyline trash after confirmation.
+The **Project actions** menu also contains **Trash project**. This action moves all project sessions to Leyline trash after confirmation. It does not delete the project's Elune traces. See [Trace privacy](./tracing#keep-trace-data-private).
 
 ## Filter and sort project sessions
 

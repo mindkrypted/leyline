@@ -13,7 +13,7 @@ Use `fnm`, `nvm`, or another version manager to select the required Node.js vers
 npm install
 ```
 
-The repository does not include a package lock.
+The repository does not include a package lock. The embedded Elune dependency installs from GitHub as `spmurrayzzz/elune`. It needs no sibling checkout or separately running service.
 
 ## Run the browser app
 
@@ -54,7 +54,7 @@ Start Vite first. Then start Electron in another terminal:
 npm run electron:dev
 ```
 
-Restart Electron after changes to `electron/main.js` or packaged-server code. Vite applies normal frontend changes without an Electron restart.
+Restart Vite after backend or embedded dependency changes in browser development. Restart Electron after changes to its main or utility-process entry point. Packaged backend changes require a rebuild and app restart. Vite applies normal frontend changes without an Electron restart.
 
 Build the packaged app with:
 
