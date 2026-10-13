@@ -191,6 +191,7 @@ export function useSessionWorkspace({
   let sessionSelectionToken = 0
   let sessionListRequestToken = 0
   let sessionRefreshToken = 0
+  let sessionRefreshInflightToken = 0
   let sessionActivationQueue = Promise.resolve()
   const startRuntimeRequests = new Map()
   let refreshTimer
@@ -568,12 +569,19 @@ export function useSessionWorkspace({
   function scheduleSessionRefresh(activeSessionId, event) {
     if (activeSessionId !== selectedSessionId.value) return
     if (['agent_start', 'compaction_start'].includes(event?.type)) {
+      const hadOutstandingRefresh = refreshTimer !== undefined
+        || sessionRefreshInflightToken !== 0
       invalidateSessionRefresh()
+      if (hadOutstandingRefresh) queueSessionRefresh(activeSessionId, 0)
       return
     }
 
     const delay = sessionRefreshDelay(activeSessionId, event)
     if (delay === undefined) return
+    queueSessionRefresh(activeSessionId, delay)
+  }
+
+  function queueSessionRefresh(activeSessionId, delay) {
     const token = ++sessionRefreshToken
     clearTimeout(refreshTimer)
     refreshTimer = setTimeout(async () => {
@@ -581,6 +589,7 @@ export function useSessionWorkspace({
       if (token !== sessionRefreshToken
         || activeSessionId !== selectedSessionId.value) return
 
+      sessionRefreshInflightToken = token
       try {
         const wasFollowing = shouldFollowOutput?.() ?? true
         const detail = await fetchSessionDetail(activeSessionId)
@@ -588,6 +597,7 @@ export function useSessionWorkspace({
           || activeSessionId !== selectedSessionId.value) return
         sessionDetail.value = detail
         updateSelectedSessionSummary(detail.session)
+        if (sessionRefreshInflightToken === token) sessionRefreshInflightToken = 0
         if (wasFollowing) await scrollToLatest?.()
         else markNewOutput?.()
       } catch (error) {
@@ -595,12 +605,15 @@ export function useSessionWorkspace({
           && activeSessionId === selectedSessionId.value) {
           sessionError.value = error.message
         }
+      } finally {
+        if (sessionRefreshInflightToken === token) sessionRefreshInflightToken = 0
       }
     }, delay)
   }
 
   function invalidateSessionRefresh() {
     sessionRefreshToken += 1
+    sessionRefreshInflightToken = 0
     clearTimeout(refreshTimer)
     refreshTimer = undefined
   }
@@ -608,7 +621,10 @@ export function useSessionWorkspace({
   function sessionRefreshDelay(activeSessionId, event) {
     if (['agent_settled', 'stream_reconnected', 'model_changed'].includes(event?.type)) return 0
     if (event?.type === 'compaction_end') {
-      return event.reason === 'manual' ? 0 : undefined
+      if (event.reason === 'manual') return 0
+      if ((event.reason === 'threshold' || event.reason === 'overflow')
+        && !event.aborted && !event.errorMessage) return 0
+      return undefined
     }
 
     const isStreaming = runtimeSessionsById.value[activeSessionId]?.isStreaming
