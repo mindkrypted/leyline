@@ -9,6 +9,7 @@
 | `App.vue` | Global Settings and contextual drawer visibility, fixed agent scope and request targets, sidebar navigation, Git review and research sources, composer/queue drafts, attachments, prompt edits and submission, session kind, goals, project selection, and startup motion |
 | `useSessionWorkspace.js` | Session list, project grouping, routes, selected detail, activation, runtime snapshots, sidebar activity rows, model, thinking, and Ultrafast controls, rename, delete, fork, reset, and reload |
 | `useBackendConnections.js` | App-wide connection records, window-specific selection, connection tests, and default selection |
+| `usePinnedSessions.js` | Pinned session IDs for the active connection, load revisions, pending toggles, errors, and batched cleanup |
 | `useTranscriptPreferences.js` | App-wide transcript display settings, loading state, and save errors |
 | `GlobalSettingsModal.vue` | Category navigation, capability filtering, modal focus, and scope labels |
 | `AgentSettings.vue` | Fixed-scope subagent and vision controls, inheritance display, and available model choices |
@@ -32,7 +33,7 @@
 
 `App.vue` creates the composables and passes narrow props and events to components. Components do not own session runtime objects.
 
-`SessionSidebar.vue` renders the current project and its virtualized session list. It owns session search, navigator search, stable project order, and cross-project activity groups.
+`SessionSidebar.vue` renders the current project and its virtualized session list. It owns session search, navigator search, stable project order, and cross-project activity groups. Outside search, it derives one pinned-first array for rows, arrow-key focus, and ARIA positions.
 
 `SessionComposer.vue` and `StartComposer.vue` own local input mechanics and dictation adapters.
 
@@ -53,6 +54,8 @@ It stores the active ID in window `sessionStorage` and configures
 A backend switch verifies `GET /api/pi/info` and reloads the window. `App.vue` then opens SSE and loads sessions from the selected backend.
 
 Retry uses the same connection flow. Transcript preferences always use the native backend, not the selected runtime backend.
+
+Pinned sessions also use the native backend. `App.vue` captures the active connection ID for each pin operation and supplies the resulting ID set to the sidebar. Pins stay separate from session DTOs. Confirmed session and project deletions prune their IDs. After full session hydration and a successful pin load, `App.vue` removes pin IDs that no session claims.
 
 ## Trace surfaces
 

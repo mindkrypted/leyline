@@ -57,13 +57,15 @@ SSE connection, and `useTerminal.js` owns the terminal WebSocket.
 
 ## Backend connections, app settings, and transport routing
 
-`server/backend-connections.js` stores named connections, the default connection, and app settings. Its routes use `/api/leyline` on the native backend.
+`server/backend-connections.js` stores named connections, the default connection, app settings, and pinned session IDs. Its routes use `/api/leyline` on the native backend.
 
 `src/composables/useBackendConnections.js` loads the registry and keeps the active connection ID in window `sessionStorage`.
 
 Saved definitions and the default are app-wide. The active connection is window-specific.
 
 `src/composables/useTranscriptPreferences.js` loads the thought display default from the native backend. All windows use this app-wide setting.
+
+`src/composables/usePinnedSessions.js` loads pinned session IDs for the active backend connection. Individual pin, unpin, and prune operations are atomic at the record level. Windows refresh their pin state when they regain focus.
 
 `src/lib/backend.js` supplies the base URL for runtime HTTP, Git review, SSE,
 terminal WebSocket, and export requests. The native backend uses the current
@@ -178,14 +180,15 @@ The database currently contains these application tables:
 
 - `backend_connections`
 - `leyline_settings`
+- `pinned_sessions`
 - `memories`
 - `rollout_feedback`
 - `subagent_overrides`
 - `vision_overrides`
 
-`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, backend file-editor settings, and `tracing.enabled`.
+`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, backend file-editor settings, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
 
-The app reads connection records and display preferences from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
+The app reads connection records, display preferences, and pinned sessions from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
 
 `subagent_overrides` and `vision_overrides` supply Agent defaults, Project settings, and Session details. Their global scope means all projects on that backend. It does not mean all saved backend connections. Vision model and thinking fields inherit independently.
 

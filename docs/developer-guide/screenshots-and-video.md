@@ -34,7 +34,7 @@ npm run docs:screenshots
 
 This command intercepts Leyline API calls and supplies sanitized fixtures. Mock coverage includes:
 
-- Backend connections, backend information and capabilities, file editor settings, and the thought display setting
+- Backend connections, backend information and capabilities, file editor settings, the thought display setting, and pinned session IDs
 - Provider/model and MCP inventories with the `piSettings` capability; saved secret values are absent
 - Catalog search results for three Qwen3.8-27B provider variants, with model details, thinking maps, and compatibility metadata
 - Projects, folder browsing, session lists, detail, activation, and runtime state
@@ -110,9 +110,9 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
-- Other fixtures: Home, workbench, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, goals, events, terminal, export, and mobile navigation
+- Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, goals, events, terminal, export, and mobile navigation
 
-Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
+Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. The pinned-session capture pins two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
 
 These models and settings exist only in the capture fixtures. The command does not change local model configuration.
 

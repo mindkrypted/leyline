@@ -2,7 +2,7 @@
 
 Leyline exposes runtime routes under `/api/pi`. The same handler runs in Vite and in the packaged Electron server.
 
-The native backend also exposes the app connection registry and app settings under `/api/leyline`.
+The native backend also exposes the app connection registry, app settings, and pinned session IDs under `/api/leyline`.
 
 ## Request flow
 
@@ -24,7 +24,7 @@ The terminal does not use the HTTP router. It uses a WebSocket upgrade at `/api/
 
 | Module | Ownership |
 | --- | --- |
-| `server/backend-connections.js` | Named connections, the default connection, and app settings on the native backend |
+| `server/backend-connections.js` | Named connections, the default connection, app settings, and pinned session IDs on the native backend |
 | `lib/leyline-settings.js` | Setting keys that the native backend and browser share |
 | `lib/research-state.js` | Branch-local research state folding and source normalization |
 | `lib/research-citations.js` | Report citation checks against canonical ledger sources |

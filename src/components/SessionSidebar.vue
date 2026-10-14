@@ -55,6 +55,23 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  pinPendingIds: {
+    type: Set,
+    default: () => new Set(),
+  },
+  pinnedSessionIds: {
+    type: Set,
+    default: () => new Set(),
+  },
+  pinnedVersion: {
+    type: Number,
+    default: 0,
+  },
+  pinsError: {
+    type: String,
+    default: '',
+  },
+  pinsReady: Boolean,
   reloadingSession: Boolean,
   runtimeActivitySessions: {
     type: Array,
@@ -122,10 +139,12 @@ const emit = defineEmits([
   'reload-session',
   'request-delete-project',
   'request-delete-session',
+  'retry-pins',
   'retry-sessions',
   'select-backend',
   'select-project',
   'select-session',
+  'toggle-pin-session',
   'update:navigator',
   'update:renameDraft',
 ])
@@ -172,6 +191,7 @@ const sessionFullFormat = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 })
 let navigatorOpener = null
+let pendingPinFocusId = null
 let sessionResizeObserver
 
 const sessionSkeletonItems = computed(() => {
@@ -332,21 +352,46 @@ const matchingProjectSessions = computed(() => {
     .map((item) => item.session)
 })
 
+const orderedProjectSessions = computed(() => {
+  const sessions = matchingProjectSessions.value
+  if (sessionQuery.value.trim() || !props.pinnedSessionIds.size) return sessions
+  const pinned = []
+  const unpinned = []
+  for (const session of sessions) {
+    if (props.pinnedSessionIds.has(session.id)) pinned.push(session)
+    else unpinned.push(session)
+  }
+  if (!pinned.length) return sessions
+  return [...pinned, ...unpinned]
+})
+
 const sessionListItems = computed(() => {
   const items = []
   const grouped = !sessionQuery.value.trim()
   const now = new Date()
   let previousGroup = ''
+  let pinnedHeaderAdded = false
 
-  matchingProjectSessions.value.forEach((session, sessionIndex) => {
-    if (grouped) {
+  orderedProjectSessions.value.forEach((session, sessionIndex) => {
+    if (grouped && props.pinnedSessionIds.has(session.id)) {
+      if (!pinnedHeaderAdded) {
+        items.push({
+          key: 'group:pinned',
+          type: 'group',
+          label: 'Pinned',
+          separator: false,
+          height: SESSION_GROUP_HEIGHT,
+        })
+        pinnedHeaderAdded = true
+      }
+    } else if (grouped) {
       const group = sessionTimeGroup(session, now)
       if (group.key !== previousGroup) {
         items.push({
           key: `group:${group.key}:${sessionIndex}`,
           type: 'group',
           label: group.label,
-          separator: sessionIndex > 0,
+          separator: items.length > 0,
           height: SESSION_GROUP_HEIGHT,
         })
         previousGroup = group.key
@@ -552,6 +597,7 @@ const navigatorSubtitle = computed(() => {
 watch(
   () => [currentProject.value?.cwd || '', sessionQuery.value],
   async ([cwd], [previousCwd] = []) => {
+    pendingPinFocusId = null
     if (cwd !== previousCwd) sessionQuery.value = ''
     sessionScrollTop.value = 0
     await nextTick()
@@ -564,11 +610,50 @@ watch(
   () => [
     props.selectedSessionId,
     currentProject.value?.cwd || '',
-    matchingProjectSessions.value.length,
+    orderedProjectSessions.value.length,
   ],
   async () => {
     await nextTick()
     scrollSelectedSessionIntoView()
+  },
+)
+
+watch(
+  () => props.pinnedVersion,
+  async () => {
+    if (!pendingPinFocusId) return
+    if (document.activeElement
+      && document.activeElement !== document.body) {
+      pendingPinFocusId = null
+      return
+    }
+    const id = pendingPinFocusId
+    pendingPinFocusId = null
+    await nextTick()
+    const index = orderedProjectSessions.value.findIndex((session) => {
+      return session.id === id
+    })
+    if (index < 0) return
+    scrollSessionIntoView(index)
+    await nextTick()
+    if (document.activeElement
+      && document.activeElement !== document.body) return
+    const row = sessionScroll.value?.querySelector(
+      `[data-session-id="${CSS.escape(id)}"]`,
+    )
+    if (!row) return
+    const pinButton = row.querySelector('.session-pin-button')
+    pinButton?.focus({ preventScroll: true })
+    if (document.activeElement !== pinButton) {
+      row.querySelector('.session-link')?.focus({ preventScroll: true })
+    }
+  },
+)
+
+watch(
+  () => props.pinsError,
+  (error) => {
+    if (error) pendingPinFocusId = null
   },
 )
 
@@ -604,7 +689,7 @@ function updateSessionScroll(event) {
 }
 
 function scrollSelectedSessionIntoView() {
-  const index = matchingProjectSessions.value.findIndex((session) => {
+  const index = orderedProjectSessions.value.findIndex((session) => {
     return session.id === props.selectedSessionId
   })
   scrollSessionIntoView(index)
@@ -627,7 +712,7 @@ function scrollSessionIntoView(index) {
 }
 
 async function focusSession(index) {
-  const last = matchingProjectSessions.value.length - 1
+  const last = orderedProjectSessions.value.length - 1
   const target = Math.max(0, Math.min(index, last))
   scrollSessionIntoView(target)
   await nextTick()
@@ -724,6 +809,20 @@ function requestCurrentProjectDelete() {
 function isRenaming(session) {
   return props.renamingSessionId === session.id
     && props.renamingSessionSource === 'sidebar'
+}
+
+function isPinned(session) {
+  return props.pinnedSessionIds.has(session.id)
+}
+
+function isPinPending(session) {
+  return props.pinPendingIds.has(session.id)
+}
+
+function togglePin(session) {
+  if (!props.pinsReady || isPinPending(session)) return
+  pendingPinFocusId = session.id
+  emit('toggle-pin-session', session)
 }
 
 function beginRename(session) {
@@ -986,6 +1085,10 @@ const vFocusSelect = {
           class="project-session-scroll"
           @scroll.passive="updateSessionScroll"
         >
+          <div v-if="pinsError" class="sidebar-note error-note">
+            {{ pinsError }}
+            <button type="button" @click="emit('retry-pins')">Retry</button>
+          </div>
           <div v-if="sessionsError" class="sidebar-note error-note">
             {{ sessionsError }}
             <button type="button" @click="emit('retry-sessions')">Retry</button>
@@ -1033,6 +1136,7 @@ const vFocusSelect = {
               <div
                 v-else
                 class="session project-session-row"
+                :data-session-id="item.session.id"
                 :class="{
                   active: item.session.id === selectedSessionId,
                   'is-renaming': isRenaming(item.session),
@@ -1063,7 +1167,7 @@ const vFocusSelect = {
                       ? 'page'
                       : undefined"
                     :aria-posinset="item.sessionIndex + 1"
-                    :aria-setsize="matchingProjectSessions.length"
+                    :aria-setsize="orderedProjectSessions.length"
                     @click="emit('select-session', item.session, $event)"
                     @auxclick.middle.prevent="emit(
                       'select-session',
@@ -1083,6 +1187,16 @@ const vFocusSelect = {
                         :title="sessionTitle(item.session)"
                         @dblclick.stop="beginRename(item.session)"
                       >{{ sessionTitle(item.session) }}</span>
+                      <svg
+                        v-if="isPinned(item.session)"
+                        class="session-pinned-icon"
+                        viewBox="0 0 16 16"
+                        role="img"
+                        aria-label="Pinned session"
+                      >
+                        <path class="pin-head" d="M5 2.2h6v2.3H5z"></path>
+                        <path d="M7.3 4.5L8 14l.7-9.5"></path>
+                      </svg>
                       <svg
                         v-if="item.session.research"
                         class="session-research-icon"
@@ -1108,6 +1222,25 @@ const vFocusSelect = {
                     >{{ sessionListTime(item.session) }}</time>
                   </button>
                   <div class="session-actions">
+                    <button
+                      class="session-pin-button"
+                      type="button"
+                      :title="isPinned(item.session)
+                        ? 'Unpin session'
+                        : 'Pin session'"
+                      :aria-label="isPinned(item.session)
+                        ? 'Unpin session'
+                        : 'Pin session'"
+                      :aria-pressed="isPinned(item.session)"
+                      :disabled="!pinsReady || isPinPending(item.session)"
+                      @click.stop="togglePin(item.session)"
+                    >
+                      <span v-if="isPinPending(item.session)">…</span>
+                      <svg v-else viewBox="0 0 16 16" aria-hidden="true">
+                        <path class="pin-head" d="M5 2.2h6v2.3H5z"></path>
+                        <path d="M7.3 4.5L8 14l.7-9.5"></path>
+                      </svg>
+                    </button>
                     <button
                       class="session-rename-button"
                       type="button"

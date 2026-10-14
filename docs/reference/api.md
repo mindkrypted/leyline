@@ -421,6 +421,50 @@ Response:
 
 The route rejects other values with `400`. An unknown setting key returns `404`.
 
+## Pinned sessions
+
+Pinned session IDs are part of the native backend. They are stored in the `pinned_sessions` table and scoped by backend connection ID. A selected remote backend does not store these records.
+
+Every pinned-session response uses this shape:
+
+```text
+{ connectionId: string, pinnedIds: string[] }
+```
+
+IDs must be strings. Leyline trims each ID and requires 1 to 128 characters. JSON request bodies must be objects and cannot exceed 64 KiB. An oversized body returns `413`.
+
+### `GET /api/leyline/pinned-sessions?connectionId=:id`
+
+Response: the pinned IDs for that connection.
+
+### `POST /api/leyline/pinned-sessions`
+
+Request:
+
+```text
+{ connectionId: string, sessionId: string }
+```
+
+Response: the updated pinned IDs with status `201`.
+
+Each connection can store at most 200 pins.
+
+### `DELETE /api/leyline/pinned-sessions?connectionId=:id&sessionId=:id`
+
+Response: the updated pinned IDs.
+
+### `POST /api/leyline/pinned-sessions/prune`
+
+Request:
+
+```text
+{ connectionId: string, sessionIds: string[] }
+```
+
+Response: the updated pinned IDs.
+
+A prune request can contain at most 500 session IDs. The frontend sends larger confirmed deletions in batches.
+
 ## Pi Settings routes
 
 These routes use `/api/pi/settings` on the selected backend. Every response sets `Cache-Control: no-store`. Successful requests return `200` without an `ok` envelope.

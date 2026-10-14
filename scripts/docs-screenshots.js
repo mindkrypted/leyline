@@ -906,11 +906,13 @@ const goal = {
 
 const traceFixtures = docsTraces(baseEntries, sessions)
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
+const pinnedAssetNames = ['pinned-sessions.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
   ...await fs.readdir(readmeOutputDir),
   ...traceAssetNames,
+  ...pinnedAssetNames,
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1066,6 +1068,17 @@ try {
       await pane.getByRole('button', { name: 'Expand review' }).click()
       await page.locator('.leyline-app.review-expanded').waitFor()
       await pane.locator('.review-diff-section').nth(1).waitFor()
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'pinned-sessions.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'pinned',
+    interact: async (page) => {
+      await page.locator('.session-time-heading', { hasText: 'Pinned' }).waitFor()
+      await page.locator('.session-pinned-icon').nth(1).waitFor()
     },
   })
   await capture({
@@ -2007,6 +2020,14 @@ async function capture({
     if (key === 'GET /api/leyline/connections') return json(backendRegistry)
     if (key === `GET /api/leyline/settings/${THINKING_DEFAULT_SETTING_KEY}`) {
       return json({ key: THINKING_DEFAULT_SETTING_KEY, value: 'collapsed' })
+    }
+    if (key === 'GET /api/leyline/pinned-sessions') {
+      return json({
+        connectionId: url.searchParams.get('connectionId') || 'builtin',
+        pinnedIds: scenario === 'pinned'
+          ? ['terminal-resize', 'export-layout']
+          : [],
+      })
     }
     if (key === 'GET /api/pi/settings/providers') return json(scenario === 'model-catalog' ? catalogProviderSettings : providerSettings)
     if (key === 'GET /api/pi/settings/catalog/models') {

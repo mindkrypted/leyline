@@ -20,6 +20,7 @@
 - `src/components/ExtensionConfirmations.vue`: Displays pending extension confirmations and sends session-scoped replies.
 - `src/composables/useSessionWorkspace.js`: Owns session, route, activation, and runtime-control state.
 - `src/composables/useBackendConnections.js`: Owns connection records, the default, and window-specific backend selection.
+- `src/composables/usePinnedSessions.js`: Owns backend-scoped pinned session IDs, pending pin state, and cleanup requests.
 - `src/composables/useTranscriptPreferences.js`: Owns app-wide transcript display settings.
 - `src/composables/useSettingsOperation.js`: Owns backend-bound operation polling, answers, and cancellation.
 - `src/composables/useLiveTurnProjection.js`: Owns optimistic and live transcript state.
@@ -32,7 +33,7 @@
 - `src/composables/useDictation.js`: Wraps browser speech recognition.
 - `src/composables/useSmoothStreamingText.js`: Controls incremental live text display.
 - `src/lib/backend.js`: Builds runtime HTTP and WebSocket URLs for the active backend.
-- `src/lib/leyline-api.js`: Manages the native connection registry, app settings, and backend identity checks.
+- `src/lib/leyline-api.js`: Manages the native connection registry, app settings, pinned sessions, and backend identity checks.
 - `src/lib/pi-api.js`: Contains frontend runtime API functions.
 - `src/lib/trace-client.js`: Supplies selected-backend trace requests, cancellation, and subscriptions through runtime SSE.
 - `src/lib/pi-settings-api.js`: Contains selected-backend provider/model/MCP requests and private operation transport.
@@ -73,7 +74,7 @@ These files are outside `src/` because Node.js backend code and browser code imp
 
 ## Backend
 
-- `server/backend-connections.js`: Stores named backend connections, the default, and native app settings.
+- `server/backend-connections.js`: Stores named backend connections, the default, native app settings, and pinned session IDs.
 - `server/pi-api/index.js`: Creates the shared runtime and exports server adapters.
 - `server/pi-api/router.js`: Routes runtime HTTP requests.
 - `server/pi-api/pi-settings-routes.js`: Routes provider/model/MCP configuration and private operations.

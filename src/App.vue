@@ -36,6 +36,7 @@ import { useComposerMotion } from './composables/useComposerMotion'
 import { useFileLinks } from './composables/useFileLinks'
 import { useLiveTurnProjection } from './composables/useLiveTurnProjection'
 import { useMemoryInspector } from './composables/useMemoryInspector'
+import { usePinnedSessions } from './composables/usePinnedSessions'
 import { useProjectBrowser } from './composables/useProjectBrowser'
 import { useRuntimeEvents } from './composables/useRuntimeEvents'
 import { useSessionWorkspace } from './composables/useSessionWorkspace'
@@ -728,6 +729,24 @@ const thinkingInitiallyExpanded = computed(
   () => thinkingDefault.value === 'expanded',
 )
 const {
+  error: pinsError,
+  load: loadPinnedSessions,
+  loadedConnectionId: pinsLoadedConnectionId,
+  loadRevision: pinsLoadRevision,
+  loading: pinsLoading,
+  pendingIds: pinPendingIds,
+  pinnedIds: pinnedSessionIds,
+  pinnedVersion,
+  prune: prunePinnedSessions,
+  pruneUnknown: pruneUnknownPins,
+  toggle: togglePinnedSession,
+  dispose: disposePinnedSessions,
+} = usePinnedSessions()
+const pinsReady = computed(() => {
+  return pinsLoadedConnectionId.value === activeBackendConnectionId.value
+    && !pinsLoading.value
+})
+const {
   memoryOpen,
   memoryDirty,
   memoryLoading,
@@ -1138,6 +1157,23 @@ watch([activeBackendConnectionId, () => activeBackendConnection.value?.url], () 
   resetTracing()
   closeSystemPrompt(false)
 }, { flush: 'sync' })
+watch(activeBackendConnectionId, (connectionId) => {
+  if (connectionId) void loadPinnedSessions(connectionId)
+})
+watch(
+  [
+    sessionsHydrated,
+    pinsLoadRevision,
+    () => sessionSnapshotKey(),
+  ],
+  ([hydrated]) => {
+    if (!hydrated) return
+    const connectionId = activeBackendConnectionId.value
+    if (!connectionId
+      || pinsLoadedConnectionId.value !== connectionId) return
+    void pruneUnknownPins(connectionId, currentSessionIds())
+  },
+)
 watch(tracingAvailable, (available) => { if (!available) resetTracing() })
 watch(traceWorkbenchCovered, (covered) => {
   if (covered) pauseScroll()
@@ -1200,9 +1236,14 @@ onMounted(async () => {
   window.addEventListener('leyline:toggle-session-details', handleNativeToggleSessionDetails)
   window.addEventListener('leyline:toggle-memory', handleNativeToggleMemory)
   window.addEventListener('leyline:toggle-sidebar', handleNativeToggleSidebar)
+  window.addEventListener('focus', refreshPinnedSessions)
+  document.addEventListener('visibilitychange', refreshPinnedSessions)
   const backendInitialization = await initializeBackendConnections()
   requiredInitialBackendConnectionId.value = backendInitialization.requestedId
   await loadTranscriptPreferences()
+  if (activeBackendConnectionId.value) {
+    void loadPinnedSessions(activeBackendConnectionId.value)
+  }
   pendingInitialNativeCwd.value = consumeInitialNativeNewSessionCwd()
   pendingInitialProjectCwd.value = initialProjectCwd()
   pendingInitialSessionPath.value = initialSessionPath()
@@ -1226,12 +1267,15 @@ onUnmounted(() => {
   window.removeEventListener('leyline:toggle-session-details', handleNativeToggleSessionDetails)
   window.removeEventListener('leyline:toggle-memory', handleNativeToggleMemory)
   window.removeEventListener('leyline:toggle-sidebar', handleNativeToggleSidebar)
+  window.removeEventListener('focus', refreshPinnedSessions)
+  document.removeEventListener('visibilitychange', refreshPinnedSessions)
   closeResearchCitationPreview()
   resetTracing()
   delete window.__leylineBackendConnectionId
   disposeTerminalResize()
   closeEventStream()
   sessionWorkspace.dispose()
+  disposePinnedSessions()
   closeTerminalPanel()
   disposeLiveTurn()
   workbenchScroll.dispose()
@@ -1524,12 +1568,18 @@ function cancelConfirmDelete() {
 }
 async function confirmDeleteSession() {
   const session = deleteConfirmSession.value
+  const connectionId = activeBackendConnectionId.value
+  const sessionId = session?.id || ''
   if (!session || !await workspaceConfirmDeleteSession()) return
   discardComposerDraft(session.id)
+  if (connectionId && sessionId) {
+    void prunePinnedSessions(connectionId, [sessionId])
+  }
 }
 async function confirmDeleteProject() {
   const project = deleteConfirmProject.value
   if (!project) return
+  const connectionId = activeBackendConnectionId.value
   const sessionIds = new Set(
     sessions.value
       .filter((session) => session.cwd === project.cwd)
@@ -1540,6 +1590,35 @@ async function confirmDeleteProject() {
   }
   if (!await workspaceConfirmDeleteProject()) return
   for (const sessionId of sessionIds) discardComposerDraft(sessionId)
+  if (connectionId && sessionIds.size) {
+    void prunePinnedSessions(connectionId, [...sessionIds])
+  }
+}
+function togglePinSessionTarget(session) {
+  const connectionId = activeBackendConnectionId.value
+  if (!connectionId || !session?.id) return
+  void togglePinnedSession(connectionId, session.id)
+}
+function retryPinnedSessions() {
+  const connectionId = activeBackendConnectionId.value
+  if (!connectionId) return
+  void loadPinnedSessions(connectionId)
+}
+function currentSessionIds() {
+  const knownIds = new Set(sessions.value.map((session) => session.id))
+  if (selectedSession.value?.id) knownIds.add(selectedSession.value.id)
+  return knownIds
+}
+function sessionSnapshotKey() {
+  const ids = sessions.value.map((session) => session.id)
+  if (selectedSession.value?.id) ids.push(selectedSession.value.id)
+  return ids.sort().join(',')
+}
+function refreshPinnedSessions() {
+  if (document.hidden) return
+  const connectionId = activeBackendConnectionId.value
+  if (!connectionId || pinsLoading.value) return
+  void loadPinnedSessions(connectionId)
 }
 function confirmPendingDelete() {
   if (deleteConfirmProject.value) return confirmDeleteProject()
@@ -3902,6 +3981,11 @@ function closePickerMenus() {
       :interrupting-session-id="activityInterruptingSessionId"
       :navigator="sidebarNavigator"
       :new-session-cwd="newSessionCwd"
+      :pin-pending-ids="pinPendingIds"
+      :pinned-session-ids="pinnedSessionIds"
+      :pinned-version="pinnedVersion"
+      :pins-error="pinsError"
+      :pins-ready="pinsReady"
       :reloading-session="reloadingSession"
       :runtime-activity-sessions="sidebarActivitySessions"
       v-model:rename-draft="renameDraft"
@@ -3932,10 +4016,12 @@ function closePickerMenus() {
       @reload-session="reloadSession"
       @request-delete-project="requestDeleteProject"
       @request-delete-session="requestDeleteSession"
+      @retry-pins="retryPinnedSessions"
       @retry-sessions="retrySessions"
       @select-backend="selectBackendTarget"
       @select-project="selectSidebarProject"
       @select-session="selectSessionTarget"
+      @toggle-pin-session="togglePinSessionTarget"
       @update:navigator="setSidebarNavigator"
     />
 

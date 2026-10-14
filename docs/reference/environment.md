@@ -29,17 +29,17 @@ Use an absolute path for `LEYLINE_MEMORY_DIR`. Without this variable, Leyline us
 ~/.local/share/leyline/elune/elune.db
 ```
 
-The database can contain the `backend_connections`, `leyline_settings`, `memories`, `rollout_feedback`, `subagent_overrides`, and `vision_overrides` tables.
+The database can contain the `backend_connections`, `leyline_settings`, `pinned_sessions`, `memories`, `rollout_feedback`, `subagent_overrides`, and `vision_overrides` tables.
 
-The `leyline_settings` table contains the default backend ID, display preferences, file-editor settings, and `tracing.enabled`.
+The `leyline_settings` table contains the default backend ID, display preferences, file-editor settings, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
 
-Display and saved connections belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
+Display, saved connections, and pinned sessions belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
 
 Set `LEYLINE_SERVER_ALLOWED_ORIGINS` on a backend when a browser UI connects
 from a different non-loopback origin. Separate origins with commas. Each value
 must include its scheme and host. Add a port when the origin uses one.
 
-Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, and set of UI settings.
+Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, set of UI settings, and set of pinned sessions.
 
 It also selects different memory, rollout, subagent, vision, and capture metadata, plus the attachment directory and embedded trace database.
 

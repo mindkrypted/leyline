@@ -27,6 +27,21 @@ Enter a session name or ID in **Search sessions** to filter the current project.
 
 A flask after the title identifies a [deep research session](./deep-research). The marker remains visible after the run finishes.
 
+## Pin a session
+
+![Sidebar with two sessions in the Pinned group above the time groups](../assets/screenshots/pinned-sessions.png)
+
+*Pinned sessions stay at the top of the current project list.*
+
+1. Point to the session row, or move keyboard focus to the row.
+2. Select **Pin session**.
+
+Leyline moves the session to the **Pinned** group at the top of the current project list. Pinned sessions remain in modification-time order. Select **Unpin session** to return a session to its time group.
+
+Leyline saves pins by backend connection in this Leyline installation. Pinning does not change the session file. A fork begins unpinned.
+
+During sidebar search, Leyline uses search order and does not show the **Pinned** group. The pin marker remains beside the session title. **Go to** does not use pin state.
+
 ## Read runtime status
 
 A session row can show these states:

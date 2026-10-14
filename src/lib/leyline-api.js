@@ -59,6 +59,45 @@ export function setLeylineSetting(key, value) {
   )
 }
 
+export function fetchPinnedSessions(connectionId) {
+  const params = new URLSearchParams({ connectionId })
+  return shellRequest(
+    `/api/leyline/pinned-sessions?${params}`,
+    'Failed to load pinned sessions',
+  )
+}
+
+export function pinLeylineSession(connectionId, sessionId) {
+  return shellRequest(
+    '/api/leyline/pinned-sessions',
+    'Failed to pin session',
+    {
+      method: 'POST',
+      body: { connectionId, sessionId },
+    },
+  )
+}
+
+export function unpinLeylineSession(connectionId, sessionId) {
+  const params = new URLSearchParams({ connectionId, sessionId })
+  return shellRequest(
+    `/api/leyline/pinned-sessions?${params}`,
+    'Failed to unpin session',
+    { method: 'DELETE' },
+  )
+}
+
+export function prunePinnedSessions(connectionId, sessionIds) {
+  return shellRequest(
+    '/api/leyline/pinned-sessions/prune',
+    'Failed to update pinned sessions',
+    {
+      method: 'POST',
+      body: { connectionId, sessionIds },
+    },
+  )
+}
+
 export async function fetchBackendInfo(connection) {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 6000)

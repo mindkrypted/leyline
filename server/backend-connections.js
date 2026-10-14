@@ -9,6 +9,11 @@ import { json, readJson } from './pi-api/http.js'
 
 const BUILTIN_CONNECTION_ID = 'builtin'
 const THINKING_DEFAULT_VALUES = new Set(['collapsed', 'expanded'])
+const PINNED_CONNECTION_ID_MAX_LENGTH = 128
+const PINNED_SESSION_ID_MAX_LENGTH = 128
+const PINNED_MAX_PER_CONNECTION = 200
+const PINNED_BULK_MAX_IDS = 500
+const PINNED_BODY_MAX_BYTES = 64 * 1024
 
 export async function backendConnectionsHandler(req, res) {
   if (!setCorsHeaders(req, res)) {
@@ -53,6 +58,43 @@ export async function backendConnectionsHandler(req, res) {
       return json(res, { error: 'Method not allowed' }, 405)
     }
 
+    if (url.pathname === '/pinned-sessions') {
+      if (req.method === 'GET') {
+        const connectionId = validPinnedConnectionId(
+          url.searchParams.get('connectionId'),
+        )
+        return json(res, listPinnedSessions(connectionId))
+      }
+      if (req.method === 'POST') {
+        const body = await readJson(req, { maxBytes: PINNED_BODY_MAX_BYTES })
+        validPinnedBody(body)
+        const connectionId = validPinnedConnectionId(body.connectionId)
+        const sessionId = validPinnedSessionId(body.sessionId)
+        return json(res, pinSession(connectionId, sessionId), 201)
+      }
+      if (req.method === 'DELETE') {
+        const connectionId = validPinnedConnectionId(
+          url.searchParams.get('connectionId'),
+        )
+        const sessionId = validPinnedSessionId(
+          url.searchParams.get('sessionId'),
+        )
+        return json(res, unpinSession(connectionId, sessionId))
+      }
+      return json(res, { error: 'Method not allowed' }, 405)
+    }
+
+    if (url.pathname === '/pinned-sessions/prune') {
+      if (req.method !== 'POST') {
+        return json(res, { error: 'Method not allowed' }, 405)
+      }
+      const body = await readJson(req, { maxBytes: PINNED_BODY_MAX_BYTES })
+      validPinnedBody(body)
+      const connectionId = validPinnedConnectionId(body.connectionId)
+      const sessionIds = validPinnedSessionIds(body.sessionIds)
+      return json(res, prunePinnedSessions(connectionId, sessionIds))
+    }
+
     const settingsMatch = url.pathname.match(/^\/settings\/([^/]+)$/)
     if (settingsMatch) {
       const key = decodeURIComponent(settingsMatch[1])
@@ -81,7 +123,7 @@ export async function backendConnectionsHandler(req, res) {
 
     return json(res, { error: 'Not found' }, 404)
   } catch (error) {
-    return json(res, { error: error.message }, 400)
+    return json(res, { error: error.message }, error.status || 400)
   }
 }
 
@@ -213,6 +255,133 @@ function setSetting(db, key, value) {
   `).run(key, value, Date.now())
 }
 
+function listPinnedSessions(connectionId) {
+  const db = openDb()
+  try {
+    return pinnedDto(db, connectionId)
+  } finally {
+    db.close()
+  }
+}
+
+function pinSession(connectionId, sessionId) {
+  const db = openDb()
+  try {
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const existing = db.prepare(`
+        SELECT 1 FROM pinned_sessions
+        WHERE connection_id = ? AND session_id = ?
+      `).get(connectionId, sessionId)
+      if (!existing) {
+        const count = db.prepare(`
+          SELECT COUNT(*) AS count FROM pinned_sessions
+          WHERE connection_id = ?
+        `).get(connectionId)?.count || 0
+        if (count >= PINNED_MAX_PER_CONNECTION) {
+          throw new Error('Pin limit reached')
+        }
+      }
+      db.prepare(`
+        INSERT INTO pinned_sessions (connection_id, session_id, pinned_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(connection_id, session_id) DO UPDATE SET
+          pinned_at = excluded.pinned_at
+      `).run(connectionId, sessionId, Date.now())
+      db.exec('COMMIT')
+    } catch (error) {
+      try {
+        db.exec('ROLLBACK')
+      } catch {}
+      throw error
+    }
+    return pinnedDto(db, connectionId)
+  } finally {
+    db.close()
+  }
+}
+
+function unpinSession(connectionId, sessionId) {
+  const db = openDb()
+  try {
+    db.prepare(`
+      DELETE FROM pinned_sessions
+      WHERE connection_id = ? AND session_id = ?
+    `).run(connectionId, sessionId)
+    return pinnedDto(db, connectionId)
+  } finally {
+    db.close()
+  }
+}
+
+function prunePinnedSessions(connectionId, sessionIds) {
+  const db = openDb()
+  try {
+    if (sessionIds.length) {
+      const placeholders = sessionIds.map(() => '?').join(',')
+      db.prepare(`
+        DELETE FROM pinned_sessions
+        WHERE connection_id = ? AND session_id IN (${placeholders})
+      `).run(connectionId, ...sessionIds)
+    }
+    return pinnedDto(db, connectionId)
+  } finally {
+    db.close()
+  }
+}
+
+function pinnedDto(db, connectionId) {
+  const rows = db.prepare(`
+    SELECT session_id AS id FROM pinned_sessions
+    WHERE connection_id = ?
+    ORDER BY pinned_at DESC, session_id
+  `).all(connectionId)
+  return {
+    connectionId,
+    pinnedIds: rows.map((row) => row.id),
+  }
+}
+
+function validPinnedBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error('Request body must be an object')
+  }
+}
+
+function validPinnedConnectionId(value) {
+  if (value === undefined || value === null) {
+    throw new Error('Connection id is required')
+  }
+  if (typeof value !== 'string') throw new Error('Connection id must be a string')
+  const id = value.trim()
+  if (!id) throw new Error('Connection id is required')
+  if (id.length > PINNED_CONNECTION_ID_MAX_LENGTH) {
+    throw new Error('Connection id is too long')
+  }
+  return id
+}
+
+function validPinnedSessionId(value) {
+  if (value === undefined || value === null) {
+    throw new Error('Session id is required')
+  }
+  if (typeof value !== 'string') throw new Error('Session id must be a string')
+  const id = value.trim()
+  if (!id) throw new Error('Session id is required')
+  if (id.length > PINNED_SESSION_ID_MAX_LENGTH) {
+    throw new Error('Session id is too long')
+  }
+  return id
+}
+
+function validPinnedSessionIds(value) {
+  if (!Array.isArray(value)) throw new Error('Session ids must be an array')
+  if (value.length > PINNED_BULK_MAX_IDS) {
+    throw new Error('Too many session ids')
+  }
+  return [...new Set(value.map(validPinnedSessionId))]
+}
+
 function validName(value) {
   const name = String(value || '').trim()
   if (!name) throw new Error('Connection name is required')
@@ -246,6 +415,7 @@ function validUrl(value) {
 function openDb() {
   mkdirSync(dirname(dbPath()), { recursive: true })
   const db = new DatabaseSync(dbPath())
+  db.exec('PRAGMA busy_timeout = 2000')
   db.exec(`
     CREATE TABLE IF NOT EXISTS backend_connections (
       id TEXT PRIMARY KEY,
@@ -261,6 +431,14 @@ function openDb() {
       value TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS pinned_sessions (
+      connection_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      pinned_at INTEGER NOT NULL,
+      PRIMARY KEY (connection_id, session_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pinned_sessions_connection
+      ON pinned_sessions(connection_id, pinned_at DESC);
   `)
   return db
 }

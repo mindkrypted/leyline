@@ -18,7 +18,7 @@ hero:
 
 features:
   - title: Browse sessions and projects
-    details: Keep one project in focus, search its sessions, use Go to across projects, and move between parent and child sessions.
+    details: Keep one project in focus, pin important sessions, search its sessions, use Go to across projects, and move between parent and child sessions.
   - title: Run and direct agents
     details: Send prompts and images, steer active runs, and queue editable Up next tasks. Select models and optional ultrafast for supported OpenAI Responses models.
   - title: Run deep research

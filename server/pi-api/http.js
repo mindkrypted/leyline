@@ -6,13 +6,25 @@ import {
 
 const MIN_COMPRESSION_BYTES = 1024
 
-export function readJson(req) {
+export function readJson(req, { maxBytes } = {}) {
   return new Promise((resolve, reject) => {
     let data = ''
+    let size = 0
+    let failed = false
     req.on('data', (chunk) => {
+      if (failed) return
+      size += chunk.length
+      if (maxBytes && size > maxBytes) {
+        failed = true
+        const error = new Error('Request body too large')
+        error.status = 413
+        reject(error)
+        return
+      }
       data += chunk
     })
     req.on('end', () => {
+      if (failed) return
       if (!data) return resolve({})
 
       try {

@@ -42,7 +42,7 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 
 ## Features
 
-You can browse and run pi sessions in one workspace. You can search across
+You can browse and run pi sessions in one workspace. You can pin sessions to keep them at the top of a project list. You can search across
 projects with **Go to** and monitor work through **Activity**. You can read
 live transcripts, use steering or **Up next** tasks, and examine tools, System
 changes, and local files. Pi's native MCP integration supplies configured
