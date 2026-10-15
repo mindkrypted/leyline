@@ -1194,8 +1194,8 @@ const vFocusSelect = {
                         role="img"
                         aria-label="Pinned session"
                       >
-                        <path class="pin-head" d="M5 2.2h6v2.3H5z"></path>
-                        <path d="M7.3 4.5L8 14l.7-9.5"></path>
+                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
+                        <path d="m6.5 9.5-4 4"></path>
                       </svg>
                       <svg
                         v-if="item.session.research"
@@ -1237,8 +1237,8 @@ const vFocusSelect = {
                     >
                       <span v-if="isPinPending(item.session)">…</span>
                       <svg v-else viewBox="0 0 16 16" aria-hidden="true">
-                        <path class="pin-head" d="M5 2.2h6v2.3H5z"></path>
-                        <path d="M7.3 4.5L8 14l.7-9.5"></path>
+                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
+                        <path d="m6.5 9.5-4 4"></path>
                       </svg>
                     </button>
                     <button
