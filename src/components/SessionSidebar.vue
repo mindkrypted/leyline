@@ -1182,11 +1182,6 @@ const vFocusSelect = {
                     )"
                   >
                     <span class="session-title-with-kind">
-                      <span
-                        class="session-title"
-                        :title="sessionTitle(item.session)"
-                        @dblclick.stop="beginRename(item.session)"
-                      >{{ sessionTitle(item.session) }}</span>
                       <svg
                         v-if="isPinned(item.session)"
                         class="session-pinned-icon"
@@ -1197,6 +1192,11 @@ const vFocusSelect = {
                         <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
                         <path d="m6.5 9.5-4 4"></path>
                       </svg>
+                      <span
+                        class="session-title"
+                        :title="sessionTitle(item.session)"
+                        @dblclick.stop="beginRename(item.session)"
+                      >{{ sessionTitle(item.session) }}</span>
                       <svg
                         v-if="item.session.research"
                         class="session-research-icon"
