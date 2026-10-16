@@ -2873,18 +2873,19 @@ async function submitDraft(streamingBehavior) {
   }
   const motionToken = startsEmptySession ? composerMotion.begin('session') : null
   if (!startsEmptySession && !startupRun.value) pulseComposerCommit()
-  const localEntry = beginUserTurn(text, images)
-  promptSubmitting.value = true
-  promptError.value = ''
-  if (!editing) {
-    draft.value = ''
-    attachedImages.value = []
-  }
-  if (shouldFollowOutput) await scrollToLatest()
-  else hasNewOutput.value = true
-
+  let localEntry
   let promptAccepted = false
   try {
+    localEntry = beginUserTurn(text, images)
+    promptSubmitting.value = true
+    promptError.value = ''
+    if (!editing) {
+      draft.value = ''
+      attachedImages.value = []
+    }
+    if (shouldFollowOutput) await scrollToLatest()
+    else hasNewOutput.value = true
+
     const data = editing
       ? await editPrompt(
         sessionId,

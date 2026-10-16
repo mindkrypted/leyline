@@ -110,6 +110,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
   const liveToolVisualFloorMs = 450
   let liveToolSeq = 0
   let liveItemSeq = 0
+  let pendingUserSeq = 0
   const liveTurnAnchorId = ref(null)
   let activeLiveAssistantId = ''
   let runtimeSnapshotRevision
@@ -1103,7 +1104,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
 
   function pendingUserEntry(text, images = []) {
     const now = Date.now()
-    const id = `local-${crypto.randomUUID()}`
+    const id = `local-${now}-${++pendingUserSeq}-${Math.random().toString(36).slice(2)}`
     const blocks = []
     if (text) blocks.push({ type: 'text', text })
     blocks.push(...images)
