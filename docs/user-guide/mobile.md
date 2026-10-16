@@ -45,11 +45,13 @@ Use **Close Leyline settings** to return to the workspace. See [Settings](./sett
 
 ### Share the backend with another device
 
-Select **Connections** in **Category**, then turn on **Allow network access**. Copy an address that the other device can reach. The toggle applies immediately without interrupting local clients or running agents.
+Select **Connections** in **Category**, then turn on **Allow network access**. Copy an address that the other device can reach.
 
-![Mobile Connections settings with network access enabled and copyable sharing URLs](../assets/screenshots/network-access-mobile.png)
+For a fixed port, enter **Proxy port** and select **Apply**. Leave the field blank for automatic selection. The port stays saved across restarts, and **Apply** does not change the sharing switch.
 
-Turning access off disconnects remote clients and their terminals. Use trusted networks only because the API has no authentication. See [Network access](./settings#share-the-native-backend) for scope and connection details.
+![Mobile Connections settings with a saved proxy port and copyable sharing URLs](../assets/screenshots/network-access-mobile.png)
+
+Changing the active port or turning access off disconnects remote clients and their terminals. Local clients and running agents continue. Use trusted networks only because the API has no authentication. See [Network access](./settings#share-the-native-backend) for scope and connection details.
 
 ### Edit a model or copy catalog fields
 

@@ -61,7 +61,7 @@ Traces and their capture setting also belong to the selected backend. The trace 
 
 ### Share the native backend
 
-![Network access enabled with copyable sharing URLs](../assets/screenshots/network-access.png)
+![Network access enabled with a saved proxy port and copyable sharing URLs](../assets/screenshots/network-access.png)
 
 1. Open **Settings → Connections** on the computer that runs Leyline.
 2. Turn on **Allow network access**.
@@ -70,13 +70,20 @@ Traces and their capture setting also belong to the selected backend. The trace 
 
 For Tailscale, use the address for this computer's Tailscale interface. Both devices need network access to that address and port.
 
-The toggle shares the **native backend**, even when the current window uses a saved remote connection. Network access is off by default. Leyline saves the preference and restores it at startup.
+These controls share the **native backend**, even when the current window uses a saved remote connection. Network access is off by default. Sharing uses a separate listener on all IPv4 interfaces, including Wi-Fi and Tailscale.
 
-Sharing starts a separate listener on all IPv4 interfaces, including Wi-Fi and Tailscale. The operating system selects an available port. The sharing URL can change after you disable and enable access, or after Leyline restarts.
+To set a fixed port:
 
-The change applies immediately. The local app keeps its address and connections, and running agents continue. HTTP requests, live updates, and terminal WebSockets use the same backend through the sharing URL.
+1. Enter a whole number from 1 through 65535 in **Proxy port**.
+2. Select **Apply**.
 
-Turn off **Allow network access** to close the sharing listener. Remote clients and their terminals disconnect. Local clients and agent runs continue. If you disable access from a remote browser, that browser loses its connection after the response.
+Leave **Proxy port** blank and select **Apply** for automatic selection. An automatic port can change after you enable sharing again or restart Leyline. A fixed port stays the same across restarts.
+
+You can save a port while sharing is off. **Apply** changes only the port, not the switch. Leyline saves both settings and restores them at startup.
+
+Changes apply immediately without changing the local app's address or interrupting local clients and running agents. Changing an active port or turning access off disconnects remote clients and their terminals. After a port change, use the new sharing URL to reconnect.
+
+If a port is unavailable, Leyline shows an error. A failed change keeps the previous listener and saved port.
 
 ::: warning
 Use trusted networks only. The API has no authentication. Anyone who can reach the sharing URL can access files, change settings, and run commands. Sharing is not restricted to Tailscale.

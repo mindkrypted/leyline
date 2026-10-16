@@ -3,14 +3,16 @@ import { networkInterfaces } from 'node:os'
 
 let binding
 
-export function configureNetworkAccess(server, { enabled = false, protocol = 'http' } = {}) {
+export function configureNetworkAccess(server, { enabled = false, port = 0, protocol = 'http' } = {}) {
   const state = {
-    server, protocol, listener: null, connections: new Set(), closing: new Set(),
+    server, protocol, configuredPort: port, listener: null, connections: new Set(), closing: new Set(),
     pending: Promise.resolve(), closed: false, error: '',
   }
   binding = state
   const restore = () => {
-    if (enabled && !state.closed) void change(state, () => startListener(state)).catch(() => {})
+    if (enabled && !state.closed) void change(state, async () => {
+      state.listener = await startListener(state, port)
+    }).catch(() => {})
   }
   if (server.listening) restore()
   else server.once('listening', restore)
@@ -27,24 +29,27 @@ export async function networkAccessStatus() {
   return statusFor(state)
 }
 
-export function setNetworkAccess(enabled, persist, response) {
+export function setNetworkAccess({ enabled, port }, persist, response) {
   const state = binding
   if (!state) return Promise.reject(new Error('Network access is unavailable'))
   return change(state, async () => {
     if (state.closed || !state.server.listening) throw new Error('The local server is unavailable')
-    if (enabled) {
-      const wasEnabled = !!state.listener
-      await startListener(state)
-      try {
-        persist()
-      } catch (error) {
-        if (!wasEnabled) await stopListener(state)
-        throw error
-      }
-    } else {
-      persist()
-      await stopListener(state, response)
+    const configuredPort = port ?? state.configuredPort
+    const previous = state.listener
+    const nextEnabled = enabled ?? !!previous
+    let listener = previous
+    if (nextEnabled && (!listener || (configuredPort !== state.configuredPort && configuredPort !== listener.address()?.port))) {
+      listener = await startListener(state, configuredPort)
     }
+    try {
+      persist({ enabled: nextEnabled, port: configuredPort })
+    } catch (error) {
+      if (listener !== previous) await stopListener(state, listener)
+      throw error
+    }
+    state.configuredPort = configuredPort
+    state.listener = nextEnabled ? listener : null
+    if (previous && previous !== state.listener) await stopListener(state, previous, response)
     state.error = ''
     return statusFor(state)
   })
@@ -67,6 +72,7 @@ function statusFor(state) {
     available: !!origin && typeof origin === 'object' && !state.closed,
     enabled,
     port: enabled ? address.port : null,
+    configuredPort: state?.configuredPort ?? 0,
     urls: [...new Set(hosts)].map((host) => `${state.protocol}://${host}:${address.port}`),
     directAccess: !!origin && typeof origin === 'object'
       && origin.address !== '::1' && !origin.address.replace(/^::ffff:/, '').startsWith('127.'),
@@ -74,9 +80,8 @@ function statusFor(state) {
   }
 }
 
-async function startListener(state) {
+async function startListener(state, port) {
   if (state.closed) throw new Error('Network access is closed')
-  if (state.listener) return
   const address = state.server.address()
   if (!address || typeof address !== 'object') throw new Error('The local server is unavailable')
   const host = localHost(address.address)
@@ -104,27 +109,32 @@ async function startListener(state) {
     client.pipe(upstream).pipe(client)
   })
   await new Promise((resolve, reject) => {
-    listener.once('error', reject)
-    listener.listen(0, '0.0.0.0', () => {
-      listener.off('error', reject)
+    const failed = (error) => {
+      if (error.code === 'EADDRINUSE') reject(new Error(`Port ${port} is already in use.`))
+      else if (error.code === 'EACCES') reject(new Error(`Permission denied for port ${port}.`))
+      else reject(error)
+    }
+    listener.once('error', failed)
+    listener.listen(port, '0.0.0.0', () => {
+      listener.off('error', failed)
       resolve()
     })
   })
-  state.listener = listener
   listener.on('error', (error) => {
+    if (state.listener !== listener) return
     state.error = error.message
-    if (state.listener === listener) void stopListener(state)
+    void stopListener(state, listener)
   })
   if (state.closed || !state.server.listening) {
-    await stopListener(state)
+    await stopListener(state, listener)
     throw new Error('The local server is unavailable')
   }
+  return listener
 }
 
-function stopListener(state, response) {
-  const listener = state.listener
+function stopListener(state, listener = state.listener, response) {
   if (!listener) return Promise.resolve()
-  state.listener = null
+  if (state.listener === listener) state.listener = null
   const socket = response?.req?.socket ?? response?.socket
   const caller = socket && !response.destroyed && [...state.connections].find(({ upstream, listener: owner }) => {
     return owner === listener && upstream.localPort === socket.remotePort && upstream.localAddress === socket.remoteAddress

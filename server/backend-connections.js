@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { NETWORK_ACCESS_SETTING_KEY, THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
+import { NETWORK_ACCESS_PORT_SETTING_KEY, NETWORK_ACCESS_SETTING_KEY, THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
 import { networkAccessStatus, setNetworkAccess } from './network-access.js'
 import { setCorsHeaders } from './pi-api/cors.js'
 import { json, readJson } from './pi-api/http.js'
@@ -32,11 +32,20 @@ export async function backendConnectionsHandler(req, res) {
       if (req.method === 'GET') return json(res, await networkAccessStatus())
       if (req.method !== 'PUT') return json(res, { error: 'Method not allowed' }, 405)
       const body = await readJson(req, { maxBytes: 1024 })
-      if (typeof body?.enabled !== 'boolean') {
+      if (body?.enabled === undefined && body?.port === undefined) {
+        return json(res, { error: 'Enabled or port is required' }, 400)
+      }
+      if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
         return json(res, { error: 'Enabled must be a boolean' }, 400)
       }
-      return json(res, await setNetworkAccess(body.enabled, () => {
-        writeBackendSettings({ [NETWORK_ACCESS_SETTING_KEY]: String(body.enabled) })
+      if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 0 || body.port > 65535)) {
+        return json(res, { error: 'Port must be an integer from 0 through 65535' }, 400)
+      }
+      return json(res, await setNetworkAccess(body, ({ enabled, port }) => {
+        writeBackendSettings({
+          [NETWORK_ACCESS_SETTING_KEY]: String(enabled),
+          [NETWORK_ACCESS_PORT_SETTING_KEY]: String(port),
+        })
       }, res))
     }
 
@@ -234,8 +243,13 @@ function registryDto(db) {
   return { connections, defaultConnectionId }
 }
 
-export function readNetworkAccessSetting() {
-  return readBackendSettings([NETWORK_ACCESS_SETTING_KEY])[NETWORK_ACCESS_SETTING_KEY] === 'true'
+export function readNetworkAccessSettings() {
+  const values = readBackendSettings([NETWORK_ACCESS_SETTING_KEY, NETWORK_ACCESS_PORT_SETTING_KEY])
+  const port = Number(values[NETWORK_ACCESS_PORT_SETTING_KEY])
+  return {
+    enabled: values[NETWORK_ACCESS_SETTING_KEY] === 'true',
+    port: Number.isInteger(port) && port >= 0 && port <= 65535 ? port : 0,
+  }
 }
 
 export function readBackendSettings(keys) {

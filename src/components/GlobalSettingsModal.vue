@@ -14,7 +14,7 @@ const emit = defineEmits(['update:category', 'close'])
 const modalEl = ref(null)
 const categories = [
   { id: 'display', label: 'Display', description: 'Choose how transcripts first appear.' },
-  { id: 'connections', label: 'Connections', description: 'Save connections here. Each window keeps its own active backend.' },
+  { id: 'connections', label: 'Connections', description: 'Each window uses its own backend connection.' },
   { id: 'files', label: 'Files', description: 'Set the editor for files opened on this backend.' },
   { id: 'agents', label: 'Agent defaults', description: 'Used when a project or session has no override.' },
   { id: 'providers', label: 'Models & providers', description: '' },

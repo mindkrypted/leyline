@@ -11,7 +11,7 @@
 - `src/components/ResearchSourcesPane.vue`: Renders cited sources and the complete research ledger.
 - `src/components/ResearchCitationPreview.vue`: Renders the anchored citation preview and mobile bottom sheet.
 - `src/components/GlobalSettingsModal.vue`: Owns global category navigation, capability gates, focus containment, and owner labels.
-- `src/components/NetworkAccessSettings.vue`: Controls live sharing for the native backend and shows copyable URLs and access warnings.
+- `src/components/NetworkAccessSettings.vue`: Controls native-backend sharing and its proxy port, with copyable URLs and access warnings.
 - `src/components/AgentSettings.vue`: Renders fixed-scope subagent and vision overrides in global, project, and session surfaces.
 - `src/components/ProjectDetailDrawer.vue`: Renders Project settings and its Sessions tab. Session details lives in `App.vue`.
 - `src/components/ProviderSettings.vue`: Manages provider/model inventories, edits, authentication, catalog refresh, and saved/draft connection tests with feedback beside draft actions.

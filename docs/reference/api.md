@@ -423,7 +423,7 @@ The route rejects other values with `400`. An unknown setting key returns `404`.
 
 ## Network access
 
-These routes control sharing for the native backend, not the window's selected remote backend. The preference defaults to off and persists as `server.network_access` in Leyline SQLite. It is not a supported `/api/leyline/settings/:key` key.
+These routes control sharing for the native backend, not the window's selected remote backend. Sharing defaults to off. Leyline SQLite stores `server.network_access` and `server.network_access_port`. Neither is a supported `/api/leyline/settings/:key` key.
 
 Every successful response uses this shape:
 
@@ -432,6 +432,7 @@ NetworkAccess = {
   available: boolean,
   enabled: boolean,
   port: number | null,
+  configuredPort: number,
   urls: string[],
   directAccess: boolean,
   error: string
@@ -440,7 +441,8 @@ NetworkAccess = {
 
 - `available` reports whether the origin is available for sharing.
 - `enabled` reports the current sharing listener, not the saved startup preference.
-- `port` is the sharing port, or `null` when sharing is off.
+- `port` is the active sharing port, or `null` when sharing is off.
+- `configuredPort` is the saved port, or `0` for automatic selection. It remains available when sharing is off.
 - `urls` lists sharing URLs for non-internal IPv4 interfaces. It can be empty even when the listener is enabled.
 - `directAccess` reports an origin binding outside loopback. Sharing off does not close that separate access path.
 - `error` reports the last listener or setting-change failure, or an empty string.
@@ -456,20 +458,26 @@ The response waits for earlier network-access operations to finish. It does not 
 Request:
 
 ```text
-{ enabled: boolean }
+{ enabled?: boolean, port?: number }
 ```
 
 Response: `NetworkAccess`.
 
-JSON bodies cannot exceed 1 KiB. A missing or non-boolean `enabled` returns `400`. Oversized bodies return `413`. Unsupported methods return `405`. Listener and persistence failures return `400` with the standard error envelope.
+At least one field is required. `enabled` must be a boolean when supplied. `port` must be an integer from 0 through 65535. `0` selects an available port automatically. Null values are invalid.
 
-Enabling starts a separate TCP listener on `0.0.0.0:0`. The operating system selects its port. The listener forwards bytes unchanged to the existing origin. It handles HTTP, SSE, WebSockets, and Vite HMR without path routing or header rewriting.
+The switch sends only `{ enabled }`. Port **Apply** sends only `{ port }`. Omitted fields keep their current values. The backend resolves them inside the serialized operation, so a port-only request preserves sharing changes made by another client. Both fields may be supplied together.
 
-The operation does not restart or rebind the origin, change its URL, or stop local clients and agents. Repeated enable requests reuse the current sharing listener. A later disable/enable cycle can select a different port.
+JSON bodies cannot exceed 1 KiB. Invalid fields or an empty update return `400`. Oversized bodies return `413`. Unsupported methods return `405`. Listener and persistence failures return `400` with the standard error envelope.
 
-Disabling stops the sharing listener and closes its remote connections, including terminals. A request through the listener can disable sharing and receive its response before its connection closes.
+Enabling starts a separate TCP listener on `0.0.0.0` at the configured port. The listener forwards bytes unchanged to the existing origin. It handles HTTP, SSE, WebSockets, and Vite HMR without path routing or header rewriting.
 
-Changes serialize within the backend. A persistence failure preserves the previous listener state. Startup restores the saved preference without changing the origin binding. Backend shutdown closes relay resources.
+The operation never restarts or rebinds the origin, changes its URL, or stops local clients and agents. A port update while sharing is off only saves the port. Repeated enable requests without a port change reuse the current listener. Selecting the active automatic port as a fixed port also keeps that listener.
+
+A live port change binds the replacement and saves both settings before closing the old listener. Bind or persistence failures preserve the previous listener and settings. An automatic port can change after a disable/enable cycle or restart. A fixed port is reused.
+
+Disabling or changing the active port closes the old relay's remote connections, including terminals. A request through that relay can disable sharing or change the port and receive its response before its connection closes.
+
+Startup restores the saved switch and port without changing the origin binding. Backend shutdown closes relay resources.
 
 These routes add no authentication or network restrictions. Any client that can reach the listener has the same backend access as a local client.
 

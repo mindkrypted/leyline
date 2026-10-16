@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchNetworkAccess, saveNetworkAccess } from '../lib/leyline-api'
 
 const props = defineProps({ copiedId: { type: String, default: '' } })
@@ -7,13 +7,18 @@ const emit = defineEmits(['copy'])
 const config = ref(null)
 const busy = ref(false)
 const error = ref('')
+const portDraft = ref('')
+const requestedPort = computed(() => Number(portDraft.value || 0))
+const portChanged = computed(() => requestedPort.value !== (config.value?.configuredPort || 0))
 
 async function load() {
   if (busy.value) return
+  const keepDraft = portChanged.value
   busy.value = true
   error.value = ''
   try {
     config.value = await fetchNetworkAccess()
+    if (!keepDraft) portDraft.value = config.value.configuredPort || ''
     error.value = config.value.error || ''
   } catch (failure) {
     error.value = failure.message
@@ -22,12 +27,14 @@ async function load() {
   }
 }
 
-async function toggle() {
+async function save(values) {
   if (busy.value || !config.value?.available) return
+  const keepDraft = values.port === undefined && portChanged.value
   busy.value = true
   error.value = ''
   try {
-    config.value = await saveNetworkAccess(!config.value.enabled)
+    config.value = await saveNetworkAccess(values)
+    if (!keepDraft) portDraft.value = config.value.configuredPort || ''
   } catch (failure) {
     error.value = failure.message
   } finally {
@@ -49,7 +56,7 @@ onUnmounted(() => window.removeEventListener('focus', load))
       <div class="settings-row">
         <span>
           <strong id="network-access-label">Allow network access</strong>
-          <small>Let other devices connect to this app’s native backend.</small>
+          <small>Share this app’s native backend.</small>
         </span>
         <button
           type="button"
@@ -59,23 +66,44 @@ onUnmounted(() => window.removeEventListener('focus', load))
           aria-describedby="network-access-warning"
           :aria-checked="config?.enabled === true"
           :disabled="busy || !config?.available"
-          @click="toggle"
+          @click="save({ enabled: !config.enabled })"
         />
       </div>
+      <form class="settings-row" @submit.prevent="save({ port: requestedPort })">
+        <span>
+          <label for="network-access-port"><strong>Proxy port</strong></label>
+          <small id="network-access-port-help">Leave blank to choose automatically.</small>
+        </span>
+        <div class="network-settings-port">
+          <input
+            id="network-access-port"
+            v-model="portDraft"
+            type="number"
+            min="1"
+            max="65535"
+            step="1"
+            inputmode="numeric"
+            placeholder="Automatic"
+            aria-describedby="network-access-port-help"
+            :disabled="busy || !config?.available"
+          />
+          <button
+            class="pi-settings-button"
+            type="submit"
+            :disabled="busy || !config?.available || !portChanged"
+          >Apply</button>
+        </div>
+      </form>
     </div>
     <p id="network-access-warning" class="settings-note">
-      No authentication. Anyone who can reach this backend can access files, change settings, and run commands. Use trusted networks only.
+      No authentication. Connected devices can read files and run commands. Use trusted networks only.
     </p>
     <template v-if="config">
-      <p class="settings-note">Applies immediately. The local app and running agents stay connected.</p>
-      <p class="settings-note">
-        Uses all IPv4 interfaces, including Wi-Fi and Tailscale. The sharing URL can change each time you enable access.
-      </p>
       <p v-if="config.directAccess" class="settings-note">
-        Startup configuration also exposes the origin. This toggle controls only the additional network listener.
+        Startup settings also allow direct access. This switch does not control it.
       </p>
       <p class="settings-note" role="status">
-        {{ config.enabled ? `Network access is enabled on port ${config.port}.` : 'The network listener is off.' }}
+        {{ config.enabled ? `Listening on port ${config.port}.` : 'Network access is off.' }}
       </p>
       <div v-if="config.urls.length" class="network-settings-addresses">
         <div v-for="url in config.urls" :key="url" class="network-settings-address">
@@ -88,8 +116,8 @@ onUnmounted(() => window.removeEventListener('focus', load))
           >{{ props.copiedId === `network-access-${url}` ? 'Copied' : 'Copy' }}</button>
         </div>
       </div>
-      <p v-else-if="config.enabled" class="settings-note">No network address is available. Check your network connection.</p>
-      <p v-if="config.enabled" class="settings-note">Turning this off disconnects remote clients and their terminals.</p>
+      <p v-else-if="config.enabled" class="settings-note">No network address found.</p>
+      <p v-if="config.enabled" class="settings-note">Changing the port or turning access off disconnects remote clients. Local agents keep running.</p>
     </template>
     <p v-if="error" class="settings-error" role="alert">{{ error }}</p>
     <button v-if="error && !config" class="settings-text-link" type="button" :disabled="busy" @click="load">Retry</button>

@@ -1945,11 +1945,20 @@ async function openBackendConnections(page, enabled = false) {
   if (await toggle.getAttribute('aria-checked') !== 'false' || await toggle.isDisabled()) {
     throw new Error('Network access must start off and available')
   }
+  const port = network.getByRole('spinbutton', { name: 'Proxy port', exact: true })
+  if (await port.inputValue() !== '') throw new Error('Proxy port must start in automatic mode')
   await dialog.locator('.backend-connection-card').filter({ hasText: 'Team backend' }).waitFor()
   await dialog.getByRole('button', { name: 'Add connection', exact: true }).waitFor()
   if (!enabled) return
+  await port.fill('52342')
+  const apply = network.getByRole('button', { name: 'Apply', exact: true })
+  await apply.click()
+  await network.waitFor()
+  if (await toggle.getAttribute('aria-checked') !== 'false' || await port.inputValue() !== '52342' || !await apply.isDisabled()) {
+    throw new Error('Proxy port must save without enabling network access')
+  }
   await toggle.click()
-  await network.getByRole('status').filter({ hasText: 'Network access is enabled on port 52342.' }).waitFor()
+  await network.getByRole('status').filter({ hasText: 'Listening on port 52342.' }).waitFor()
   if (await toggle.getAttribute('aria-checked') !== 'true'
     || await network.locator('.network-settings-address').count() !== 2) {
     throw new Error('Network access capture did not reach the enabled state')
@@ -2023,7 +2032,7 @@ async function capture({
   const page = await context.newPage()
   const unexpected = []
   let captureConfig = { enabled: true, error: '' }
-  let networkAccess = { available: true, enabled: false, port: null, urls: [], directAccess: false, error: '' }
+  let networkAccess = { available: true, enabled: false, port: null, configuredPort: 0, urls: [], directAccess: false, error: '' }
   const capturedTraces = structuredClone(traceFixtures)
   await page.route('**/*', (request) => {
     const origin = new URL(request.request().url()).origin
@@ -2061,14 +2070,16 @@ async function capture({
 
     if (key === 'GET /api/leyline/connections') return json(backendRegistry)
     if (key === 'GET /api/leyline/network-access') return json(networkAccess)
-    if (key === 'PUT /api/leyline/network-access' && scenario === 'network'
-      && typeof req.postDataJSON()?.enabled === 'boolean') {
-      const enabled = req.postDataJSON().enabled
+    if (key === 'PUT /api/leyline/network-access' && scenario === 'network') {
+      const enabled = req.postDataJSON().enabled ?? networkAccess.enabled
+      const configuredPort = req.postDataJSON().port ?? networkAccess.configuredPort
+      const port = configuredPort || 52342
       networkAccess = {
         ...networkAccess,
         enabled,
-        port: enabled ? 52342 : null,
-        urls: enabled ? ['http://192.0.2.10:52342', 'http://198.51.100.10:52342'] : [],
+        configuredPort,
+        port: enabled ? port : null,
+        urls: enabled ? [`http://192.0.2.10:${port}`, `http://198.51.100.10:${port}`] : [],
       }
       return json(networkAccess)
     }

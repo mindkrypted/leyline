@@ -1,4 +1,4 @@
-import { backendConnectionsHandler, readNetworkAccessSetting } from '../backend-connections.js'
+import { backendConnectionsHandler, readNetworkAccessSettings } from '../backend-connections.js'
 import { configureNetworkAccess, localServerUrl } from '../network-access.js'
 import { createPiRuntimeApi } from './runtime.js'
 import { createPiApiHandler } from './router.js'
@@ -17,7 +17,7 @@ export function piApi() {
       configurePiWebSocketServer(server.httpServer)
       const protocol = server.config.server.https ? 'https' : 'http'
       closeNetworkAccess = configureNetworkAccess(server.httpServer, {
-        enabled: readNetworkAccessSetting(),
+        ...readNetworkAccessSettings(),
         protocol,
       })
       server.httpServer.once('listening', () => {

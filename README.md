@@ -140,9 +140,10 @@ app.
 
 To share the native backend with other devices, enable **Allow network access**
 in **Settings → Connections**. Copy a sharing URL and open it on the other
-device. Sharing takes effect immediately without a restart or interruption to
-running agents. The port is automatic and can change when you enable sharing
-again. The API has no authentication, so use trusted networks only. See
+device. For a fixed port, set **Proxy port** and select **Apply**. Leave it blank
+for automatic selection. Changes apply immediately. Local clients and agents
+stay connected, but a port change or disabling sharing disconnects remote
+clients. The API has no authentication, so use trusted networks only. See
 [Network access](docs/user-guide/settings.md#share-the-native-backend).
 
 Saved connections and the configured default are app-wide. Each browser or

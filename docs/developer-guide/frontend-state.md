@@ -178,7 +178,9 @@ Electron's `CommandOrControl+,` command opens global Settings idempotently. Comm
 
 ### Network access
 
-`NetworkAccessSettings.vue` mounts lazily inside Connections. It loads native-backend state on mount and window focus through `src/lib/leyline-api.js`. The switch waits for the live operation response before changing its displayed value. Failed requests leave the previous value and show an error.
+`NetworkAccessSettings.vue` mounts lazily inside Connections. It loads native-backend state on mount and window focus through `src/lib/leyline-api.js`. The switch sends only `{ enabled }`. **Proxy port → Apply** sends only `{ port }`, with a blank field represented as `0`. The backend resolves omitted values inside its serialized operation, preserving concurrent changes from other clients.
+
+The controls wait for the live response before changing saved state. The port draft survives focus refreshes and switch changes. Failed requests retain the previous saved state and the draft, and show an error.
 
 The component shows actual sharing URLs and the unauthenticated full-access warning. It warns separately when startup configuration exposes the origin. The toggle does not reload the window or change the selected backend, composer drafts, or runtime subscriptions. The current window's saved remote selection never redirects this native setting.
 

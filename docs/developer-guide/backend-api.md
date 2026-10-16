@@ -27,7 +27,7 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | Module | Ownership |
 | --- | --- |
 | `server/backend-connections.js` | Named connections, the default connection, app settings, live network-access routes, and pinned session IDs on the native backend |
-| `server/network-access.js` | Independent TCP relay, serialized changes, live status, self-disable response handling, and relay cleanup |
+| `server/network-access.js` | Configurable TCP relay, serialized partial updates, live status, self-change response handling, and relay cleanup |
 | `lib/leyline-settings.js` | Setting keys that the native backend and browser share |
 | `lib/research-state.js` | Branch-local research state folding and source normalization |
 | `lib/research-citations.js` | Report citation checks against canonical ledger sources |

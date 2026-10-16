@@ -33,7 +33,7 @@ development, Vite owns it. A packaged Electron app starts one native backend.
 By default, it uses an ephemeral loopback port. Server environment variables
 can change the host and port.
 
-Both paths support **Settings → Connections → Allow network access**. The toggle starts or stops a separate listener immediately. The origin and active agents stay unchanged. See [Network access](../user-guide/settings#share-the-native-backend) for sharing URLs and the full-access warning.
+Both paths support **Settings → Connections → Allow network access**. **Proxy port** accepts a fixed port or a blank value for automatic selection. Select **Apply** to save a port change. These controls take effect immediately without changing the origin or active agents. Changing the port or disabling sharing disconnects remote clients. See [Network access](../user-guide/settings#share-the-native-backend) for sharing URLs and the full-access warning.
 
 Leyline stores named connections and the configured default for the full app.
 Each window selects its active backend independently. A fresh window uses the

@@ -877,6 +877,25 @@
   flex: none;
 }
 
+.network-settings-port {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.network-settings-port input {
+  width: 108px;
+  min-width: 0;
+  border: 1px solid #3a3a3a;
+  border-radius: 6px;
+  background: #111;
+  padding: 7px 8px;
+  color: #ddd;
+  font: inherit;
+  font-size: 11px;
+}
+
 .network-settings-addresses {
   display: grid;
   gap: 6px;

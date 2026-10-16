@@ -38,7 +38,7 @@ checks the backend again and reconnects the runtime event stream.
 
 1. On the host computer, open **Settings → Connections**.
 2. Confirm that **Allow network access** is on.
-3. Copy a current sharing URL. The port can change after sharing starts again.
+3. Copy a current sharing URL. An automatic port can change after sharing starts again.
 4. Use an address that the other device can reach.
 5. Check the host firewall and network access rules for that address and port.
 
@@ -46,9 +46,9 @@ For Tailscale, use the host's Tailscale interface address and check the tailnet 
 
 Open the sharing URL directly in the other device's browser. The app and API then use the same origin. No extra allowed-origin setting is necessary. A UI on a different non-loopback origin still needs `LEYLINE_SERVER_ALLOWED_ORIGINS` on the backend.
 
-If Settings reports a listener error, correct the reported cause and try the toggle again. Local clients and agent runs continue during sharing changes.
+If the port is in use, choose another **Proxy port** and select **Apply**. If sharing is off, turn it on afterward. A failed live port change keeps the previous listener and saved port. Local clients and agent runs continue during sharing changes.
 
-Turning sharing off intentionally disconnects remote clients and terminals. It does not close an origin that startup configuration separately exposes. Settings shows a notice for that configuration.
+Changing the active port or turning sharing off disconnects remote clients and terminals. Neither action closes an origin that startup configuration separately exposes. Settings shows a notice for that configuration.
 
 Use trusted networks only. The API has no authentication. See [Network access](../user-guide/settings#share-the-native-backend).
 

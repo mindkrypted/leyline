@@ -87,13 +87,15 @@ Same-origin and loopback clients work by default. Other frontend origins must be
 
 ### Live network access
 
-`server/network-access.js` owns a separate TCP listener for native-backend sharing. Both Vite and `startLeylineServer()` configure it against the existing origin. Enabling binds `0.0.0.0:0` and forwards bytes unchanged to that origin. HTTP, SSE, terminal WebSockets, and Vite HMR share this path.
+`server/network-access.js` owns a separate TCP listener for native-backend sharing. Both Vite and `startLeylineServer()` configure it against the existing origin. The listener binds `0.0.0.0` on the configured port, or port `0` for automatic selection. HTTP, SSE, terminal WebSockets, and Vite HMR pass through unchanged.
 
-The toggle never restarts or rebinds the origin. It does not change the local app URL or runtime handles. Disabling closes only the relay listener and its connections. Remote terminal processes end when their WebSockets close. Agent runs and local clients continue.
+Switch and port changes never restart or rebind the origin, change the local app URL, or replace runtime handles. Disabling sharing or changing the active port closes only the old relay and its connections. Remote terminal processes end when their WebSockets close. Agent runs and local clients continue.
 
-`GET` and `PUT /api/leyline/network-access` report and change the listener. Changes serialize, and persistence failures preserve the previous state. The saved `server.network_access` value restores sharing at startup. Backend shutdown disposes relay resources. A self-disable request uses its request socket to retain the caller until the response can leave, including pipelined HTTP requests.
+`GET` and `PUT /api/leyline/network-access` report and change the listener. The switch sends only `{ enabled }`. **Proxy port → Apply** sends only `{ port }`. The serialized operation resolves omitted values from current state, so a port change cannot replay a stale switch value from another client.
 
-The listener always uses an available port. Settings shows current interface URLs, which can change after re-enabling or restarting. Explicit origin host and port options remain unchanged. `directAccess` warns when origin configuration creates another network access path that the toggle cannot close.
+A port change binds the replacement and saves both settings before closing the old listener. Bind or persistence failures preserve the previous listener and settings. Selecting the current automatic port as a fixed port keeps the existing listener. Self-disable and self-port-change requests retain their connection long enough to return a response. Backend shutdown disposes relay resources.
+
+`server.network_access` and `server.network_access_port` restore sharing and its configured port at startup. Status separates the actual `port` from `configuredPort`, which is `0` for automatic selection. Automatic ports can change after re-enabling or restarting. Fixed ports remain saved. Explicit origin host and port options stay authoritative. `directAccess` warns when origin configuration creates a separate access path.
 
 Vite sets `LEYLINE_SERVER_URL` from the actual local origin address at startup. Remote request Host headers never replace it, so child-runtime callbacks stay independent of sharing.
 
@@ -198,7 +200,7 @@ The database currently contains these application tables:
 - `subagent_overrides`
 - `vision_overrides`
 
-`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, backend file-editor settings, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
+`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, `server.network_access_port`, backend file-editor settings, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
 
 The app reads connection records, display preferences, network-access state, and pinned sessions from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
 

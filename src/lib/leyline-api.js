@@ -45,10 +45,10 @@ export function fetchNetworkAccess() {
   return shellRequest('/api/leyline/network-access', 'Failed to load network access settings')
 }
 
-export function saveNetworkAccess(enabled) {
+export function saveNetworkAccess(values) {
   return shellRequest('/api/leyline/network-access', 'Failed to save network access settings', {
     method: 'PUT',
-    body: { enabled },
+    body: values,
   })
 }
 
