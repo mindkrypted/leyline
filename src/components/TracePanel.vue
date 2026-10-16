@@ -193,6 +193,7 @@ defineExpose({ focus })
   border-left: 1px solid var(--border);
 }
 .sidebar-hidden .trace-panel { left: 0; }
+.trace-panel:not(.trace-panel-inspector) { transform: none; transition: none; }
 .trace-panel.trace-panel-inspector {
   left: auto;
   width: min(510px, calc(100vw - var(--sidebar-width)));

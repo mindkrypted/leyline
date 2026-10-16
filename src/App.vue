@@ -4661,23 +4661,25 @@ function closePickerMenus() {
       </div>
     </section>
 
-    <TracePanel
-      v-if="traceMode && traceClient && tracingAvailable"
-      ref="tracePane"
-      :mode="traceMode"
-      :client="traceClient"
-      :session-id="traceState.sessionId"
-      :selection="traceState.selection"
-      :list-state="traceState.listState"
-      :backend-name="activeBackendConnection?.name || 'Selected backend'"
-      :return-to="traceOrigin"
-      :projects="visibleProjects"
-      @update:selection="updateTraceState('selection', $event)"
-      @update:list-state="updateTraceState('listState', $event)"
-      @open-workspace="openTraceWorkspace"
-      @open-session="openTraceSession"
-      @close="closeTrace()"
-    />
+    <Transition name="event-drawer">
+      <TracePanel
+        v-if="traceMode && traceClient && tracingAvailable"
+        ref="tracePane"
+        :mode="traceMode"
+        :client="traceClient"
+        :session-id="traceState.sessionId"
+        :selection="traceState.selection"
+        :list-state="traceState.listState"
+        :backend-name="activeBackendConnection?.name || 'Selected backend'"
+        :return-to="traceOrigin"
+        :projects="visibleProjects"
+        @update:selection="updateTraceState('selection', $event)"
+        @update:list-state="updateTraceState('listState', $event)"
+        @open-workspace="openTraceWorkspace"
+        @open-session="openTraceSession"
+        @close="closeTrace()"
+      />
+    </Transition>
 
     <ReviewPane
       v-if="reviewAvailable && selectedSession"
