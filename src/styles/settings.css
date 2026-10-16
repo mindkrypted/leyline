@@ -862,6 +862,40 @@
   color: #d2c8fa;
 }
 
+.network-settings {
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.network-settings h2,
+.network-settings .settings-note,
+.network-settings .settings-error {
+  margin: 0;
+}
+
+.network-settings .pi-settings-switch {
+  flex: none;
+}
+
+.network-settings-addresses {
+  display: grid;
+  gap: 6px;
+}
+
+.network-settings-address {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.network-settings-address code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #aaa;
+  font-size: 11px;
+}
+
 .backend-connection-list {
   overflow: hidden;
   border: 1px solid #303030;

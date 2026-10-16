@@ -43,6 +43,14 @@ Settings fills the mobile viewport. **Models & providers** and **MCP servers** u
 
 Use **Close Leyline settings** to return to the workspace. See [Settings](./settings) for scope, authentication, and reload behavior.
 
+### Share the backend with another device
+
+Select **Connections** in **Category**, then turn on **Allow network access**. Copy an address that the other device can reach. The toggle applies immediately without interrupting local clients or running agents.
+
+![Mobile Connections settings with network access enabled and copyable sharing URLs](../assets/screenshots/network-access-mobile.png)
+
+Turning access off disconnects remote clients and their terminals. Use trusted networks only because the API has no authentication. See [Network access](./settings#share-the-native-backend) for scope and connection details.
+
 ### Edit a model or copy catalog fields
 
 The model editor temporarily hides the category and provider selectors. **Model**, **Thinking & compatibility**, and **Pricing** share one draft. Save/Test stay visible below the fields.

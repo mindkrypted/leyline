@@ -138,6 +138,13 @@ Connections**. You can add, test, edit, remove, or select a named connection
 there. The **Native backend** is the server that supplied the current Leyline
 app.
 
+To share the native backend with other devices, enable **Allow network access**
+in **Settings → Connections**. Copy a sharing URL and open it on the other
+device. Sharing takes effect immediately without a restart or interruption to
+running agents. The port is automatic and can change when you enable sharing
+again. The API has no authentication, so use trusted networks only. See
+[Network access](docs/user-guide/settings.md#share-the-native-backend).
+
 Saved connections and the configured default are app-wide. Each browser or
 Electron window keeps its active connection independently. A new window uses
 the default. A new Electron window inherits the source window's active

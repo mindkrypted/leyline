@@ -85,13 +85,25 @@ backend's filesystem. The review API does not change Git state.
 
 Same-origin and loopback clients work by default. Other frontend origins must be listed in `LEYLINE_SERVER_ALLOWED_ORIGINS`.
 
+### Live network access
+
+`server/network-access.js` owns a separate TCP listener for native-backend sharing. Both Vite and `startLeylineServer()` configure it against the existing origin. Enabling binds `0.0.0.0:0` and forwards bytes unchanged to that origin. HTTP, SSE, terminal WebSockets, and Vite HMR share this path.
+
+The toggle never restarts or rebinds the origin. It does not change the local app URL or runtime handles. Disabling closes only the relay listener and its connections. Remote terminal processes end when their WebSockets close. Agent runs and local clients continue.
+
+`GET` and `PUT /api/leyline/network-access` report and change the listener. Changes serialize, and persistence failures preserve the previous state. The saved `server.network_access` value restores sharing at startup. Backend shutdown disposes relay resources. A self-disable request uses its request socket to retain the caller until the response can leave, including pipelined HTTP requests.
+
+The listener always uses an available port. Settings shows current interface URLs, which can change after re-enabling or restarting. Explicit origin host and port options remain unchanged. `directAccess` warns when origin configuration creates another network access path that the toggle cannot close.
+
+Vite sets `LEYLINE_SERVER_URL` from the actual local origin address at startup. Remote request Host headers never replace it, so child-runtime callbacks stay independent of sharing.
+
 ## Settings surfaces and ownership
 
 Settings and trace surfaces use distinct owners and storage:
 
 | Surface | Owner and storage |
 | --- | --- |
-| Display and Connections | Native app backend, in Leyline SQLite. Display is app-wide. The active connection remains per window. |
+| Display and Connections | Native app backend, in Leyline SQLite. Connections includes live network access for that native backend. The active connection remains per window. |
 | Files | Selected backend, with editor values in `leyline_settings`. |
 | Agent defaults | Selected backend, with global subagent and vision overrides in SQLite. |
 | Models & providers | Selected backend's pi global `models.json` and native provider authentication. |
@@ -186,9 +198,9 @@ The database currently contains these application tables:
 - `subagent_overrides`
 - `vision_overrides`
 
-`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, backend file-editor settings, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
+`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, backend file-editor settings, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
 
-The app reads connection records, display preferences, and pinned sessions from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
+The app reads connection records, display preferences, network-access state, and pinned sessions from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
 
 `subagent_overrides` and `vision_overrides` supply Agent defaults, Project settings, and Session details. Their global scope means all projects on that backend. It does not mean all saved backend connections. Vision model and thinking fields inherit independently.
 

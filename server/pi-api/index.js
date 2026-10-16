@@ -1,4 +1,5 @@
-import { backendConnectionsHandler } from '../backend-connections.js'
+import { backendConnectionsHandler, readNetworkAccessSetting } from '../backend-connections.js'
+import { configureNetworkAccess, localServerUrl } from '../network-access.js'
 import { createPiRuntimeApi } from './runtime.js'
 import { createPiApiHandler } from './router.js'
 import {
@@ -8,16 +9,22 @@ import {
 const runtime = createPiRuntimeApi()
 
 export function piApi() {
+  let closeNetworkAccess
   return {
     name: 'pi-api',
-    closeBundle: () => runtime.shutdownRuntime(),
+    closeBundle: () => Promise.all([closeNetworkAccess?.(), runtime.shutdownRuntime()]),
     configureServer(server) {
       configurePiWebSocketServer(server.httpServer)
-      server.middlewares.use('/api/leyline', backendConnectionsHandler)
-      server.middlewares.use('/api/pi', (req, res, next) => {
-        if (req.headers.host) process.env.LEYLINE_SERVER_URL = `http://${req.headers.host}`
-        piApiHandler(req, res, next)
+      const protocol = server.config.server.https ? 'https' : 'http'
+      closeNetworkAccess = configureNetworkAccess(server.httpServer, {
+        enabled: readNetworkAccessSetting(),
+        protocol,
       })
+      server.httpServer.once('listening', () => {
+        process.env.LEYLINE_SERVER_URL = localServerUrl(server.httpServer, protocol)
+      })
+      server.middlewares.use('/api/leyline', backendConnectionsHandler)
+      server.middlewares.use('/api/pi', piApiHandler)
     },
   }
 }

@@ -9,8 +9,8 @@ variables come from the user's pi setup.
 | --- | --- |
 | `LEYLINE_DEV_SERVER_URL` | URL that Electron loads instead of its packaged server. `npm run electron:dev` sets `http://localhost:5173`. |
 | `LEYLINE_PUBLIC_URL` | Base URL for Open Graph and Twitter metadata in HTML exports. A final slash is removed. |
-| `LEYLINE_SERVER_HOST` | Host for the packaged Electron server. The default is `127.0.0.1`. Vite does not use this variable. |
-| `LEYLINE_SERVER_PORT` | Port for the packaged Electron server. The default is `0`, which selects an available port. Vite does not use this variable. |
+| `LEYLINE_SERVER_HOST` | Origin host for the packaged Electron server. The default is `127.0.0.1`. The network-access toggle does not change this binding. Vite does not use this variable. |
+| `LEYLINE_SERVER_PORT` | Origin port for the packaged Electron server. The default is `0`, which selects an available port. The separate sharing listener always selects its own available port. Vite does not use this variable. |
 | `LEYLINE_SERVER_ALLOWED_ORIGINS` | Comma-separated frontend origins that can use the backend. Same-origin and loopback clients work without this variable. Use `*` to allow all origins. |
 | `PI_CODING_AGENT_SESSION_DIR` | Session directory for discovery and new sessions. Leyline expands `~` and searches subdirectories for JSONL files. |
 | `PI_CODING_AGENT_DIR` | Pi agent directory resolved by the SDK. Global provider/model/MCP configuration and native credentials use this directory. The default is `~/.pi/agent`. |
@@ -31,15 +31,23 @@ Use an absolute path for `LEYLINE_MEMORY_DIR`. Without this variable, Leyline us
 
 The database can contain the `backend_connections`, `leyline_settings`, `pinned_sessions`, `memories`, `rollout_feedback`, `subagent_overrides`, and `vision_overrides` tables.
 
-The `leyline_settings` table contains the default backend ID, display preferences, file-editor settings, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
+The `leyline_settings` table contains the default backend ID, display preferences, `server.network_access`, file-editor settings, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
 
-Display, saved connections, and pinned sessions belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
+Display, network access, saved connections, and pinned sessions belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
 
 Set `LEYLINE_SERVER_ALLOWED_ORIGINS` on a backend when a browser UI connects
 from a different non-loopback origin. Separate origins with commas. Each value
 must include its scheme and host. Add a port when the origin uses one.
 
-Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, set of UI settings, and set of pinned sessions.
+For network sharing, use **Settings → Connections → Allow network access**. No environment variable is necessary. The preference defaults to off and persists as `server.network_access` in `memory.sqlite`.
+
+Sharing uses a separate TCP listener on `0.0.0.0` with an automatically selected port. It leaves the origin host, port, clients, and running agents unchanged. The toggle takes effect immediately. It does not require a restart.
+
+Opening a sharing URL serves the app and API from the same origin, so no additional allowed-origin value is necessary. `LEYLINE_SERVER_ALLOWED_ORIGINS` still applies to a UI on another non-loopback origin.
+
+Explicit origin host and port configuration remains authoritative. If that configuration exposes the origin, turning sharing off does not close origin access. Settings shows a notice. See [Network access](../user-guide/settings#share-the-native-backend).
+
+Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, set of UI settings, network-access preference, and set of pinned sessions.
 
 It also selects different memory, rollout, subagent, vision, and capture metadata, plus the attachment directory and embedded trace database.
 
@@ -137,7 +145,7 @@ Do not set these variables as user configuration.
 
 | Variable | Owner |
 | --- | --- |
-| `LEYLINE_SERVER_URL` | The local Leyline server sets its URL for the bundled subagent and vision-agent extensions. |
+| `LEYLINE_SERVER_URL` | The local Leyline server sets its origin URL for the bundled subagent and vision-agent extensions. Sharing never replaces it with a relay URL or a remote request's Host header. |
 | `PI_CODING_AGENT` | The pi runtime integration sets this to `true` when it is absent. |
 
 ## Shell environment

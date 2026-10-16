@@ -17,6 +17,7 @@ const PierrePreview = defineAsyncComponent(() => import('./components/PierrePrev
 const FilePreview = defineAsyncComponent(() => import('./components/FilePreview.vue'))
 const FileContextMenu = defineAsyncComponent(() => import('./components/FileContextMenu.vue'))
 const FileLinkSettings = defineAsyncComponent(() => import('./components/FileLinkSettings.vue'))
+const NetworkAccessSettings = defineAsyncComponent(() => import('./components/NetworkAccessSettings.vue'))
 const ProjectBrowser = defineAsyncComponent(() => import('./components/ProjectBrowser.vue'))
 const ProjectDetailDrawer = defineAsyncComponent(() => import('./components/ProjectDetailDrawer.vue'))
 const ReviewPane = defineAsyncComponent(() => import('./components/ReviewPane.vue'))
@@ -4855,6 +4856,7 @@ function closePickerMenus() {
       @close="closeGlobalSettings"
     >
       <template #connections>
+        <NetworkAccessSettings :copied-id="copiedEntryId" @copy="copyTranscriptItem" />
         <section class="settings-group backend-settings-group">
           <div class="settings-group-heading">
             <h2>Backend</h2>

@@ -34,7 +34,7 @@ npm run docs:screenshots
 
 This command intercepts Leyline API calls and supplies sanitized fixtures. Mock coverage includes:
 
-- Backend connections, backend information and capabilities, file editor settings, the thought display setting, and pinned session IDs
+- Backend connections, live network-access state and toggles, backend information and capabilities, file editor settings, the thought display setting, and pinned session IDs
 - Provider/model and MCP inventories with the `piSettings` capability; saved secret values are absent
 - Catalog search results for three Qwen3.8-27B provider variants, with model details, thinking maps, and compatibility metadata
 - Projects, folder browsing, session lists, detail, activation, and runtime state
@@ -70,7 +70,21 @@ For the settings overview and connection-test captures:
 DOCS_SCREENSHOT_FILTER=backend-connections.png,models-providers.png,provider-models.png,provider-connection-test.png,model-connection-test.png,mcp-servers.png,subagents.png,vision-agent.png,project-details.png,session-details.png,settings-mobile.png npm run docs:screenshots
 ```
 
-These images show Connections, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
+These images show Connections with network access off, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
+
+For network access:
+
+```bash
+DOCS_SCREENSHOT_FILTER=backend-connections.png,network-access.png,network-access-mobile.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `backend-connections.png` | Connections with the default-off network switch and saved backends. |
+| `network-access.png` | Desktop Connections after enabling sharing, with copyable fixture URLs. |
+| `network-access-mobile.png` | The same enabled state at 390 by 844 CSS pixels. |
+
+The helper uses the real switch and waits for enabled state and both URL rows. The intercepted toggle changes only browser fixture state. It never opens a real listener or changes local settings. The example IPv4 addresses use documentation ranges. The fixed capture port represents an automatically assigned sharing port, not a product default.
 
 For the model editor and catalog workflow:
 

@@ -3,7 +3,8 @@ import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
+import { NETWORK_ACCESS_SETTING_KEY, THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
+import { networkAccessStatus, setNetworkAccess } from './network-access.js'
 import { setCorsHeaders } from './pi-api/cors.js'
 import { json, readJson } from './pi-api/http.js'
 
@@ -27,6 +28,18 @@ export async function backendConnectionsHandler(req, res) {
   const url = new URL(req.url, 'http://localhost')
 
   try {
+    if (url.pathname === '/network-access') {
+      if (req.method === 'GET') return json(res, await networkAccessStatus())
+      if (req.method !== 'PUT') return json(res, { error: 'Method not allowed' }, 405)
+      const body = await readJson(req, { maxBytes: 1024 })
+      if (typeof body?.enabled !== 'boolean') {
+        return json(res, { error: 'Enabled must be a boolean' }, 400)
+      }
+      return json(res, await setNetworkAccess(body.enabled, () => {
+        writeBackendSettings({ [NETWORK_ACCESS_SETTING_KEY]: String(body.enabled) })
+      }, res))
+    }
+
     if (url.pathname === '/connections') {
       if (req.method === 'GET') return json(res, readRegistry())
       if (req.method === 'POST') {
@@ -219,6 +232,10 @@ function registryDto(db) {
     ? storedDefault
     : BUILTIN_CONNECTION_ID
   return { connections, defaultConnectionId }
+}
+
+export function readNetworkAccessSetting() {
+  return readBackendSettings([NETWORK_ACCESS_SETTING_KEY])[NETWORK_ACCESS_SETTING_KEY] === 'true'
 }
 
 export function readBackendSettings(keys) {

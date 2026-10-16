@@ -2,7 +2,7 @@
 
 Leyline exposes runtime routes under `/api/pi`. The same handler runs in Vite and in the packaged Electron server.
 
-The native backend also exposes the app connection registry, app settings, and pinned session IDs under `/api/leyline`.
+The native backend also exposes the app connection registry, app settings, live network access, and pinned session IDs under `/api/leyline`.
 
 ## Request flow
 
@@ -20,11 +20,14 @@ The router returns JSON for HTTP errors. It uses explicit 400, 404, 405, and 409
 
 The terminal does not use the HTTP router. It uses a WebSocket upgrade at `/api/pi/terminal`.
 
+Network sharing adds a TCP relay before the origin, without another HTTP router. `server/network-access.js` forwards all connection bytes unchanged. The `/api/leyline/network-access` routes control only that relay. They leave the origin and active runtimes intact. See [Live network access](./architecture#live-network-access) and the [route contract](../reference/api#network-access).
+
 ## Module ownership
 
 | Module | Ownership |
 | --- | --- |
-| `server/backend-connections.js` | Named connections, the default connection, app settings, and pinned session IDs on the native backend |
+| `server/backend-connections.js` | Named connections, the default connection, app settings, live network-access routes, and pinned session IDs on the native backend |
+| `server/network-access.js` | Independent TCP relay, serialized changes, live status, self-disable response handling, and relay cleanup |
 | `lib/leyline-settings.js` | Setting keys that the native backend and browser share |
 | `lib/research-state.js` | Branch-local research state folding and source normalization |
 | `lib/research-citations.js` | Report citation checks against canonical ledger sources |

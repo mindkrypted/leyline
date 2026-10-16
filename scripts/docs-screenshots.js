@@ -907,12 +907,14 @@ const goal = {
 const traceFixtures = docsTraces(baseEntries, sessions)
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
+const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
   ...await fs.readdir(readmeOutputDir),
   ...traceAssetNames,
   ...pinnedAssetNames,
+  ...networkAssetNames,
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1132,13 +1134,24 @@ try {
     file: path.join(docsOutputDir, 'backend-connections.png'),
     route: '/sessions/demo-session',
     ready: '.assistant-message',
-    interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
-      const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
-      await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
-      await dialog.locator('.backend-connection-card').filter({ hasText: 'Team backend' }).waitFor()
-      await dialog.locator('button:not(:disabled)').filter({ hasText: /^Add connection$/ }).waitFor()
-    },
+    interact: openBackendConnections,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'network-access.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'network',
+    interact: (page) => openBackendConnections(page, true),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'network-access-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-label',
+    scenario: 'network',
+    viewport: { width: 390, height: 844 },
+    interact: (page) => openBackendConnections(page, true),
   })
   await capture({
     browser,
@@ -1917,6 +1930,34 @@ function detailFor(scenario) {
   }
 }
 
+async function openBackendConnections(page, enabled = false) {
+  const sidebar = page.getByRole('button', { name: 'Open sessions', exact: true })
+  if (await sidebar.isVisible()) await sidebar.click()
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
+  await dialog.waitFor()
+  const category = dialog.getByRole('combobox', { name: 'Settings category', exact: true })
+  if (await category.isVisible()) await category.selectOption('connections')
+  else await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  const network = dialog.locator('.network-settings[aria-busy="false"]')
+  await network.waitFor()
+  const toggle = network.getByRole('switch', { name: 'Allow network access' })
+  if (await toggle.getAttribute('aria-checked') !== 'false' || await toggle.isDisabled()) {
+    throw new Error('Network access must start off and available')
+  }
+  await dialog.locator('.backend-connection-card').filter({ hasText: 'Team backend' }).waitFor()
+  await dialog.getByRole('button', { name: 'Add connection', exact: true }).waitFor()
+  if (!enabled) return
+  await toggle.click()
+  await network.getByRole('status').filter({ hasText: 'Network access is enabled on port 52342.' }).waitFor()
+  if (await toggle.getAttribute('aria-checked') !== 'true'
+    || await network.locator('.network-settings-address').count() !== 2) {
+    throw new Error('Network access capture did not reach the enabled state')
+  }
+  await network.getByRole('button', { name: 'Copy http://192.0.2.10:52342', exact: true }).waitFor()
+  await network.getByRole('button', { name: 'Copy http://198.51.100.10:52342', exact: true }).waitFor()
+}
+
 async function openModelCatalog(page) {
   const sidebarButton = page.getByRole('button', { name: 'Open sessions', exact: true })
   if (await sidebarButton.isVisible()) await sidebarButton.click()
@@ -1982,6 +2023,7 @@ async function capture({
   const page = await context.newPage()
   const unexpected = []
   let captureConfig = { enabled: true, error: '' }
+  let networkAccess = { available: true, enabled: false, port: null, urls: [], directAccess: false, error: '' }
   const capturedTraces = structuredClone(traceFixtures)
   await page.route('**/*', (request) => {
     const origin = new URL(request.request().url()).origin
@@ -2018,6 +2060,18 @@ async function capture({
     })
 
     if (key === 'GET /api/leyline/connections') return json(backendRegistry)
+    if (key === 'GET /api/leyline/network-access') return json(networkAccess)
+    if (key === 'PUT /api/leyline/network-access' && scenario === 'network'
+      && typeof req.postDataJSON()?.enabled === 'boolean') {
+      const enabled = req.postDataJSON().enabled
+      networkAccess = {
+        ...networkAccess,
+        enabled,
+        port: enabled ? 52342 : null,
+        urls: enabled ? ['http://192.0.2.10:52342', 'http://198.51.100.10:52342'] : [],
+      }
+      return json(networkAccess)
+    }
     if (key === `GET /api/leyline/settings/${THINKING_DEFAULT_SETTING_KEY}`) {
       return json({ key: THINKING_DEFAULT_SETTING_KEY, value: 'collapsed' })
     }

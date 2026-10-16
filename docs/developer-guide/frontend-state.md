@@ -176,6 +176,12 @@ The global modal has Display, Connections, Files, Agent defaults, Models & provi
 
 Electron's `CommandOrControl+,` command opens global Settings idempotently. Command+Shift+E toggles Session details, not global Settings. It does nothing on Home or while blocking overlays are open.
 
+### Network access
+
+`NetworkAccessSettings.vue` mounts lazily inside Connections. It loads native-backend state on mount and window focus through `src/lib/leyline-api.js`. The switch waits for the live operation response before changing its displayed value. Failed requests leave the previous value and show an error.
+
+The component shows actual sharing URLs and the unauthenticated full-access warning. It warns separately when startup configuration exposes the origin. The toggle does not reload the window or change the selected backend, composer drafts, or runtime subscriptions. The current window's saved remote selection never redirects this native setting.
+
 ### Agent defaults and overrides
 
 `AgentSettings.vue` replaces the former Subagents and Vision configuration drawers. The containing surface fixes `scope`: global in Agent defaults, project in Project settings, and session in Session details. There is no scope picker inside global Settings.

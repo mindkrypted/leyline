@@ -11,6 +11,7 @@
 - `src/components/ResearchSourcesPane.vue`: Renders cited sources and the complete research ledger.
 - `src/components/ResearchCitationPreview.vue`: Renders the anchored citation preview and mobile bottom sheet.
 - `src/components/GlobalSettingsModal.vue`: Owns global category navigation, capability gates, focus containment, and owner labels.
+- `src/components/NetworkAccessSettings.vue`: Controls live sharing for the native backend and shows copyable URLs and access warnings.
 - `src/components/AgentSettings.vue`: Renders fixed-scope subagent and vision overrides in global, project, and session surfaces.
 - `src/components/ProjectDetailDrawer.vue`: Renders Project settings and its Sessions tab. Session details lives in `App.vue`.
 - `src/components/ProviderSettings.vue`: Manages provider/model inventories, edits, authentication, catalog refresh, and saved/draft connection tests with feedback beside draft actions.
@@ -74,7 +75,8 @@ These files are outside `src/` because Node.js backend code and browser code imp
 
 ## Backend
 
-- `server/backend-connections.js`: Stores named backend connections, the default, native app settings, and pinned session IDs.
+- `server/backend-connections.js`: Stores named backend connections, the default, native app settings, and pinned session IDs. Exposes live network-access routes.
+- `server/network-access.js`: Forwards TCP connections from an independent network listener to the existing origin without restarting it.
 - `server/pi-api/index.js`: Creates the shared runtime and exports server adapters.
 - `server/pi-api/router.js`: Routes runtime HTTP requests.
 - `server/pi-api/pi-settings-routes.js`: Routes provider/model/MCP configuration and private operations.

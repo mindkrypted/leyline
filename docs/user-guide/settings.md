@@ -11,7 +11,7 @@ The modal has these categories:
 | Category | Applies to |
 | --- | --- |
 | **Display** | Transcript display across Leyline windows. |
-| **Connections** | Saved backend connections and the default connection. Each window selects its own active backend. |
+| **Connections** | Network access for the native backend, saved connections, and the default connection. Each window selects its own active backend. |
 | **Files** | File actions on the selected backend. |
 | **Agent defaults** | Global subagent and vision defaults on the selected backend. |
 | **Models & providers** | Pi provider credentials, custom providers, model definitions, and catalog overrides on the selected backend. |
@@ -59,7 +59,32 @@ The Leyline backend API does not have authentication. Do not expose the server t
 
 Traces and their capture setting also belong to the selected backend. The trace explorer does not combine data across connections. Trace input and output can contain private data, so protect access to the backend. See [Trace privacy](./tracing#keep-trace-data-private).
 
-For remote browser access, configure the server to allow the frontend origin. See [Environment variables](../reference/environment).
+### Share the native backend
+
+![Network access enabled with copyable sharing URLs](../assets/screenshots/network-access.png)
+
+1. Open **Settings → Connections** on the computer that runs Leyline.
+2. Turn on **Allow network access**.
+3. Select **Copy** beside an address that the other device can reach.
+4. Open that URL in the other device's browser.
+
+For Tailscale, use the address for this computer's Tailscale interface. Both devices need network access to that address and port.
+
+The toggle shares the **native backend**, even when the current window uses a saved remote connection. Network access is off by default. Leyline saves the preference and restores it at startup.
+
+Sharing starts a separate listener on all IPv4 interfaces, including Wi-Fi and Tailscale. The operating system selects an available port. The sharing URL can change after you disable and enable access, or after Leyline restarts.
+
+The change applies immediately. The local app keeps its address and connections, and running agents continue. HTTP requests, live updates, and terminal WebSockets use the same backend through the sharing URL.
+
+Turn off **Allow network access** to close the sharing listener. Remote clients and their terminals disconnect. Local clients and agent runs continue. If you disable access from a remote browser, that browser loses its connection after the response.
+
+::: warning
+Use trusted networks only. The API has no authentication. Anyone who can reach the sharing URL can access files, change settings, and run commands. Sharing is not restricted to Tailscale.
+:::
+
+If startup configuration already exposes the origin, the toggle does not close that separate access path. Settings shows a notice in this case.
+
+Opening the sharing URL serves both the app and API from one origin. No extra allowed-origin setting is necessary. A UI on a different non-loopback origin still needs `LEYLINE_SERVER_ALLOWED_ORIGINS`. See [Environment variables](../reference/environment).
 
 ## Manage models and providers
 

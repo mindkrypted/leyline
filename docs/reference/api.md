@@ -9,7 +9,7 @@ returns `201`. A CORS preflight request (`OPTIONS`) returns `204`.
 
 ## Conventions and status behavior
 
-JSON requests use `Content-Type: application/json`. Most routes ignore extra fields. Pi Settings rejects unsupported provider, model, target, and editable MCP fields. A field marked `?` can be omitted. JSON serialization omits object properties whose value is `undefined`. The current JSON reader has no explicit body-size limit.
+JSON requests use `Content-Type: application/json`. Most routes ignore extra fields. Pi Settings rejects unsupported provider, model, target, and editable MCP fields. A field marked `?` can be omitted. JSON serialization omits object properties whose value is `undefined`. Most routes have no explicit JSON body-size limit. Network-access and pinned-session routes set their own limits.
 
 Most errors have this envelope:
 
@@ -393,7 +393,7 @@ The ID can identify a saved connection or the native `builtin` connection.
 
 App settings are part of the native backend. A selected remote backend does not store these settings.
 
-The server currently accepts only the `ui.thinking_default` setting key.
+The `/api/leyline/settings/:key` routes accept only `ui.thinking_default`. Network access uses its own routes below.
 
 ### `GET /api/leyline/settings/ui.thinking_default`
 
@@ -420,6 +420,58 @@ Response:
 ```
 
 The route rejects other values with `400`. An unknown setting key returns `404`.
+
+## Network access
+
+These routes control sharing for the native backend, not the window's selected remote backend. The preference defaults to off and persists as `server.network_access` in Leyline SQLite. It is not a supported `/api/leyline/settings/:key` key.
+
+Every successful response uses this shape:
+
+```text
+NetworkAccess = {
+  available: boolean,
+  enabled: boolean,
+  port: number | null,
+  urls: string[],
+  directAccess: boolean,
+  error: string
+}
+```
+
+- `available` reports whether the origin is available for sharing.
+- `enabled` reports the current sharing listener, not the saved startup preference.
+- `port` is the sharing port, or `null` when sharing is off.
+- `urls` lists sharing URLs for non-internal IPv4 interfaces. It can be empty even when the listener is enabled.
+- `directAccess` reports an origin binding outside loopback. Sharing off does not close that separate access path.
+- `error` reports the last listener or setting-change failure, or an empty string.
+
+### `GET /api/leyline/network-access`
+
+Response: `NetworkAccess`.
+
+The response waits for earlier network-access operations to finish. It does not start a listener or change the saved preference.
+
+### `PUT /api/leyline/network-access`
+
+Request:
+
+```text
+{ enabled: boolean }
+```
+
+Response: `NetworkAccess`.
+
+JSON bodies cannot exceed 1 KiB. A missing or non-boolean `enabled` returns `400`. Oversized bodies return `413`. Unsupported methods return `405`. Listener and persistence failures return `400` with the standard error envelope.
+
+Enabling starts a separate TCP listener on `0.0.0.0:0`. The operating system selects its port. The listener forwards bytes unchanged to the existing origin. It handles HTTP, SSE, WebSockets, and Vite HMR without path routing or header rewriting.
+
+The operation does not restart or rebind the origin, change its URL, or stop local clients and agents. Repeated enable requests reuse the current sharing listener. A later disable/enable cycle can select a different port.
+
+Disabling stops the sharing listener and closes its remote connections, including terminals. A request through the listener can disable sharing and receive its response before its connection closes.
+
+Changes serialize within the backend. A persistence failure preserves the previous listener state. Startup restores the saved preference without changing the origin binding. Backend shutdown closes relay resources.
+
+These routes add no authentication or network restrictions. Any client that can reach the listener has the same backend access as a local client.
 
 ## Pinned sessions
 
