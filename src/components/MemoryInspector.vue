@@ -234,220 +234,241 @@ function canCreate(scope) {
 </script>
 
 <template>
-  <aside class="memory-drawer" aria-label="Memory Inspector">
-    <header class="memory-drawer-header">
+  <aside class="memory-drawer context-settings-drawer" aria-label="Memory Inspector">
+    <header class="context-settings-header">
       <div>
         <strong>Memory</strong>
-        <span>{{ counts.active || 0 }} active · {{ counts.archived || 0 }} archived</span>
+        <small>{{ counts.active || 0 }} active · {{ counts.archived || 0 }} archived</small>
       </div>
       <div class="memory-header-actions">
-        <button type="button" @click="emit('refresh')">Refresh</button>
-        <button type="button" @click="toggleSelectionMode">
+        <button
+          class="memory-refresh"
+          type="button"
+          aria-label="Refresh memory"
+          title="Refresh memory"
+          @click="emit('refresh')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 17.9 17" />
+          </svg>
+        </button>
+        <button type="button" :aria-pressed="selectionMode" @click="toggleSelectionMode">
           {{ selectionMode ? 'Done' : 'Select' }}
         </button>
-        <button type="button" @click="emit('close')">×</button>
       </div>
+      <button class="settings-close" type="button" aria-label="Close memory" @click="emit('close')">×</button>
     </header>
 
-    <div class="memory-caveat">
-      Changes affect future turns only. Memories already used earlier in this
-      session may remain in transcript context.
-    </div>
-
-    <label class="memory-search">
-      <span>Search visible memory</span>
-      <input v-model="query" type="search" placeholder="Filter content, tags, reason…">
-    </label>
-
-    <div v-if="selectionMode" class="memory-bulk-bar">
-      <strong>{{ selectedIds.size }} selected</strong>
-      <button type="button" :disabled="!selectedActiveCount" @click="bulkArchive">
-        Archive {{ selectedActiveCount || '' }}
-      </button>
-      <button type="button" :disabled="!selectedArchivedCount" @click="bulkRestore">
-        Restore {{ selectedArchivedCount || '' }}
-      </button>
-      <button type="button" :disabled="!selectedIds.size" @click="bulkDelete">
-        Delete {{ selectedIds.size || '' }}
-      </button>
-    </div>
-
-    <div v-if="loading" class="memory-empty">Loading memory…</div>
-    <div v-else-if="error" class="memory-error">{{ error }}</div>
-
-    <div v-else class="memory-sections">
-      <section
-        v-for="scope in scopes"
-        :key="scope.key"
-        class="memory-section"
-        :class="{ disabled: scope.key === 'session' && !context.sessionAvailable }"
-      >
-        <header class="memory-section-header">
-          <div>
-            <h2>{{ scope.label }}</h2>
-            <span>
-              {{ scopeCount(scope.key, 'active') }} active ·
-              {{ scopeCount(scope.key, 'archived') }} archived
-            </span>
-          </div>
-          <button
-            type="button"
-            :disabled="!canCreate(scope.key) || selectionMode || formOpen()"
-            @click="beginCreate(scope.key)"
-          >+ {{ scope.label }}</button>
-        </header>
-        <p class="memory-section-note">
-          <template v-if="scope.key === 'session' && !context.sessionAvailable">
-            Session memory is available after a session is created.
-          </template>
-          <template v-else>{{ scope.note }}</template>
-        </p>
-
-        <form
-          v-if="creatingScope === scope.key"
-          class="memory-card memory-form"
-          @submit.prevent="saveForm"
-        >
-          <textarea v-model="contentDraft" rows="5" placeholder="Memory markdown…" />
-          <input v-model="tagsDraft" type="text" placeholder="tags, comma-separated">
-          <div class="memory-form-actions">
-            <button type="button" @click="cancelForm">Cancel</button>
-            <button type="submit" :disabled="saving || !contentDraft.trim()">Save</button>
-          </div>
-        </form>
-
-        <div v-if="scopeRows(scope.key, 'active').length" class="memory-card-list">
-          <article
-            v-for="memory in scopeRows(scope.key, 'active')"
-            :key="memory.id"
-            class="memory-card"
-          >
-            <label v-if="selectionMode" class="memory-select">
-              <input
-                type="checkbox"
-                :checked="selectedIds.has(memory.id)"
-                @change="toggleSelected(memory)"
-              >
-            </label>
-            <form v-if="editingId === memory.id" class="memory-form" @submit.prevent="saveForm">
-              <textarea v-model="contentDraft" rows="5" />
-              <input v-model="tagsDraft" type="text" placeholder="tags, comma-separated">
-              <div class="memory-form-actions">
-                <button type="button" @click="cancelForm">Cancel</button>
-                <button type="submit" :disabled="saving || !contentDraft.trim()">Save</button>
-              </div>
-            </form>
-            <template v-else>
-              <div class="memory-card-markdown markdown-body" v-html="renderedMemory(memory)" />
-              <div class="memory-card-meta">
-                <span class="memory-source">{{ sourceLabel(memory.source) }}</span>
-                <span v-for="tag in memory.tags" :key="tag" class="memory-tag">{{ tag }}</span>
-              </div>
-              <details class="memory-details">
-                <summary>Details</summary>
-                <dl>
-                  <div>
-                    <dt>ID</dt>
-                    <dd class="memory-id-row">
-                      <span>{{ memory.id }}</span>
-                      <button type="button" @click="copyId(memory.id)">
-                        {{ copiedId === memory.id ? 'Copied' : 'Copy' }}
-                      </button>
-                    </dd>
-                  </div>
-                  <div><dt>Updated</dt><dd>{{ formatDate(memory.updatedAt) }}</dd></div>
-                  <div><dt>Created</dt><dd>{{ formatDate(memory.createdAt) }}</dd></div>
-                  <div v-if="memory.reasonMd"><dt>Reason</dt><dd>{{ memory.reasonMd }}</dd></div>
-                </dl>
-              </details>
-              <div v-if="deleteId === memory.id" class="memory-delete-confirm">
-                <span>Delete permanently?</span>
-                <button type="button" @click="deleteId = ''">Cancel</button>
-                <button type="button" @click="deleteMemory(memory)">Delete</button>
-              </div>
-              <div v-else class="memory-card-actions">
-                <button type="button" :disabled="selectionMode" @click="beginEdit(memory)">Edit</button>
-                <button type="button" :disabled="selectionMode" @click="archive(memory)">Archive</button>
-                <button type="button" :disabled="selectionMode" @click="confirmDelete(memory)">Delete</button>
-              </div>
-            </template>
-          </article>
-        </div>
-        <div v-else class="memory-empty">
-          No active {{ scope.label.toLowerCase() }} memories.
-        </div>
-
-        <button
-          v-if="scopeCount(scope.key, 'archived') || scopeRows(scope.key, 'archived').length"
-          type="button"
-          class="memory-archived-toggle"
-          @click="toggleArchived(scope.key)"
-        >
-          {{ archivedVisible(scope.key) ? 'Hide' : 'Show' }} archived
-          · {{ scopeCount(scope.key, 'archived') }}
+    <div class="memory-toolbar">
+      <label class="memory-search">
+        <span>Search visible memory</span>
+        <input v-model="query" type="search" placeholder="Filter content, tags, reason…">
+      </label>
+      <div v-if="selectionMode" class="memory-bulk-bar">
+        <strong>{{ selectedIds.size }} selected</strong>
+        <button type="button" :disabled="!selectedActiveCount" @click="bulkArchive">
+          Archive {{ selectedActiveCount || '' }}
         </button>
+        <button type="button" :disabled="!selectedArchivedCount" @click="bulkRestore">
+          Restore {{ selectedArchivedCount || '' }}
+        </button>
+        <button type="button" :disabled="!selectedIds.size" @click="bulkDelete">
+          Delete {{ selectedIds.size || '' }}
+        </button>
+      </div>
+    </div>
 
-        <div v-if="archivedVisible(scope.key)" class="memory-archived-list">
-          <article
-            v-for="memory in scopeRows(scope.key, 'archived')"
-            :key="memory.id"
-            class="memory-card archived"
-          >
-            <label v-if="selectionMode" class="memory-select">
-              <input
-                type="checkbox"
-                :checked="selectedIds.has(memory.id)"
-                @change="toggleSelected(memory)"
-              >
-            </label>
-            <form v-if="editingId === memory.id" class="memory-form" @submit.prevent="saveForm">
-              <textarea v-model="contentDraft" rows="5" />
-              <input v-model="tagsDraft" type="text" placeholder="tags, comma-separated">
-              <div class="memory-form-actions">
-                <button type="button" @click="cancelForm">Cancel</button>
-                <button type="submit" :disabled="saving || !contentDraft.trim()">Save</button>
-              </div>
-            </form>
-            <template v-else>
-              <div class="memory-card-markdown markdown-body" v-html="renderedMemory(memory)" />
-              <div class="memory-card-meta">
-                <span class="memory-source">{{ sourceLabel(memory.source) }}</span>
-                <span v-for="tag in memory.tags" :key="tag" class="memory-tag">{{ tag }}</span>
-              </div>
-              <details class="memory-details">
-                <summary>Details</summary>
-                <dl>
-                  <div>
-                    <dt>ID</dt>
-                    <dd class="memory-id-row">
-                      <span>{{ memory.id }}</span>
-                      <button type="button" @click="copyId(memory.id)">
-                        {{ copiedId === memory.id ? 'Copied' : 'Copy' }}
-                      </button>
-                    </dd>
-                  </div>
-                  <div><dt>Updated</dt><dd>{{ formatDate(memory.updatedAt) }}</dd></div>
-                  <div><dt>Archived</dt><dd>{{ formatDate(memory.archivedAt) }}</dd></div>
-                  <div v-if="memory.reasonMd"><dt>Reason</dt><dd>{{ memory.reasonMd }}</dd></div>
-                </dl>
-              </details>
-              <div v-if="deleteId === memory.id" class="memory-delete-confirm">
-                <span>Delete permanently?</span>
-                <button type="button" @click="deleteId = ''">Cancel</button>
-                <button type="button" @click="deleteMemory(memory)">Delete</button>
-              </div>
-              <div v-else class="memory-card-actions">
-                <button type="button" :disabled="selectionMode" @click="beginEdit(memory)">Edit</button>
-                <button type="button" :disabled="selectionMode" @click="restore(memory)">Restore</button>
-                <button type="button" :disabled="selectionMode" @click="confirmDelete(memory)">Delete</button>
-              </div>
+    <div class="memory-drawer-body">
+      <p class="memory-caveat">
+        Changes affect future turns only. Memories already used earlier in this
+        session may remain in transcript context.
+      </p>
+      <div v-if="loading" class="memory-empty">Loading memory…</div>
+      <div v-else-if="error" class="memory-error">{{ error }}</div>
+
+      <div v-else class="memory-sections">
+        <section
+          v-for="scope in scopes"
+          :key="scope.key"
+          class="memory-section"
+          :class="{ disabled: scope.key === 'session' && !context.sessionAvailable }"
+        >
+          <header class="memory-section-header">
+            <div>
+              <h2>{{ scope.label }}</h2>
+              <span>
+                {{ scopeCount(scope.key, 'active') }} active ·
+                {{ scopeCount(scope.key, 'archived') }} archived
+              </span>
+            </div>
+            <button
+              type="button"
+              :disabled="!canCreate(scope.key) || selectionMode || formOpen()"
+              @click="beginCreate(scope.key)"
+            >+ {{ scope.label }}</button>
+          </header>
+          <p class="memory-section-note">
+            <template v-if="scope.key === 'session' && !context.sessionAvailable">
+              Session memory is available after a session is created.
             </template>
-          </article>
-          <div v-if="!scopeRows(scope.key, 'archived').length" class="memory-empty">
-            No archived matches.
+            <template v-else>{{ scope.note }}</template>
+          </p>
+
+          <form
+            v-if="creatingScope === scope.key"
+            class="memory-card memory-form"
+            @submit.prevent="saveForm"
+          >
+            <textarea v-model="contentDraft" rows="5" aria-label="Memory text" placeholder="Memory markdown…" />
+            <input v-model="tagsDraft" type="text" aria-label="Tags" placeholder="tags, comma-separated">
+            <div class="memory-form-actions">
+              <button type="button" @click="cancelForm">Cancel</button>
+              <button type="submit" :disabled="saving || !contentDraft.trim()">Save</button>
+            </div>
+          </form>
+
+          <div v-if="scopeRows(scope.key, 'active').length" class="memory-card-list">
+            <article
+              v-for="memory in scopeRows(scope.key, 'active')"
+              :key="memory.id"
+              class="memory-card"
+              :class="{ selected: selectedIds.has(memory.id) }"
+            >
+              <label v-if="selectionMode" class="memory-select">
+                <input
+                  type="checkbox"
+                  aria-label="Select memory"
+                  :checked="selectedIds.has(memory.id)"
+                  @change="toggleSelected(memory)"
+                >
+              </label>
+              <form v-if="editingId === memory.id" class="memory-form" @submit.prevent="saveForm">
+                <textarea v-model="contentDraft" rows="5" aria-label="Memory text" />
+                <input v-model="tagsDraft" type="text" aria-label="Tags" placeholder="tags, comma-separated">
+                <div class="memory-form-actions">
+                  <button type="button" @click="cancelForm">Cancel</button>
+                  <button type="submit" :disabled="saving || !contentDraft.trim()">Save</button>
+                </div>
+              </form>
+              <template v-else>
+                <div class="memory-card-markdown markdown-body" v-html="renderedMemory(memory)" />
+                <div class="memory-card-meta">
+                  <span class="memory-source">{{ sourceLabel(memory.source) }}</span>
+                  <span v-for="tag in memory.tags" :key="tag" class="memory-tag">{{ tag }}</span>
+                </div>
+                <div class="memory-card-footer">
+                  <details class="memory-details">
+                    <summary>Details</summary>
+                    <dl>
+                      <div>
+                        <dt>ID</dt>
+                        <dd class="memory-id-row">
+                          <span>{{ memory.id }}</span>
+                          <button type="button" @click="copyId(memory.id)">
+                            {{ copiedId === memory.id ? 'Copied' : 'Copy' }}
+                          </button>
+                        </dd>
+                      </div>
+                      <div><dt>Updated</dt><dd>{{ formatDate(memory.updatedAt) }}</dd></div>
+                      <div><dt>Created</dt><dd>{{ formatDate(memory.createdAt) }}</dd></div>
+                      <div v-if="memory.reasonMd"><dt>Reason</dt><dd>{{ memory.reasonMd }}</dd></div>
+                    </dl>
+                  </details>
+                  <div v-if="deleteId === memory.id" class="memory-delete-confirm">
+                    <span>Delete permanently?</span>
+                    <button type="button" @click="deleteId = ''">Cancel</button>
+                    <button type="button" @click="deleteMemory(memory)">Delete</button>
+                  </div>
+                  <div v-else class="memory-card-actions">
+                    <button type="button" :disabled="selectionMode" @click="beginEdit(memory)">Edit</button>
+                    <button type="button" :disabled="selectionMode" @click="archive(memory)">Archive</button>
+                    <button type="button" :disabled="selectionMode" @click="confirmDelete(memory)">Delete</button>
+                  </div>
+                </div>
+              </template>
+            </article>
           </div>
-        </div>
-      </section>
+          <div v-else class="memory-empty">
+            No active {{ scope.label.toLowerCase() }} memories.
+          </div>
+
+          <button
+            v-if="scopeCount(scope.key, 'archived') || scopeRows(scope.key, 'archived').length"
+            type="button"
+            class="memory-archived-toggle"
+            :aria-expanded="Boolean(archivedVisible(scope.key))"
+            @click="toggleArchived(scope.key)"
+          >
+            {{ archivedVisible(scope.key) ? 'Hide' : 'Show' }} archived
+            · {{ scopeCount(scope.key, 'archived') }}
+          </button>
+
+          <div v-if="archivedVisible(scope.key)" class="memory-archived-list">
+            <article
+              v-for="memory in scopeRows(scope.key, 'archived')"
+              :key="memory.id"
+              class="memory-card archived"
+              :class="{ selected: selectedIds.has(memory.id) }"
+            >
+              <label v-if="selectionMode" class="memory-select">
+                <input
+                  type="checkbox"
+                  aria-label="Select memory"
+                  :checked="selectedIds.has(memory.id)"
+                  @change="toggleSelected(memory)"
+                >
+              </label>
+              <form v-if="editingId === memory.id" class="memory-form" @submit.prevent="saveForm">
+                <textarea v-model="contentDraft" rows="5" aria-label="Memory text" />
+                <input v-model="tagsDraft" type="text" aria-label="Tags" placeholder="tags, comma-separated">
+                <div class="memory-form-actions">
+                  <button type="button" @click="cancelForm">Cancel</button>
+                  <button type="submit" :disabled="saving || !contentDraft.trim()">Save</button>
+                </div>
+              </form>
+              <template v-else>
+                <div class="memory-card-markdown markdown-body" v-html="renderedMemory(memory)" />
+                <div class="memory-card-meta">
+                  <span class="memory-source">{{ sourceLabel(memory.source) }}</span>
+                  <span v-for="tag in memory.tags" :key="tag" class="memory-tag">{{ tag }}</span>
+                </div>
+                <div class="memory-card-footer">
+                  <details class="memory-details">
+                    <summary>Details</summary>
+                    <dl>
+                      <div>
+                        <dt>ID</dt>
+                        <dd class="memory-id-row">
+                          <span>{{ memory.id }}</span>
+                          <button type="button" @click="copyId(memory.id)">
+                            {{ copiedId === memory.id ? 'Copied' : 'Copy' }}
+                          </button>
+                        </dd>
+                      </div>
+                      <div><dt>Updated</dt><dd>{{ formatDate(memory.updatedAt) }}</dd></div>
+                      <div><dt>Archived</dt><dd>{{ formatDate(memory.archivedAt) }}</dd></div>
+                      <div v-if="memory.reasonMd"><dt>Reason</dt><dd>{{ memory.reasonMd }}</dd></div>
+                    </dl>
+                  </details>
+                  <div v-if="deleteId === memory.id" class="memory-delete-confirm">
+                    <span>Delete permanently?</span>
+                    <button type="button" @click="deleteId = ''">Cancel</button>
+                    <button type="button" @click="deleteMemory(memory)">Delete</button>
+                  </div>
+                  <div v-else class="memory-card-actions">
+                    <button type="button" :disabled="selectionMode" @click="beginEdit(memory)">Edit</button>
+                    <button type="button" :disabled="selectionMode" @click="restore(memory)">Restore</button>
+                    <button type="button" :disabled="selectionMode" @click="confirmDelete(memory)">Delete</button>
+                  </div>
+                </div>
+              </template>
+            </article>
+            <div v-if="!scopeRows(scope.key, 'archived').length" class="memory-empty">
+              No archived matches.
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   </aside>
 </template>

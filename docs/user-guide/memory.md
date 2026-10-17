@@ -12,6 +12,8 @@ Select **Memory** in the workbench header. In Electron on macOS, press **Command
 
 The header count shows active visible memories. The drawer header shows active and archived totals.
 
+The drawer header and search field stay visible while the memory list scrolls.
+
 ## Understand memory scopes
 
 Leyline groups memory into three scopes:
@@ -50,7 +52,7 @@ Select **Cancel** to discard the form. Leyline asks before you close the drawer 
 
 ## Inspect memory details
 
-Select **Details** on a card. The details include the ID, source, dates, and optional reason.
+Each card shows its source and tags. Select **Details** at the bottom of a card to show its ID, dates, and optional reason.
 
 Select **Copy** beside the ID to copy it.
 
@@ -81,4 +83,4 @@ Bulk **Delete** asks for confirmation and permanently removes all selected memor
 
 Memory changes affect future turns only. Earlier transcript context can still contain memory text that pi already received. [Traces](./tracing#keep-trace-data-private) can also retain memory text in recorded input or tool results. Deleting a memory does not remove it from those earlier records.
 
-Select **Refresh** to reload the visible memory list. The drawer also refreshes after an active turn ends while the drawer is open.
+Select **Refresh memory**, the circular-arrow button in the drawer header, to reload the visible memory list. The drawer also refreshes after an active turn ends while the drawer is open.
