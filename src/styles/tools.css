@@ -1634,3 +1634,183 @@
   }
 }
 
+@media (max-width: 760px) {
+  .mobile-activity-card {
+    overflow: hidden;
+    margin: 20px 0 24px;
+    border: 1px solid #494949;
+    border-radius: 11px;
+    background: #1c1c1c;
+  }
+
+  .mobile-activity-summary {
+    display: block;
+    width: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .mobile-activity-heading {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 46px;
+    padding: 0 11px;
+  }
+
+  .mobile-activity-heading svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: #b7b0ce;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .mobile-activity-heading strong {
+    color: #e0e0e0;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .mobile-activity-check {
+    margin-left: auto;
+    color: #8fbc9b;
+    font-size: 13px;
+  }
+
+  .mobile-activity-chevron {
+    color: #aaa;
+    transition: transform 280ms var(--ease-emphasized);
+  }
+
+  .mobile-activity-card.is-expanded .mobile-activity-chevron,
+  .mobile-activity-card[open] > summary .mobile-activity-chevron {
+    transform: rotate(90deg);
+  }
+
+  .mobile-activity-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    min-height: 31px;
+    border-top: 1px solid #383838;
+    padding: 8px 12px;
+    background: #242424;
+    color: #b8b8b8;
+    font-size: 10px;
+  }
+
+  .mobile-activity-list {
+    padding: 4px 10px;
+  }
+
+  .mobile-activity-list .tool-card {
+    margin: 0;
+    border-top: 1px solid #353535;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .tool-card:not(.subagent-card) .tool-card-header {
+    flex-wrap: wrap;
+    gap: 0 7px;
+  }
+
+  .tool-card:not(.subagent-card) .tool-expand-button {
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    gap: 7px;
+    min-height: 44px;
+  }
+
+  .tool-card:not(.subagent-card) .tool-label {
+    flex: none;
+    max-width: 40%;
+    font-size: 11px;
+  }
+
+  .tool-card:not(.subagent-card) .tool-card-header code {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tool-card:not(.subagent-card) .tool-card-header em {
+    flex: none;
+    white-space: nowrap;
+    font-size: 9px;
+  }
+
+  .tool-card-header em.status-stopped {
+    color: #c6ad83;
+  }
+
+  .tool-card-header em.status-unknown {
+    color: #93939b;
+  }
+
+  .live-tool-card:not(.subagent-card) .tool-card-header {
+    flex-wrap: nowrap;
+    min-height: 44px;
+  }
+
+  .tool-card:not(.subagent-card) .tool-card-header .copy-button {
+    display: none;
+  }
+
+  .tool-card:not(.subagent-card).is-expanded .tool-card-header .copy-button {
+    display: grid;
+    place-items: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .mobile-tool-target {
+    padding: 8px 0;
+    color: #ccc;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-activity-list .subagent-card:not(.is-expanded) .subagent-results,
+  .mobile-activity-list .subagent-card:not(.is-expanded) .subagent-summary {
+    display: none;
+  }
+
+  .mobile-activity-list .subagent-header .tool-expand-button {
+    flex-wrap: nowrap;
+    min-height: 44px;
+  }
+
+  .mobile-activity-list .subagent-header code {
+    flex: 1;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-activity-list .subagent-card:not(.is-expanded) .copy-button {
+    display: none;
+  }
+
+  .mobile-activity-summary:focus-visible {
+    outline: 2px solid #aaa;
+    outline-offset: -2px;
+  }
+}
+

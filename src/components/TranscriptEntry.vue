@@ -6,6 +6,7 @@ const PierrePreview = defineAsyncComponent(() => import('./PierrePreview.vue'))
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { mobileToolStatus } from '../../lib/tool-activity.js'
 import { researchSourcesMatch } from '../../lib/research-state.js'
 import { systemPromptInfo } from '../../lib/system-prompt.js'
 import { subagentStatus as resultStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
@@ -36,6 +37,7 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  mobile: Boolean,
   skillExpanded: Boolean,
   systemPromptSelected: Boolean,
   thinkingInitiallyExpanded: Boolean,
@@ -167,11 +169,13 @@ function liveEntryToolStatus() {
 
 function toolStatusTone(status) {
   if (['preparing', 'running', 'reading result'].includes(status)) return 'running'
+  if (props.mobile && ['stopped', 'unknown'].includes(status)) return status
   if (['error', 'aborted'].includes(status)) return 'error'
   return 'completed'
 }
 
 function entryToolStatus(entry) {
+  if (props.mobile) return mobileToolStatus(entry, props.toolStatus)
   return liveEntryToolStatus() || (entry.isError ? 'error' : 'completed')
 }
 
@@ -464,7 +468,7 @@ function openMarkdownContent(event) {
   <article
     v-else-if="entry.type === 'tool'"
     class="tool-card transcript-tool"
-    :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError }"
+    :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError && (!mobile || entryToolStatus(entry) !== 'stopped') }"
   >
     <div class="tool-card-header">
       <button
@@ -533,6 +537,7 @@ function openMarkdownContent(event) {
           class="tool-expanded-body"
           @click.stop
         >
+          <div v-if="mobile && entry.code && !toolCommandCode(entry)" class="mobile-tool-target"><code>{{ entry.preview?.path || entry.code }}</code></div>
           <div v-if="toolCommandCode(entry)" class="tool-command-block">
             <strong>Command</strong>
             <pre>{{ entry.code }}</pre>

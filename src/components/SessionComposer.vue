@@ -2,12 +2,16 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useDictation } from '../composables/useDictation'
 import ModelPicker from './ModelPicker.vue'
+import MobileComposerControls from './MobileComposerControls.vue'
+import { useMobileComposerInput } from '../composables/useMobileComposerInput'
 import UltrafastToggle from './UltrafastToggle.vue'
 import PromptQueue from './PromptQueue.vue'
 import { formatMode } from '../lib/format'
 
 const props = defineProps({
   agentRunning: Boolean,
+  mobile: Boolean,
+  settingsError: { type: String, default: '' },
   attachedImages: {
     type: Array,
     default: () => [],
@@ -176,6 +180,9 @@ const emit = defineEmits([
 const form = ref(null)
 const textarea = ref(null)
 const queue = ref(null)
+const mobileControls = ref(null)
+const mobileSheetOpen = ref(false)
+useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
 const sendActions = ref(null)
 const sendMenu = ref(null)
 const sendMenuOpen = ref(false)
@@ -207,7 +214,10 @@ const {
   setDraft: (value) => emit('update:draft', value),
 })
 
-watch(() => props.sessionId, () => { sendMenuOpen.value = false })
+watch(() => props.sessionId, () => {
+  sendMenuOpen.value = false
+  mobileControls.value?.dismiss()
+})
 watch([queueMode, () => props.promptSubmitting], ([queueing, submitting]) => {
   if (!queueing || submitting) sendMenuOpen.value = false
 })
@@ -248,7 +258,15 @@ function hasQueueDrafts() {
   return queue.value?.hasDrafts() || false
 }
 
-defineExpose({ focus, form, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen })
+function dismissMobileSheet() {
+  return mobileControls.value?.dismiss() || false
+}
+
+const mobileStop = computed(() => props.mobile && !props.editingLabel
+  && (props.agentRunning || props.compacting || props.shellRunning)
+  && !props.draft.trim() && !props.attachedImages.length)
+
+defineExpose({ focus, form, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet })
 
 function updateDraft(event) {
   emit('update:draft', event.target.value)
@@ -365,6 +383,34 @@ async function insertNewline() {
       <div class="composer-primary-row">
         <div class="composer-row-spacer"></div>
         <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
+          <MobileComposerControls
+            v-if="mobile"
+            ref="mobileControls"
+            :available-models="availableModels"
+            :available-thinking-levels="availableThinkingLevels"
+            :current-model-label="currentModelLabel"
+            :selected-model-key="selectedModelKey"
+            :model-key="modelKey"
+            :thinking-level="thinkingLevel"
+            :settings-disabled="reloadingSession || switchingModel || switchingThinking || switchingUltrafast"
+            :settings-error="settingsError"
+            :image-disabled="shellMode"
+            :ultrafast-available="ultrafastAvailable"
+            :ultrafast-enabled="ultrafastEnabled"
+            :research-enabled="researchToggleEnabled"
+            :research-disabled="promptSubmitting"
+            :research="research"
+            :running="agentRunning || compacting || shellRunning"
+            :interrupting="interrupting"
+            @open="mobileSheetOpen = $event"
+            @select-model="emit('select-model', $event)"
+            @select-thinking="emit('select-thinking', $event)"
+            @toggle-ultrafast="emit('toggle-ultrafast')"
+            @toggle-research="emit('toggle-research')"
+            @pick-images="emit('pick-images', $event)"
+            @interrupt="emit('interrupt')"
+            @newline="insertNewline"
+          />
           <ModelPicker
             :available-models="availableModels"
             :current-mobile-model-label="currentMobileModelLabel"
@@ -451,13 +497,14 @@ async function insertNewline() {
             <button
               class="send-button"
               :class="{ 'shell-run-button': shellMode }"
-              type="submit"
-              :disabled="submitDisabled"
-              :title="queueMode
+              :type="mobileStop ? 'button' : 'submit'"
+              :disabled="mobileStop ? interrupting : submitDisabled"
+              @click="mobileStop && emit('interrupt')"
+              :title="mobileStop ? 'Stop the current run and hold queued messages' : queueMode
                 ? 'Queue next task (Enter)'
                 : shellMode ? 'Run shell command' : 'Send message'"
-              :aria-label="queueMode ? 'Queue message' : shellMode ? 'Run shell command' : 'Send message'"
-            >{{ queueMode || editingLabel ? '↑' : sendButtonLabel }}</button>
+              :aria-label="mobileStop ? 'Stop generation' : queueMode ? 'Queue message' : shellMode ? 'Run shell command' : 'Send message'"
+            >{{ mobileStop ? '■' : queueMode || editingLabel ? '↑' : sendButtonLabel }}</button>
             <button
               v-if="queueMode"
               class="composer-send-menu-toggle"

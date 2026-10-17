@@ -2,10 +2,15 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDictation } from '../composables/useDictation'
 import ModelPicker from './ModelPicker.vue'
+import MobileComposerControls from './MobileComposerControls.vue'
+import { useMobileComposerInput } from '../composables/useMobileComposerInput'
 import UltrafastToggle from './UltrafastToggle.vue'
 import { formatMode } from '../lib/format'
 
 const props = defineProps({
+  mobile: Boolean,
+  settingsError: { type: String, default: '' },
+  startProjectTrigger: { default: null },
   attachedImages: {
     type: Array,
     default: () => [],
@@ -137,6 +142,9 @@ const emit = defineEmits([
 
 const form = ref(null)
 const textarea = ref(null)
+const mobileControls = ref(null)
+const mobileSheetOpen = ref(false)
+useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
 const startProjectMenu = ref(null)
 const startProjectMenuStyle = ref({})
 let projectMenuObserver
@@ -168,6 +176,11 @@ const {
 })
 
 watch(() => props.startProjectPickerOpen, scheduleProjectMenu, { flush: 'post' })
+watch(() => props.startProjectTrigger, (element, previous) => {
+  if (previous) projectMenuObserver?.unobserve(previous)
+  if (element) projectMenuObserver?.observe(element)
+  scheduleProjectMenu()
+}, { flush: 'post' })
 watch(startProjectMenu, (element, previous) => {
   if (previous) projectMenuObserver?.unobserve(previous)
   if (element) projectMenuObserver?.observe(element)
@@ -177,6 +190,7 @@ watch(startProjectMenu, (element, previous) => {
 onMounted(() => {
   projectMenuObserver = new ResizeObserver(scheduleProjectMenu)
   if (form.value) projectMenuObserver.observe(form.value)
+  if (props.startProjectTrigger) projectMenuObserver.observe(props.startProjectTrigger)
   if (startProjectMenu.value) projectMenuObserver.observe(startProjectMenu.value)
   window.addEventListener('resize', scheduleProjectMenu)
   window.addEventListener('scroll', scheduleProjectMenu, true)
@@ -204,7 +218,7 @@ function scheduleProjectMenu() {
 
 function updateProjectMenu() {
   if (!props.startProjectPickerOpen || !form.value || !startProjectMenu.value) return
-  const rect = form.value.getBoundingClientRect()
+  const rect = (props.mobile && props.startProjectTrigger || form.value).getBoundingClientRect()
   const viewport = window.visualViewport
   const top = (viewport?.offsetTop || 0) + 8
   const left = (viewport?.offsetLeft || 0) + 8
@@ -222,9 +236,18 @@ function updateProjectMenu() {
   const menuTop = placement === 'above' ? rect.top - height - 8
     : placement === 'below' ? rect.bottom + 8
       : Math.max(top, Math.min(rect.top, bottom - height))
-  startProjectMenuStyle.value = {
+  const menuLeft = Math.max(left, Math.min(rect.left + (props.mobile ? 0 : 12), right - width))
+  startProjectMenuStyle.value = props.mobile ? {
+    position: 'fixed',
+    zIndex: 70,
+    top: `${menuTop}px`,
+    left: `${menuLeft}px`,
+    width: `${width}px`,
+    maxHeight: `${height}px`,
+    transformOrigin: placement === 'above' ? 'bottom left' : 'top left',
+  } : {
     top: `${menuTop - rect.top - form.value.clientTop}px`,
-    left: `${Math.max(left, Math.min(rect.left + 12, right - width)) - rect.left - form.value.clientLeft}px`,
+    left: `${menuLeft - rect.left - form.value.clientLeft}px`,
     width: `${width}px`,
     maxHeight: `${height}px`,
     transformOrigin: placement === 'above' ? 'bottom left' : 'top left',
@@ -253,7 +276,15 @@ function focus() {
   if (!inputDisabled.value) textarea.value?.focus()
 }
 
-defineExpose({ form, focus })
+function dismissMobileSheet() {
+  return mobileControls.value?.dismiss() || false
+}
+
+function openMobileDetails(event) {
+  mobileControls.value?.open('details', event)
+}
+
+defineExpose({ form, focus, mobileSheetOpen, dismissMobileSheet, openMobileDetails })
 </script>
 
 <template>
@@ -342,6 +373,32 @@ defineExpose({ form, focus })
       <div class="composer-primary-row">
         <div class="composer-row-spacer"></div>
         <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
+          <MobileComposerControls
+            v-if="mobile"
+            ref="mobileControls"
+            :available-models="availableModels"
+            :available-thinking-levels="availableThinkingLevels"
+            :current-model-label="currentModelLabel"
+            :selected-model-key="selectedModelKey"
+            :model-key="modelKey"
+            :thinking-level="thinkingLevel"
+            :disabled="inputDisabled"
+            :settings-disabled="switchingModel || switchingThinking || switchingUltrafast"
+            :settings-error="settingsError"
+            :image-disabled="shellMode"
+            :ultrafast-available="ultrafastAvailable"
+            :ultrafast-enabled="ultrafastEnabled"
+            :research-enabled="researchEnabled"
+            :research="researchMode"
+            :tool-names="toolNames"
+            @open="mobileSheetOpen = $event"
+            @select-model="emit('select-model', $event)"
+            @select-thinking="emit('select-thinking', $event)"
+            @toggle-ultrafast="emit('toggle-ultrafast')"
+            @toggle-research="emit('toggle-session-kind')"
+            @pick-images="emit('pick-images', $event)"
+            @newline="insertNewline"
+          />
           <ModelPicker
             :available-models="availableModels"
             :current-model-label="currentModelLabel"
@@ -514,6 +571,7 @@ defineExpose({ form, focus })
         </div>
       </div>
     </div>
+    <Teleport to="body" :disabled="!mobile">
     <Transition name="composer-popover">
       <div
         v-if="startProjectPickerOpen"
@@ -552,6 +610,7 @@ defineExpose({ form, focus })
         </button>
       </div>
     </Transition>
+    </Teleport>
   </form>
 </template>
 
