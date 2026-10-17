@@ -151,10 +151,14 @@ const props = defineProps({
 
 const emit = defineEmits([
   'cancel-edit',
+  'composition-start',
+  'composition-end',
+  'input-blur',
   'interrupt',
   'keydown',
   'open-image',
   'paste',
+  'pick-images',
   'queue-snapshot',
   'remove-image',
   'select-model',
@@ -250,6 +254,20 @@ function updateDraft(event) {
   emit('update:draft', event.target.value)
   emit('show-slash-picker')
 }
+
+async function insertNewline() {
+  const input = textarea.value
+  if (!input) return
+  const sessionId = props.sessionId
+  input.setRangeText('\n', input.selectionStart, input.selectionEnd, 'end')
+  const value = input.value
+  const caret = input.selectionStart
+  updateDraft({ target: input })
+  await nextTick()
+  if (textarea.value !== input || props.sessionId !== sessionId || props.draft !== value) return
+  input.focus({ preventScroll: true })
+  input.setSelectionRange(caret, caret)
+}
 </script>
 
 <template>
@@ -286,6 +304,9 @@ function updateDraft(event) {
         :value="draft"
         :placeholder="placeholder"
         @keydown="emit('keydown', $event)"
+        @compositionstart="emit('composition-start', $event)"
+        @compositionend="emit('composition-end', $event)"
+        @blur="emit('input-blur', $event)"
         @input="updateDraft"
         @paste="emit('paste', $event)"
       ></textarea>
@@ -297,7 +318,8 @@ function updateDraft(event) {
           :key="`${command.source}-${command.name}`"
           type="button"
           :class="{ active: index === slashActiveIndex }"
-          @mousedown.prevent="emit('select-slash-command', command)"
+          @mousedown.prevent
+          @click="emit('select-slash-command', command)"
         >
           <span class="slash-command-name">/{{ command.name }}</span>
           <span class="slash-command-description">
@@ -320,7 +342,7 @@ function updateDraft(event) {
           class="attachment-preview-button"
           type="button"
           :aria-label="`Open attached image ${index + 1}`"
-          @click="emit('open-image', image.preview, `Attached image ${index + 1}`)"
+          @click="emit('open-image', image.preview, `Attached image ${index + 1}`, $event)"
         >
           <img :src="image.preview" alt="Pasted image" />
         </button>
@@ -458,6 +480,18 @@ function updateDraft(event) {
         </div>
       </div>
       <div class="composer-context-row">
+        <button
+          class="composer-chip composer-input-action"
+          type="button"
+          :disabled="shellMode"
+          @click="emit('pick-images', $event)"
+        >Add image</button>
+        <button
+          class="composer-chip composer-input-action composer-newline-button"
+          type="button"
+          @mousedown.prevent
+          @click="insertNewline"
+        >New line</button>
         <span
           v-if="compacting || agentRunning"
           class="composer-status"
@@ -566,3 +600,33 @@ function updateDraft(event) {
     </div>
   </form>
 </template>
+
+<style scoped>
+.composer-context-row {
+  flex-wrap: wrap;
+}
+
+.composer-input-action {
+  flex: none;
+  min-height: 28px;
+}
+
+.composer-newline-button {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .composer textarea {
+    font-size: 16px;
+  }
+
+  .composer-input-action {
+    min-height: 44px;
+  }
+
+  .composer .composer-context-row > .composer-chip.composer-input-action {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+</style>

@@ -451,6 +451,90 @@
   animation: review-refresh-spin 700ms linear infinite;
 }
 
+.review-pane.compact {
+  position: fixed;
+  z-index: 31;
+  inset: 53px 0 0;
+  width: auto;
+  border-left: 0;
+  outline: none;
+}
+
+.review-pane.compact .review-pane-header button {
+  width: 44px;
+  height: 44px;
+}
+
+.review-pane.compact .review-pane-body.has-files {
+  display: flex;
+}
+
+.review-pane.compact .review-files {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  max-height: none;
+  border: 0;
+}
+
+.review-pane.compact .review-file-list {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.review-pane.compact .review-file-list button {
+  min-height: 44px;
+}
+
+.review-pane.compact .review-file-name strong,
+.review-pane.compact .review-file-name small {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.review-pane.compact .review-pane-state {
+  overflow: auto;
+  min-height: 0;
+}
+
+.review-diff-navigation {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 12px;
+  max-height: 40%;
+  overflow: auto;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 4px 12px;
+}
+
+.review-diff-navigation button {
+  flex: none;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  padding: 0 10px;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.review-diff-navigation strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 550;
+}
+
+@media (max-width: 760px) {
+  .review-pane.compact {
+    top: 50px;
+  }
+}
+
 @media (min-width: 1121px) {
   .leyline-app.review-transcript-hidden .main-pane {
     content-visibility: hidden;

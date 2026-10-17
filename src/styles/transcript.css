@@ -42,6 +42,7 @@
 }
 
 .transcript-message:hover .turn-feedback,
+.transcript-message:focus-within .turn-feedback,
 .turn-feedback:has(.is-selected) {
   opacity: 1;
 }
@@ -653,6 +654,11 @@
   margin-bottom: 0 !important;
 }
 
+.markdown-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .markdown-body p,
 .markdown-body ul,
 .markdown-body ol,
@@ -703,6 +709,8 @@
 
 .markdown-body pre {
   overflow: auto;
+  overflow-wrap: normal;
+  word-break: normal;
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   background: #131419;
@@ -715,6 +723,38 @@
   background: transparent;
   padding: 0;
   color: #d8dbe3;
+}
+
+.markdown-body .table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 0 0 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+}
+
+.markdown-body .table-wrap > table {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-collapse: collapse;
+  font-size: 13px;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border-soft);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  background: #17181e;
+  color: var(--text);
+  font-weight: 700;
 }
 
 .markdown-body .hljs-comment,
@@ -1382,6 +1422,45 @@
 .transcript-skeleton-row .skeleton-line:nth-child(4) {
   --sk-line-offset: 260ms;
   --sk-sweep-opacity: 0.9;
+}
+
+@media (hover: none) {
+  .turn-feedback {
+    opacity: 1;
+  }
+}
+
+@media (any-pointer: coarse) {
+  .message-meta-row {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .turn-feedback {
+    margin-right: auto;
+  }
+
+  .transcript-message .copy-button,
+  .event-row .copy-button,
+  .feedback-button,
+  .feedback-note-button,
+  .feedback-note-actions button {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
+  .thinking-trigger,
+  .skill-summary,
+  .system-prompt-trigger {
+    min-height: 44px;
+  }
+}
+
+.transcript-message button:focus-visible,
+.event-row button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @keyframes skeleton-sweep {

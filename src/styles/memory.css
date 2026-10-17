@@ -421,6 +421,14 @@
   padding: 4px 0;
 }
 
+@media (pointer: coarse) {
+  .memory-search input,
+  .memory-form input,
+  .memory-form textarea {
+    font-size: 16px;
+  }
+}
+
 @media (max-width: 380px) {
   .memory-bulk-bar strong {
     flex-basis: 100%;

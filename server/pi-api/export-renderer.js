@@ -1226,8 +1226,8 @@ button, input, textarea { color: inherit; font: inherit; }
 }
 .entry-text { margin-bottom: 0 !important; }
 .markdown-body {
+  min-width: 0;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 .markdown-body p,
 .markdown-body ul,
@@ -1262,6 +1262,8 @@ button, input, textarea { color: inherit; font: inherit; }
 }
 .markdown-body pre {
   overflow: auto;
+  overflow-wrap: normal;
+  word-break: normal;
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   background: #131419;
@@ -1286,6 +1288,8 @@ button, input, textarea { color: inherit; font: inherit; }
   border: 0;
   border-collapse: collapse;
   font-size: 13px;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .markdown-body th,
 .markdown-body td {
@@ -1752,6 +1756,17 @@ button, input, textarea { color: inherit; font: inherit; }
   .assistant-message { padding-left: 0; }
   .user-message { padding: 9px 10px; }
   .tool-card-header { gap: 7px; }
+}
+@media (any-pointer: coarse) {
+  .tool-card > summary,
+  .thinking-trigger,
+  .skill-summary,
+  .system-prompt-trigger,
+  .system-prompt-inspector button,
+  .system-prompt-inspector summary {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .transcript-message,

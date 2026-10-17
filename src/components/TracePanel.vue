@@ -172,9 +172,9 @@ defineExpose({ focus })
         <summary>Capture new runs · {{ configBusy ? 'Updating…' : config ? config.enabled ? 'On' : 'Off' : 'Unavailable' }}</summary>
         <label class="trace-capture-toggle"><input type="checkbox" :checked="config?.enabled === true" :disabled="!config || configBusy" @change="updateConfig($event.target.checked)" />Capture new runs</label>
         <p>Prompts and tool results are stored locally on {{ backendName }}. Turning capture off does not delete traces or interrupt a run already being captured.</p>
+        <p>{{ config?.error ? 'Capture is unavailable for new runs.' : config?.enabled === false ? 'Capture is off for new runs.' : config?.enabled === true ? 'New runs will be captured.' : 'Capture status is unavailable.' }} Historical records are not reconstructed.</p>
       </details>
       <p v-if="configWriting">Capture change is pending on {{ backendName }}. If you close this view, reopen traces on this backend to check the result.</p>
-      <p>{{ config?.error ? 'Capture is unavailable for new runs.' : config?.enabled === false ? 'Capture is off for new runs.' : config?.enabled === true ? 'New runs will be captured.' : 'Capture status is unavailable.' }} Historical records are not reconstructed.</p>
     </footer>
   </aside>
 </template>
@@ -183,9 +183,11 @@ defineExpose({ focus })
 .trace-panel {
   position: fixed;
   z-index: 31;
-  inset: 53px 0 0 var(--sidebar-width);
+  inset: calc(var(--app-top, 0px) + 53px) 0 var(--app-bottom, 0px) var(--sidebar-width);
   display: flex;
   flex-direction: column;
+  container: trace-panel / size;
+  overflow: auto;
   min-width: 0;
   min-height: 0;
   background: var(--bg);
@@ -201,6 +203,20 @@ defineExpose({ focus })
 }
 .sidebar-hidden .trace-panel.trace-panel-inspector { left: auto; width: min(510px, 100vw); }
 .trace-panel > .elune-ui { flex: 1; height: auto; --elune-muted: #929292; }
+.trace-panel .elune-ui .elune-detail-heading h3,
+.trace-panel .elune-ui .elune-summary h3 {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+  user-select: text;
+  -webkit-user-select: text;
+}
+@container trace-panel (max-height: 520px) {
+  .trace-panel > .elune-ui { flex-shrink: 0; min-height: 360px; }
+  .trace-panel .elune-ui .elune-surface { overflow: auto; }
+  .trace-panel .elune-ui .elune-body { min-height: 180px; }
+}
 .trace-host-context {
   display: flex;
   align-items: center;
@@ -234,6 +250,6 @@ defineExpose({ focus })
 .trace-navigation-notice button { margin-left: 8px; border: 1px solid var(--border); background: var(--panel-soft); color: var(--text); font: inherit; }
 .sidebar-traces-button[aria-pressed=true] { color: #b5a0ce; background: var(--panel-soft); }
 @media (max-width: 760px) {
-  .trace-panel, .sidebar-hidden .trace-panel, .trace-panel.trace-panel-inspector, .sidebar-hidden .trace-panel.trace-panel-inspector { inset: 50px 0 0; width: 100%; border-left: 0; box-shadow: none; }
+  .trace-panel, .sidebar-hidden .trace-panel, .trace-panel.trace-panel-inspector, .sidebar-hidden .trace-panel.trace-panel-inspector { inset: calc(var(--app-top, 0px) + 50px) 0 var(--app-bottom, 0px); width: 100%; border-left: 0; box-shadow: none; }
 }
 </style>

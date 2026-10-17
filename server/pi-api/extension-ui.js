@@ -241,35 +241,52 @@ function requestExtensionConfirmation(handle, events, binding, title, message, o
   ].filter(Boolean))
   if (signal.aborted) return Promise.resolve(false)
 
+  const createdAt = Date.now()
   const request = {
     id: randomUUID(),
     title,
     message,
-    createdAt: Date.now(),
-    expiresAt: timeout === undefined ? null : Date.now() + timeout,
+    createdAt,
+    expiresAt: timeout === undefined ? null : createdAt + timeout,
   }
   return new Promise((resolve) => {
     let timer
-    const finish = (confirmed) => {
+    const finish = (confirmed, reason = 'reply') => {
       if (!binding.pending.has(request.id)) return false
-      const valid = isCurrent() && !signal.aborted
-        && (request.expiresAt === null || Date.now() < request.expiresAt)
+      const current = isCurrent()
+      const active = current && !binding.invalidated && !signal.aborted
+      const expired = request.expiresAt !== null && Date.now() >= request.expiresAt
+      const valid = active && !expired
       binding.pending.delete(request.id)
       clearTimeout(timer)
       signal.removeEventListener('abort', cancel)
-      handle.extensionUiState = {
-        ...handle.extensionUiState,
-        confirmations: (handle.extensionUiState.confirmations || [])
-          .filter((item) => item.id !== request.id),
+      if (current) {
+        const state = handle.extensionUiState
+        const notifications = active && expired && (reason === 'timeout' || reason === 'reply')
+          ? [...state.notifications.slice(-19), {
+            id: `confirmation-expired-${request.id}`,
+            requestId: request.id,
+            kind: 'confirmation-expired',
+            type: 'info',
+            message: `Confirmation "${String(request.title).slice(0, 200)}" expired. Nothing was approved.`,
+            timestamp: new Date().toISOString(),
+          }]
+          : state.notifications
+        handle.extensionUiState = {
+          ...state,
+          notifications,
+          confirmations: (state.confirmations || [])
+            .filter((item) => item.id !== request.id),
+        }
       }
       resolve(valid && confirmed === true)
-      if (isCurrent()) broadcastExtensionUi(handle, events)
+      if (current) broadcastExtensionUi(handle, events)
       return valid
     }
-    const cancel = () => finish(false)
+    const cancel = () => finish(false, 'cancel')
     const scheduleTimeout = () => {
       const remaining = request.expiresAt - Date.now()
-      if (remaining <= 0) cancel()
+      if (remaining <= 0) finish(false, 'timeout')
       else timer = setTimeout(scheduleTimeout, Math.min(remaining, 2147483647))
     }
     binding.pending.set(request.id, finish)

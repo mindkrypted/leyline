@@ -35,7 +35,11 @@ export function useSessionWorkspace({
   scrollToLatest,
   shouldFollowOutput,
   markNewOutput,
+  beforeRouteChange = () => true,
 } = {}) {
+  let routePosition = Number.isInteger(window.history.state?.leylineRoutePosition) ? window.history.state.leylineRoutePosition : 0
+  let restoringRoute = false
+  window.history.replaceState({ ...window.history.state, leylineRoutePosition: routePosition }, '')
   const sessions = ref([])
   const projectSummaries = ref([])
   const sessionsError = ref('')
@@ -527,8 +531,29 @@ export function useSessionWorkspace({
     setTimeout(() => { sessionSwitching.value = false }, 150)
   }
 
-  async function handleRouteChange() {
+  async function handleRouteChange(event) {
+    if (restoringRoute) {
+      restoringRoute = false
+      return
+    }
+    const position = window.history.state?.leylineRoutePosition
     const id = sessionIdFromRoute()
+    if (id === selectedSessionId.value) {
+      if (Number.isInteger(position)) routePosition = position
+      else {
+        routePosition += 1
+        window.history.replaceState({ ...window.history.state, leylineRoutePosition: routePosition }, '')
+      }
+      return
+    }
+    if (!beforeRouteChange()) {
+      if (Number.isInteger(position) && position !== routePosition) {
+        restoringRoute = true
+        window.history.go(routePosition - position)
+      }
+      return
+    }
+    if (Number.isInteger(position)) routePosition = position
     if (!id) {
       clearSelectedSession()
       return
@@ -563,7 +588,8 @@ export function useSessionWorkspace({
       + window.location.hash
     if (next === current) return
     const method = replaceRoute ? 'replaceState' : 'pushState'
-    window.history[method]({}, '', next)
+    if (!replaceRoute) routePosition += 1
+    window.history[method]({ ...window.history.state, leylineRoutePosition: routePosition }, '', next)
   }
 
   function scheduleSessionRefresh(activeSessionId, event) {

@@ -271,10 +271,6 @@
     grid-template-columns: 0 minmax(0, 1fr) 0;
   }
 
-  .review-pane,
-  .review-toggle-button {
-    display: none;
-  }
 }
 
 @media (min-width: 761px) and (max-height: 520px) {
@@ -301,7 +297,6 @@
     --start-composer-width: calc(100vw - 24px);
     --empty-session-composer-width: calc(100vw - 24px);
     --docked-composer-width: calc(100vw - 20px);
-    --terminal-drawer-height: min(46vh, 310px);
   }
 
   .leyline-app,
@@ -406,7 +401,7 @@
   }
 
   .main-pane {
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
     width: 100vw;
   }
 
@@ -517,9 +512,7 @@
     padding: 0;
   }
 
-  .topbar-icon-count,
-  .review-pane,
-  .review-toggle-button {
+  .topbar-icon-count {
     display: none;
   }
 
@@ -829,7 +822,7 @@
   }
 
   .terminal-header {
-    grid-template-columns: auto 1fr auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     gap: 7px;
   }
 }
@@ -1075,5 +1068,262 @@
   .composer-actions.has-ultrafast > .small-picker {
     min-width: 0;
     flex: 1 1 0;
+  }
+}
+
+.header-more-button {
+  display: none;
+}
+
+.header-utilities {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.event-log-row {
+  cursor: pointer;
+  list-style: none;
+}
+
+.event-log-row::-webkit-details-marker {
+  display: none;
+}
+
+.event-log-detail {
+  padding: 8px 0 14px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.event-log-detail button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  padding: 7px 10px;
+}
+
+.terminal-header {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+}
+
+.terminal-header .terminal-keys-toggle {
+  font-size: 12px;
+}
+
+.terminal-panel:has(.terminal-keys) {
+  z-index: 6;
+  overflow: visible;
+}
+
+.terminal-keys {
+  position: absolute;
+  right: 8px;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.terminal-keys button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+
+.memory-drawer-slot,
+.settings-drawer-slot,
+.project-detail-drawer-slot,
+.event-log-slot,
+.confirm-backdrop,
+.project-browser-backdrop,
+.sidebar-navigator-backdrop,
+.session-actions-backdrop,
+.global-settings-backdrop,
+.tool-fullscreen-backdrop {
+  top: var(--app-top, 0px);
+  bottom: var(--app-bottom, 0px);
+}
+
+.trace-panel,
+.review-pane.compact {
+  top: calc(var(--app-top, 0px) + 53px);
+  bottom: var(--app-bottom, 0px);
+}
+
+@container composer (max-width: 520px) {
+  .composer-actions {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .composer-actions > .model-picker {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .composer-actions .model-picker-button {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .composer-actions .ultrafast-toggle {
+    flex: none;
+    width: auto;
+  }
+
+  .composer-row-spacer {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .leyline-app.sidebar-open.sidebar-hidden .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar {
+    top: var(--app-top, 0px);
+    bottom: var(--app-bottom, 0px);
+  }
+
+  .header-more-button {
+    display: grid;
+    width: 44px;
+    height: 44px;
+  }
+
+  .header-utilities {
+    display: none;
+  }
+
+  .header-utilities.open {
+    position: fixed;
+    z-index: 60;
+    top: calc(var(--app-top, 0px) + 50px);
+    right: 8px;
+    display: grid;
+    gap: 2px;
+    width: min(260px, calc(100vw - 16px));
+    max-height: calc(var(--app-height, 100dvh) - 60px);
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    padding: 6px;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 40%);
+  }
+
+  .header-utilities .topbar-icon-button {
+    display: flex;
+    justify-content: flex-start;
+    gap: 12px;
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    padding: 10px;
+    font-size: 13px;
+    text-align: left;
+    text-decoration: none;
+  }
+
+  .header-utilities .topbar-icon-button::after {
+    content: attr(aria-label);
+  }
+
+  .header-utilities .review-toggle-button::after {
+    content: 'Review changes';
+  }
+
+  .header-utilities .topbar-icon-button svg {
+    flex: none;
+  }
+
+  .trace-panel,
+  .sidebar-hidden .trace-panel,
+  .trace-panel.trace-panel-inspector,
+  .sidebar-hidden .trace-panel.trace-panel-inspector,
+  .review-pane.compact {
+    top: calc(var(--app-top, 0px) + 50px);
+    bottom: var(--app-bottom, 0px);
+  }
+}
+
+@media (any-pointer: coarse) {
+  .leyline-app input:not([type='checkbox']):not([type='radio']),
+  .leyline-app textarea,
+  .leyline-app select,
+  .global-settings-modal input:not([type='checkbox']):not([type='radio']),
+  .global-settings-modal textarea,
+  .global-settings-modal select,
+  .sidebar-navigator-dialog input,
+  .project-browser-modal input {
+    font-size: 16px;
+  }
+
+  .composer-send-menu-toggle,
+  .confirm-actions button,
+  .activity-result-actions button,
+  .terminal-header button,
+  .event-log-detail button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .attachment-chip {
+    display: flex;
+    width: 116px;
+  }
+
+  .attachment-chip .attachment-preview-button {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .attachment-chip .attachment-remove-button {
+    position: static;
+    flex: none;
+    width: 44px;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .terminal-header {
+    height: 44px;
+  }
+
+  .terminal-frame {
+    height: max(0px, calc(100% - 44px));
+  }
+}
+
+@media (max-height: 520px) and (any-pointer: coarse) {
+  .leyline-app .composer textarea,
+  .leyline-app .start-composer textarea {
+    height: 48px;
+    min-height: 48px;
+    max-height: 64px;
+    padding-top: 8px;
+  }
+
+  .composer-context-row {
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition-duration: 1ms;
   }
 }

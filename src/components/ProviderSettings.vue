@@ -495,13 +495,15 @@ function selectModelSection(section) {
   if (modelBody.value) modelBody.value.scrollTop = 0
 }
 
-async function toggleCatalog(open) {
+async function toggleCatalog(open, event) {
   if (locked.value) return
   catalogOpen.value = open
   if (open && !catalogQuery.value) catalogQuery.value = draft.value.values.id || draft.value.values.name
   await nextTick()
   if (open) {
-    catalogSearch.value?.focus({ preventScroll: true })
+    if (event?.detail === 0 || !window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+      catalogSearch.value?.focus({ preventScroll: true })
+    }
     if (catalogQuery.value.trim() && !catalogResults.value.length && !catalogLoading.value) void searchCatalog(false)
   } else catalogLookupButton.value?.focus({ preventScroll: true })
 }
@@ -598,7 +600,7 @@ function beginAction(action, authType, model) {
   const target = { ...props.target }
   const body = { providerId: provider.id, action, ...(authType ? { authType } : {}), ...(model ? { modelId: model.id } : {}) }
   const labels = { login: 'Sign in', logout: 'Sign out', refresh: 'Refresh catalog', test: 'Test connection' }
-  operationOwner.value = { id: provider.id, action, generation, title: `${model?.name || provider.name} · ${labels[action]}` }
+  operationOwner.value = { id: provider.id, action, generation, title: `${model ? `${model.name} (${model.id})` : provider.name} · ${labels[action]}` }
   void start((baseUrl) => runProviderSettingsAction(target, body, baseUrl))
 }
 
@@ -754,9 +756,9 @@ function metadataRows(value) {
               <p class="settings-note">{{ selected?.name }} · {{ draft.values.id || 'New model' }}</p>
               <h4>{{ catalogOpen ? 'Find a model configuration' : draft.kind === 'override' ? 'Edit catalog overrides' : draft.create ? 'Add a custom model' : 'Edit custom model' }}</h4>
             </div>
-            <button v-if="!catalogOpen" ref="catalogLookupButton" type="button" class="pi-settings-button" :disabled="locked" @click="toggleCatalog(true)">Find in catalog</button>
+            <button v-if="!catalogOpen" ref="catalogLookupButton" type="button" class="pi-settings-button" :disabled="locked" @click="toggleCatalog(true, $event)">Find in catalog</button>
           </header>
-          <template v-if="catalogOpen">
+          <div v-if="catalogOpen" class="pi-settings-catalog-body">
             <div class="pi-settings-catalog-search">
               <input ref="catalogSearch" v-model="catalogQuery" type="search" aria-label="Search catalog" placeholder="Model name or ID" maxlength="256" :disabled="locked" :readonly="catalogLoading" spellcheck="false" @keydown.enter.prevent="searchCatalog(false)" />
               <button type="button" class="pi-settings-button" :disabled="locked || catalogLoading" @click="searchCatalog(false)">{{ catalogLoading ? 'Searching…' : 'Search' }}</button>
@@ -769,7 +771,7 @@ function metadataRows(value) {
             <label v-if="catalogResults.length" class="pi-settings-field pi-settings-catalog-picker">
               <span>Catalog match</span>
               <select :value="catalogSelected" :disabled="locked || catalogLoading" @change="selectCatalog(catalogResults.find((entry) => `${entry.providerId}/${entry.id}` === $event.target.value))">
-                <option v-for="entry in catalogResults" :key="`${entry.providerId}/${entry.id}`" :value="`${entry.providerId}/${entry.id}`">{{ providerName(entry.providerId) }} · {{ entry.name }}</option>
+                <option v-for="entry in catalogResults" :key="`${entry.providerId}/${entry.id}`" :value="`${entry.providerId}/${entry.id}`">{{ entry.id }} · {{ providerName(entry.providerId) }} · {{ entry.name }}</option>
               </select>
             </label>
             <div class="pi-settings-catalog" :aria-busy="catalogLoading">
@@ -794,6 +796,7 @@ function metadataRows(value) {
               <div class="pi-settings-catalog-review">
                 <template v-if="catalogEntry">
                   <h4>{{ providerName(catalogEntry.providerId) }} · {{ catalogEntry.name }}</h4>
+                  <p class="pi-settings-catalog-source">Source model ID: <code>{{ catalogEntry.id }}</code></p>
                   <p class="settings-note">Provider-specific settings. Check that these values match your endpoint.</p>
                   <label class="pi-settings-catalog-check">
                     <input v-model="catalogCopyModel" type="checkbox" :disabled="locked || catalogLoading || !catalogModelRows.length" />
@@ -828,7 +831,7 @@ function metadataRows(value) {
                 <p v-else class="pi-settings-empty">{{ catalogLoading ? 'Searching the backend catalog…' : 'Choose a catalog entry to review its fields. You can also return to the editor and configure them manually.' }}</p>
               </div>
             </div>
-          </template>
+          </div>
           <template v-else>
             <nav ref="modelNav" class="pi-settings-tabs pi-settings-model-tabs" aria-label="Model editor sections">
               <button v-for="section in modelSections" :key="section.id" type="button" :class="{ active: modelSection === section.id }" :aria-current="modelSection === section.id ? 'page' : undefined" @click="selectModelSection(section.id)">{{ section.label }}</button>
@@ -975,11 +978,12 @@ function metadataRows(value) {
           <div v-for="model in visibleModels" :key="model.id" class="pi-settings-model-row">
             <div class="pi-settings-model-info">
               <strong>{{ model.name }}</strong>
-              <small :title="model.id">{{ modelSummary(model) }}</small>
+              <small class="pi-settings-model-id">{{ model.id }}</small>
+              <small>{{ modelSummary(model) }}</small>
             </div>
             <div class="pi-settings-model-actions">
-              <button type="button" class="pi-settings-text-button" :disabled="locked || busy || Boolean(selected.error)" :aria-label="`Test connection to ${model.name}`" @click="beginAction('test', undefined, model)">Test connection</button>
-              <button type="button" class="pi-settings-text-button" :disabled="locked || !writable" :aria-label="`${model.kind === 'catalog' ? 'Override' : 'Edit'} ${model.name}`" @click="editModel(model)">{{ model.kind === 'catalog' ? 'Override' : 'Edit' }}</button>
+              <button type="button" class="pi-settings-text-button" :disabled="locked || busy || Boolean(selected.error)" :aria-label="`Test connection to ${model.name} (${model.id})`" @click="beginAction('test', undefined, model)">Test connection</button>
+              <button type="button" class="pi-settings-text-button" :disabled="locked || !writable" :aria-label="`${model.kind === 'catalog' ? 'Override' : 'Edit'} ${model.name} (${model.id})`" @click="editModel(model)">{{ model.kind === 'catalog' ? 'Override' : 'Edit' }}</button>
             </div>
           </div>
         </div>

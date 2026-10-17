@@ -1,8 +1,11 @@
 .leyline-app {
+  position: fixed;
+  inset: var(--app-top, 0px) 0 auto;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr) 0;
   grid-template-rows: 53px minmax(0, 1fr);
   height: 100vh;
+  height: var(--app-height, 100dvh);
   background: var(--bg);
   transition: grid-template-columns var(--motion-base) var(--ease-standard);
 }

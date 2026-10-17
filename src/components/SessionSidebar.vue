@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { backendDisplayAddress } from '../lib/backend'
 import { sessionTime } from '../lib/format'
+import { useModalFocus } from '../composables/useModalFocus'
 
 const props = defineProps({
   activityActionError: {
@@ -50,6 +51,10 @@ const props = defineProps({
   navigator: {
     type: String,
     default: '',
+  },
+  navigatorFocusActive: {
+    type: Boolean,
+    default: true,
   },
   newSessionCwd: {
     type: String,
@@ -153,6 +158,13 @@ const backendMenu = ref(null)
 const backendMenuOpen = ref(false)
 const projectControl = ref(null)
 const navigatorSearch = ref(null)
+const navigatorDialog = ref(null)
+const navigatorOpener = ref(null)
+const navigatorSearchFocus = ref(null)
+const sessionActionTarget = ref(null)
+const sessionActionOpener = ref(null)
+const sessionActionDialog = ref(null)
+const sessionActionsOpen = computed(() => Boolean(sessionActionTarget.value))
 const navigatorQuery = ref('')
 const sessionQuery = ref('')
 const navigationProjectCwd = ref('')
@@ -190,7 +202,24 @@ const sessionFullFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
-let navigatorOpener = null
+useModalFocus({
+  dialog: navigatorDialog,
+  active: () => props.navigatorFocusActive
+    && (props.navigator === 'quick' || props.navigator === 'activity'),
+  opener: navigatorOpener,
+  fallbackSelector: '[aria-label="Open sessions"]',
+  initialFocus: () => (navigatorSearchFocus.value
+    ?? !window.matchMedia('(hover: none), (pointer: coarse)').matches)
+    ? navigatorSearch.value : navigatorDialog.value,
+})
+
+useModalFocus({
+  dialog: sessionActionDialog,
+  active: () => props.navigatorFocusActive && sessionActionsOpen.value && !props.navigator,
+  opener: sessionActionOpener,
+  fallbackSelector: '[aria-label="Open sessions"]',
+})
+
 let pendingPinFocusId = null
 let sessionResizeObserver
 
@@ -292,16 +321,12 @@ watch(
 
 watch(
   () => props.navigator,
-  async (navigator, previous) => {
+  (navigator, previous) => {
     if (navigator !== previous) navigatorQuery.value = ''
-    if (navigator === 'quick' || navigator === 'activity') {
-      await nextTick()
-      navigatorSearch.value?.focus()
-      return
-    }
-    if (!navigator && previous && navigatorOpener?.isConnected) {
-      await nextTick()
-      navigatorOpener.focus()
+    if (navigator) closeSessionActions()
+    else {
+      navigatorOpener.value = null
+      navigatorSearchFocus.value = null
     }
   },
 )
@@ -598,6 +623,7 @@ watch(
   () => [currentProject.value?.cwd || '', sessionQuery.value],
   async ([cwd], [previousCwd] = []) => {
     pendingPinFocusId = null
+    closeSessionActions()
     if (cwd !== previousCwd) sessionQuery.value = ''
     sessionScrollTop.value = 0
     await nextTick()
@@ -617,6 +643,8 @@ watch(
     scrollSelectedSessionIntoView()
   },
 )
+
+watch(() => props.selectedSessionId, closeSessionActions)
 
 watch(
   () => props.pinnedVersion,
@@ -642,7 +670,9 @@ watch(
       `[data-session-id="${CSS.escape(id)}"]`,
     )
     if (!row) return
-    const pinButton = row.querySelector('.session-pin-button')
+    const actionButton = row.querySelector('.session-row-actions-button')
+    const pinButton = actionButton?.getClientRects().length
+      ? actionButton : row.querySelector('.session-pin-button')
     pinButton?.focus({ preventScroll: true })
     if (document.activeElement !== pinButton) {
       row.querySelector('.session-link')?.focus({ preventScroll: true })
@@ -730,15 +760,34 @@ function closeMenusOnOutsideClick(event) {
 }
 
 function openNavigator(navigator, event) {
-  navigatorOpener = event?.currentTarget || null
+  navigatorOpener.value = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget : document.activeElement
+  navigatorSearchFocus.value = event
+    ? event.type === 'keydown' || event.detail === 0 || (event.pointerType !== 'touch'
+      && !window.matchMedia('(hover: none), (pointer: coarse)').matches)
+    : null
   navigatorQuery.value = ''
   backendMenuOpen.value = false
+  closeSessionActions()
   emit('update:navigator', navigator)
 }
 
 function closeNavigator() {
+  if (props.navigator === 'actions') navigatorOpener.value?.focus({ preventScroll: true })
   emit('update:navigator', '')
 }
+
+function openSessionActions(session, event) {
+  sessionActionOpener.value = event.currentTarget
+  sessionActionTarget.value = session
+  backendMenuOpen.value = false
+}
+
+function closeSessionActions() {
+  sessionActionTarget.value = null
+}
+
+defineExpose({ openNavigator, closeSessionActions, sessionActionsOpen })
 
 function isNewWindowClick(event) {
   return Boolean(
@@ -1221,6 +1270,20 @@ const vFocusSelect = {
                       :title="sessionFullTime(item.session)"
                     >{{ sessionListTime(item.session) }}</time>
                   </button>
+                  <button
+                    class="session-row-actions-button"
+                    type="button"
+                    :aria-label="`Actions for ${sessionTitle(item.session)}`"
+                    aria-haspopup="dialog"
+                    :aria-expanded="sessionActionTarget?.id === item.session.id"
+                    @click.stop="openSessionActions(item.session, $event)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="3.5" cy="8" r="1"></circle>
+                      <circle cx="8" cy="8" r="1"></circle>
+                      <circle cx="12.5" cy="8" r="1"></circle>
+                    </svg>
+                  </button>
                   <div class="session-actions">
                     <button
                       class="session-pin-button"
@@ -1477,15 +1540,53 @@ const vFocusSelect = {
 
     <Teleport to="body">
       <div
+        v-if="sessionActionTarget"
+        class="session-actions-backdrop"
+        @click.self="closeSessionActions"
+      >
+        <section
+          ref="sessionActionDialog"
+          class="session-actions-menu"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="session-actions-title"
+          tabindex="-1"
+          @keydown.esc.stop.prevent="closeSessionActions"
+        >
+          <header>
+            <strong id="session-actions-title">{{ sessionTitle(sessionActionTarget) }}</strong>
+            <button type="button" aria-label="Close session actions" @click="closeSessionActions">×</button>
+          </header>
+          <button
+            type="button"
+            :disabled="!pinsReady || isPinPending(sessionActionTarget)"
+            @click="togglePin(sessionActionTarget); closeSessionActions()"
+          >{{ isPinned(sessionActionTarget) ? 'Unpin session' : 'Pin session' }}</button>
+          <button
+            type="button"
+            :disabled="renamingSessionSavingId === sessionActionTarget.id"
+            @click="beginRename(sessionActionTarget); closeSessionActions()"
+          >Rename session</button>
+          <button
+            class="destructive"
+            type="button"
+            :disabled="deletingSessionId === sessionActionTarget.id"
+            @click="emit('request-delete-session', sessionActionTarget); closeSessionActions()"
+          >Delete session</button>
+        </section>
+      </div>
+      <div
         v-if="navigator === 'quick' || navigator === 'activity'"
         class="sidebar-navigator-backdrop"
         @mousedown.self="closeNavigator"
       >
         <section
+          ref="navigatorDialog"
           class="sidebar-navigator-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="sidebar-navigator-title"
+          tabindex="-1"
         >
           <header class="sidebar-navigator-header">
             <div>
@@ -1516,6 +1617,7 @@ const vFocusSelect = {
             <input
               ref="navigatorSearch"
               v-model="navigatorQuery"
+              :aria-label="navigator === 'activity' ? 'Search active sessions' : 'Search sessions or projects'"
               :placeholder="navigator === 'activity'
                 ? 'Search active sessions'
                 : 'Search sessions or projects'"
@@ -1679,3 +1781,118 @@ const vFocusSelect = {
     </Teleport>
   </aside>
 </template>
+
+<style scoped>
+.session-row-actions-button {
+  display: none;
+}
+
+.session-actions-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 38;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 45%);
+}
+
+.session-actions-menu {
+  display: grid;
+  width: min(320px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 8px;
+}
+
+.session-actions-menu header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 12px;
+}
+
+.session-actions-menu strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.session-actions-menu button {
+  min-width: 44px;
+  min-height: 44px;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.session-actions-menu button:hover,
+.session-actions-menu button:focus-visible {
+  background: var(--panel-soft);
+}
+
+.session-actions-menu button:disabled {
+  opacity: 0.45;
+}
+
+.session-actions-menu .destructive {
+  color: #fca5a5;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .project-session-row .session-actions {
+    display: none;
+  }
+
+  .project-session-row.session .session-link {
+    width: calc(100% - 36px);
+    padding-right: 7px;
+  }
+
+  .project-session-row.session .session-time,
+  .project-session-row.session .session-status {
+    display: block;
+  }
+
+  .session-row-actions-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted-strong);
+  }
+
+  .session-row-actions-button svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+
+  .session-row-actions-button:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: -2px;
+  }
+
+  .sidebar-session-search input,
+  .sidebar-navigator-search input,
+  .project-session-row .session-title-input {
+    font-size: 16px;
+  }
+}
+</style>

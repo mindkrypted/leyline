@@ -37,6 +37,8 @@ import { useComposerMotion } from './composables/useComposerMotion'
 import { useFileLinks } from './composables/useFileLinks'
 import { useLiveTurnProjection } from './composables/useLiveTurnProjection'
 import { useMemoryInspector } from './composables/useMemoryInspector'
+import { useModalFocus } from './composables/useModalFocus'
+import { useVisibleViewport } from './composables/useVisibleViewport'
 import { usePinnedSessions } from './composables/usePinnedSessions'
 import { useProjectBrowser } from './composables/useProjectBrowser'
 import { useRuntimeEvents } from './composables/useRuntimeEvents'
@@ -80,6 +82,31 @@ import {
   toolCommandCode,
 } from './lib/transcript'
 
+const viewport = useVisibleViewport()
+const sidebarRef = ref(null)
+const mainPane = ref(null)
+const imageDialog = ref(null)
+const toolDialog = ref(null)
+const imageOpener = shallowRef(null)
+const toolOpener = shallowRef(null)
+const reviewPane = ref(null)
+const reviewOpener = shallowRef(null)
+const headerMoreOpen = ref(false)
+const headerActions = ref(null)
+const headerMoreButton = ref(null)
+const composerImageInput = ref(null)
+const composerReadPending = ref(false)
+const compositionInputs = new WeakMap()
+let imageChooser = null
+let layoutObserver
+let layoutFrame = 0
+const terminalHeightBudget = ref(310)
+const confirmationMaxHeight = ref(320)
+const terminalKeysOpen = ref(false)
+const terminalKeys = [
+  ['interrupt', 'Ctrl-C'], ['escape', 'Esc'], ['tab', 'Tab'],
+  ['left', 'Left'], ['down', 'Down'], ['up', 'Up'], ['right', 'Right'],
+]
 const sidebarOpen = ref(false)
 const sidebarNavigator = ref('')
 const desktopSidebarHidden = ref(false)
@@ -232,7 +259,7 @@ const researchEnabled = computed(() => {
   return activeBackendConnectionInfo.value?.capabilities?.research === true
 })
 const reviewAvailable = computed(() => {
-  return reviewEnabled.value && reviewDesktopAvailable.value
+  return reviewEnabled.value
 })
 const reviewHasLineStats = computed(() => {
   const summary = reviewSummary.value
@@ -298,6 +325,7 @@ const {
   terminalOpen,
   terminalStatus,
   resizeTerminal,
+  sendKey,
   toggleTerminal,
   startTerminalResize,
   stopTerminalResize,
@@ -305,7 +333,8 @@ const {
   setTerminalDrawerHeight,
   terminalDrawerHeight,
   disposeTerminalResize,
-} = useTerminal()
+} = useTerminal({ maxHeight: terminalHeightBudget })
+const terminalCompact = computed(() => terminalDrawerHeight.value < 70)
 const initPhaseFloorMs = 340
 
 const selectedSessionExportUrl = computed(() => {
@@ -380,6 +409,7 @@ const sessionWorkspace = useSessionWorkspace({
   scrollToLatest,
   shouldFollowOutput,
   markNewOutput,
+  beforeRouteChange: prepareRouteChange,
 })
 const {
   activeGoal,
@@ -493,7 +523,7 @@ const composerMotion = useComposerMotion({
   sessionComposer: composerRef,
   workbench,
   homeVisible: homeComposerVisible,
-  isSessionVisible: () => !homeComposerVisible.value || extensionConfirmations.value.length > 0,
+  isSessionVisible: () => !homeComposerVisible.value || extensionConfirmations.value.length > 0 || confirmationPanelHeight.value > 0,
   onReveal(kind) {
     if (kind !== 'home') return
     finishStartupRun()
@@ -532,6 +562,7 @@ const selectedResearch = computed(() => {
     || null
 })
 const isResearchSession = computed(() => Boolean(selectedResearch.value))
+const canInspectResearch = computed(() => Boolean(selectedResearch.value?.sourceCount || selectedResearch.value?.invalidLinks?.length))
 const researchReportNeedsRepair = computed(() => {
   return selectedResearch.value?.status === 'error'
     && selectedResearch.value?.phase === 'report'
@@ -591,16 +622,16 @@ watch(researchEnabled, (enabled) => {
 watch(
   () => [
     selectedSessionId.value,
-    selectedResearch.value?.sourceCount || 0,
+    canInspectResearch.value,
   ],
-  ([sessionId, sourceCount], [previousSessionId] = []) => {
+  ([sessionId, canInspect], [previousSessionId] = []) => {
     if (sessionId !== previousSessionId) {
       closeResearchCitationPreview()
       if (researchSourcesDismissedSessionId !== sessionId) {
         researchSourcesDismissedSessionId = ''
       }
     }
-    if (!selectedResearch.value || !sourceCount) {
+    if (!canInspect) {
       researchSourcesOpen.value = false
       closeResearchCitationPreview()
       return
@@ -681,7 +712,7 @@ const {
   fullscreenToolMarkdown,
   isToolExpanded,
   toggleTool,
-  openToolFullscreen,
+  openToolFullscreen: showToolFullscreen,
   closeToolFullscreen,
   isSkillExpanded,
   toggleSkill,
@@ -760,8 +791,8 @@ const {
   closeMemoryDrawer,
   confirmDiscardMemoryChanges,
   loadVisibleMemory,
-  createMemory,
-  updateMemory,
+  memoryTarget,
+  saveMemory,
   archiveMemories,
   restoreMemories,
   deleteMemories,
@@ -907,6 +938,15 @@ const extensionConfirmations = computed(() => {
   if (!selectedSessionId.value || runtime?.id !== selectedSessionId.value) return []
   return runtime.state?.extensionUi?.confirmations || []
 })
+const extensionConfirmationNotices = computed(() => {
+  const runtime = activeRuntimeSession.value
+  if (runtime?.id !== selectedSessionId.value) return []
+  return (runtime.state?.extensionUi?.notifications || []).filter(notice => notice.kind === 'confirmation-expired')
+})
+const goalStatusLabel = computed(() => ({
+  complete: 'Complete', budget_limited: 'Token budget reached',
+  continuation_limited: 'Continuation limit reached', paused: 'Paused',
+})[activeGoal.value?.status] || '')
 const goalBudgetLabel = computed(() => {
   const goal = activeGoal.value
   if (!goal) return ''
@@ -1223,7 +1263,42 @@ watch(composerScannerSourceActive, (active, wasActive) => {
   }, 420)
 })
 
+const activeFocusScope = computed(() => {
+  if (settingsOpen.value || filePreview.value || fileMenu.value || projectBrowserOpen.value || deleteConfirmProject.value || deleteConfirmSession.value) return 'external'
+  if (fullscreenImage.value) return 'image'
+  if (fullscreenTool.value) return 'tool'
+  if (['quick', 'activity'].includes(sidebarNavigator.value) || sidebarRef.value?.sessionActionsOpen) return 'sidebar'
+  if (!reviewDesktopAvailable.value && reviewOpen.value) return 'review'
+  if (headerMoreOpen.value) return 'header'
+  return ''
+})
+const workbenchDialogOpen = computed(() => ['image', 'tool', 'sidebar', 'review'].includes(activeFocusScope.value))
+useModalFocus({ dialog: imageDialog, active: () => activeFocusScope.value === 'image', opener: imageOpener, initialFocus: imageDialog, fallbackSelector: '.header-more-button, .brand-home' })
+useModalFocus({ dialog: toolDialog, active: () => activeFocusScope.value === 'tool', opener: toolOpener, initialFocus: toolDialog, fallbackSelector: '.header-more-button, .brand-home' })
+useModalFocus({ dialog: () => !reviewDesktopAvailable.value && reviewOpen.value ? reviewPane.value?.element : null, active: () => activeFocusScope.value === 'review', opener: reviewOpener, fallbackSelector: '.header-more-button, .review-toggle-button' })
+useModalFocus({ dialog: () => headerMoreOpen.value ? headerActions.value : null, active: () => activeFocusScope.value === 'header', opener: headerMoreButton, fallbackSelector: '.header-more-button' })
+
+function measureDockSpace() {
+  cancelAnimationFrame(layoutFrame)
+  layoutFrame = requestAnimationFrame(() => {
+    if (!mainPane.value || !composerFrameRef.value) return
+    const chrome = mainPane.value.querySelector('.runtime-chrome')?.offsetHeight || 0
+    const height = mainPane.value.clientHeight - chrome
+    const composer = composerFrameRef.value.offsetHeight
+    const available = Math.max(0, height - composer - 34)
+    confirmationMaxHeight.value = Math.max(44, Math.min(320, available - (terminalOpen.value ? 48 : 0)))
+    const confirmation = Math.min(confirmationPanelHeight.value, confirmationMaxHeight.value)
+    terminalHeightBudget.value = Math.max(44, available - (confirmation ? confirmation + 12 : 0))
+  })
+}
+watch([viewport, terminalOpen, confirmationPanelHeight, activeGoal, selectedResearch], measureDockSpace)
+watch(terminalOpen, open => { if (!open) terminalKeysOpen.value = false })
+
 onMounted(async () => {
+  layoutObserver = new ResizeObserver(measureDockSpace)
+  if (mainPane.value) layoutObserver.observe(mainPane.value)
+  if (composerFrameRef.value) layoutObserver.observe(composerFrameRef.value)
+  measureDockSpace()
   reviewDesktopQuery = window.matchMedia('(min-width: 1121px)')
   reviewDesktopAvailable.value = reviewDesktopQuery.matches
   reviewDesktopQuery.addEventListener('change', handleReviewDesktopChange)
@@ -1231,6 +1306,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown, true)
   window.addEventListener('click', closeMenusOnOutsideClick)
   window.addEventListener('popstate', handleRouteChange)
+  window.addEventListener('hashchange', handleRouteChange)
   window.addEventListener('leyline:new-session', handleNativeNewSession)
   window.addEventListener('leyline:toggle-terminal', handleNativeToggleTerminal)
   window.addEventListener('leyline:open-settings', handleNativeOpenSettings)
@@ -1257,11 +1333,14 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  layoutObserver?.disconnect()
+  cancelAnimationFrame(layoutFrame)
   reviewDesktopQuery?.removeEventListener('change', handleReviewDesktopChange)
   systemPromptViewport.removeEventListener('change', updateSystemPromptViewport)
   window.removeEventListener('keydown', handleGlobalKeydown, true)
   window.removeEventListener('click', closeMenusOnOutsideClick)
   window.removeEventListener('popstate', handleRouteChange)
+  window.removeEventListener('hashchange', handleRouteChange)
   window.removeEventListener('leyline:new-session', handleNativeNewSession)
   window.removeEventListener('leyline:toggle-terminal', handleNativeToggleTerminal)
   window.removeEventListener('leyline:open-settings', handleNativeOpenSettings)
@@ -1464,7 +1543,11 @@ async function createSessionForCwd(cwd, options = {}) {
 }
 
 async function selectSession(session, options, traceRevision) {
-  if (memoryDirty.value && !confirmDiscardMemoryChanges()) return
+  if (settingsOpen.value && !confirmPiSettingsLeave()) return
+  if (!confirmDiscardMemoryChanges()) return
+  settingsOpen.value = false
+  memoryOpen.value = false
+  headerMoreOpen.value = false
   if (traceRevision !== traceViewRevision) resetTracing()
   sidebarNavigator.value = ''
   await workspaceSelectSession(session, options)
@@ -1643,9 +1726,25 @@ function openMobileSidebar() {
   sidebarOpen.value = true
 }
 
-function handleRouteChange() {
+function prepareRouteChange() {
+  if (settingsOpen.value && !confirmPiSettingsLeave()) return false
+  if (!confirmDiscardMemoryChanges()) return false
+  settingsOpen.value = false
+  memoryOpen.value = false
+  sidebarNavigator.value = ''
+  sidebarOpen.value = false
+  sidebarRef.value?.closeSessionActions()
+  headerMoreOpen.value = false
+  terminalKeysOpen.value = false
+  closeImageFullscreen()
+  closeToolFullscreen()
+  closeReview(true)
   resetTracing()
-  return workspaceHandleRouteChange()
+  return true
+}
+
+function handleRouteChange(event) {
+  return workspaceHandleRouteChange(event)
 }
 
 function handleNativeNewSession(event) {
@@ -1889,7 +1988,7 @@ async function closeSystemPrompt(restoreFocus = true) {
 }
 
 function openResearchSources() {
-  if (!selectedResearch.value?.sourceCount) return
+  if (!canInspectResearch.value) return
   closeSystemPrompt(false)
   closeResearchCitationPreview()
   closeReview(true)
@@ -1898,6 +1997,7 @@ function openResearchSources() {
 }
 
 function closeResearchSources(dismiss = true) {
+  if (researchCitationPreview.value?.origin === 'ledger') closeResearchCitationPreview()
   researchSourcesOpen.value = false
   if (dismiss) researchSourcesDismissedSessionId = selectedSessionId.value
 }
@@ -1918,15 +2018,16 @@ async function openResearchSource(payload) {
   const id = Number(payload?.id || 0)
   const source = selectedResearch.value?.sources?.find((item) => {
     return item.id === id
-  }) || payload?.source
+  })
   if (!source || !payload?.rect) return
-  const paneWasOpen = researchSourcesOpen.value
+  const ledger = payload.origin === 'ledger'
+  const paneWasOpen = (!ledger && researchSourcesOpen.value)
     || reviewOpen.value
     || reviewClosing.value
     || !!systemPromptEntry.value
   closeSystemPrompt(false)
   closeReview(true)
-  closeResearchSources(false)
+  if (!ledger) closeResearchSources(false)
   closeResearchCitationPreview()
   const token = researchCitationPreviewToken
   researchCitationAnchor = payload.anchor || null
@@ -1948,11 +2049,13 @@ async function openResearchSource(payload) {
       top: anchorRect.top,
       width: anchorRect.width,
     },
+    origin: ledger ? 'ledger' : 'citation',
     source,
   }
 }
 
 function openReview() {
+  reviewOpener.value = document.activeElement
   closeSystemPrompt(false)
   closeResearchCitationPreview()
   closeResearchSources(true)
@@ -2053,6 +2156,7 @@ function toggleReviewExpanded() {
 }
 
 function navigateHome() {
+  if (!prepareRouteChange()) return
   resetTracing()
   clearPendingWorkspaceTargets()
   workspaceNavigateHome()
@@ -2687,6 +2791,7 @@ function composerDraftState(key) {
 
 function moveComposerDraft(sourceKey, sessionId) {
   const targetKey = composerDraftKey(sessionId)
+  if (imageChooser?.key === sourceKey) imageChooser.key = targetKey
   const state = composerDraftState(sourceKey)
   for (const paste of pendingComposerPastes) {
     if (paste.valid && paste.key === sourceKey) paste.key = targetKey
@@ -2730,6 +2835,7 @@ async function settleComposerPastes(key) {
 
 function discardComposerDraft(sessionId) {
   const key = composerDraftKey(sessionId)
+  if (imageChooser?.key === key) imageChooser = null
   for (const paste of pendingComposerPastes) {
     if (paste.key === key) paste.valid = false
   }
@@ -2768,6 +2874,14 @@ function restoreComposerEdit(key, entry, text, images) {
 }
 
 async function submitDraft(streamingBehavior) {
+  if (composerReadPending.value) return
+  const owner = activeComposerDraftKey
+  if (hasPendingComposerPastes(owner)) {
+    composerReadPending.value = true
+    try { await settleComposerPastes(owner) }
+    finally { composerReadPending.value = false }
+    if (owner !== activeComposerDraftKey) return
+  }
   const submittedDraft = draft.value
   const text = submittedDraft.trim()
   const submittedAttachments = attachedImages.value
@@ -3382,22 +3496,62 @@ function handleSlashPickerKeydown(event) {
   return false
 }
 
+function handleComposerCompositionStart(event) {
+  compositionInputs.set(event.target, { key: activeComposerDraftKey, composing: true })
+}
+
+function handleComposerCompositionEnd(event) {
+  const state = compositionInputs.get(event.target)
+  if (!state) return
+  setTimeout(() => { if (compositionInputs.get(event.target) === state) state.composing = false }, 0)
+}
+
+function handleComposerInputBlur(event) {
+  compositionInputs.delete(event.target)
+}
+
+function isComposingInput(event) {
+  return event.isComposing || event.keyCode === 229 || compositionInputs.get(event.target)?.composing
+}
+
 function handleComposerKeydown(event) {
+  if (isComposingInput(event)) return
   if (handleSlashPickerKeydown(event)) return
   if (event.key !== 'Enter' || event.shiftKey) return
   event.preventDefault()
   submitDraft(event.altKey ? 'steer' : 'followUp')
 }
 
-async function handleComposerPaste(event) {
-  const files = Array.from(event.clipboardData?.files || [])
-    .filter((file) => file.type.startsWith('image/'))
-  if (!files.length) return
+function openComposerImagePicker() {
+  imageChooser = { key: activeComposerDraftKey, valid: true }
+  composerImageInput.value.value = ''
+  composerImageInput.value.click()
+}
 
+function cancelComposerImageSelection() {
+  imageChooser = null
+}
+
+function handleComposerImageSelection(event) {
+  const owner = imageChooser
+  imageChooser = null
+  if (owner?.valid) void addComposerImages([...event.target.files], owner.key)
+  event.target.value = ''
+}
+
+function handleComposerPaste(event) {
+  const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'))
+  if (!files.length) return
   event.preventDefault()
+  void addComposerImages(files, activeComposerDraftKey)
+}
+
+async function addComposerImages(files, key) {
+  files = files.filter(file => file.type.startsWith('image/'))
+  if (!files.length) return
   promptError.value = ''
   const paste = {
-    key: activeComposerDraftKey,
+    key,
     promise: Promise.all(files.map(fileToImageContent)),
     valid: true,
   }
@@ -3421,9 +3575,15 @@ function removeAttachedImage(index) {
   })
 }
 
-function openImageFullscreen(src, title = 'Image preview') {
+function openImageFullscreen(src, title = 'Image preview', event) {
   if (!src) return
+  imageOpener.value = event?.currentTarget || document.activeElement
   fullscreenImage.value = { src, title }
+}
+
+function openToolFullscreen(entry, event) {
+  toolOpener.value = event?.currentTarget || document.activeElement
+  showToolFullscreen(entry)
 }
 
 function closeImageFullscreen() {
@@ -3450,6 +3610,11 @@ function fileToImageContent(file) {
 }
 
 function handleStartComposerKeydown(event) {
+  if (isComposingInput(event)) return
+  if (switchingUltrafast.value && event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    return
+  }
   if (handleSlashPickerKeydown(event)) return
   if (event.key !== 'Enter' || event.shiftKey) return
   event.preventDefault()
@@ -3521,6 +3686,7 @@ async function submitStartDraft() {
 }
 
 function handleGlobalKeydown(event) {
+  if (isComposingInput(event)) return
   if (settingsOpen.value) {
     if (event.key === 'Escape') {
       if (event.target?.closest?.('.global-settings-modal')) return
@@ -3543,7 +3709,7 @@ function handleGlobalKeydown(event) {
     closePickerMenus()
     closeProjectBrowser()
     closeResearchCitationPreview()
-    setSidebarNavigator('quick')
+    sidebarRef.value?.openNavigator('quick', event)
     return
   }
   if (event.key === 'Escape') handleEscape(event)
@@ -3558,6 +3724,11 @@ function anyEscapeTargetOpen(ignoreQueue = false) {
     || fileMenu.value
     || projectBrowserOpen.value
     || sidebarNavigator.value
+    || sidebarRef.value?.sessionActionsOpen
+    || sidebarOpen.value
+    || headerMoreOpen.value
+    || terminalKeysOpen.value
+    || (!reviewDesktopAvailable.value && (reviewOpen.value || reviewOpenRequested.value))
     || settingsOpen.value
     || eventLogOpen.value
     || sessionDetailsOpen.value
@@ -3595,6 +3766,21 @@ function handleEscape(event) {
     else if (fullscreenImage.value) closeImageFullscreen()
     else if (fullscreenTool.value) closeToolFullscreen()
     else sidebarNavigator.value = ''
+    return
+  }
+  if (headerMoreOpen.value || terminalKeysOpen.value || sidebarRef.value?.sessionActionsOpen) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    headerMoreOpen.value = false
+    terminalKeysOpen.value = false
+    sidebarRef.value?.closeSessionActions()
+    return
+  }
+  if (sidebarOpen.value || (!reviewDesktopAvailable.value && (reviewOpen.value || reviewOpenRequested.value))) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    if (sidebarOpen.value) sidebarOpen.value = false
+    else closeReview()
     return
   }
   if (traceMode.value) {
@@ -3660,10 +3846,12 @@ function clearPendingWorkspaceTargets() {
   url.searchParams.delete('leylineSessionPath')
   if (url.search === previous) return
   const next = `${url.pathname}${url.search}${url.hash}`
-  window.history.replaceState({}, '', next)
+  window.history.replaceState(window.history.state, '', next)
 }
 
 function closeMenusOnOutsideClick(event) {
+  if (!event.target.closest('.topbar-meta')) headerMoreOpen.value = false
+  if (!event.target.closest('.terminal-header, .terminal-keys')) terminalKeysOpen.value = false
   composerRef.value?.closePopovers?.(event)
   if (event.target.closest('.project-browser-modal')) return
   if (event.target.closest('.model-picker')) return
@@ -3702,10 +3890,10 @@ function closePickerMenus() {
       'terminal-open': terminalOpen,
       'event-log-open': eventLogOpen,
       'memory-open': memoryOpen,
-      'review-open': reviewAvailable && reviewOpen && !!selectedSession,
-      'review-expanded': reviewAvailable && reviewOpen && reviewExpanded
+      'review-open': reviewDesktopAvailable && reviewAvailable && reviewOpen && !!selectedSession,
+      'review-expanded': reviewDesktopAvailable && reviewAvailable && reviewOpen && reviewExpanded
         && !!selectedSession,
-      'review-transcript-hidden': reviewAvailable
+      'review-transcript-hidden': reviewDesktopAvailable && reviewAvailable
         && (reviewOpen || reviewClosing) && reviewPaneExpanded
         && !!selectedSession,
       'research-open': researchSourcesOpen
@@ -3716,6 +3904,7 @@ function closePickerMenus() {
     }"
     :style="{
       '--composer-height': `${composerHeight}px`,
+      '--confirmation-max-height': `${confirmationMaxHeight}px`,
       '--composer-reserved-height': confirmationPanelHeight
         ? `calc(${composerReservedHeight} + ${confirmationPanelHeight + 12}px)`
         : composerReservedHeight,
@@ -3741,7 +3930,8 @@ function closePickerMenus() {
       @select="createSessionForCwd"
     />
 
-    <header class="app-header">
+    <input ref="composerImageInput" type="file" accept="image/*" multiple hidden @change="handleComposerImageSelection" @cancel="cancelComposerImageSelection" />
+    <header class="app-header" :inert="workbenchDialogOpen">
       <div class="app-header-brand">
         <button
           class="brand-home"
@@ -3828,6 +4018,8 @@ function closePickerMenus() {
               : selectedResearch.phase }}</span>
         </div>
         <div v-if="selectedSession" class="topbar-meta">
+          <button ref="headerMoreButton" class="header-more-button topbar-icon-button" type="button" aria-label="Session actions" :aria-expanded="headerMoreOpen" @click="headerMoreOpen = !headerMoreOpen">•••</button>
+          <div ref="headerActions" class="header-utilities" :class="{ open: headerMoreOpen }" role="group" aria-label="Session actions" @click="headerMoreOpen = false">
           <button
             v-if="tracingAvailable"
             class="topbar-icon-button trace-inspector-toggle"
@@ -3855,7 +4047,7 @@ function closePickerMenus() {
             </svg>
           </button>
           <button
-            v-if="isResearchSession && selectedResearch.sourceCount"
+            v-if="canInspectResearch"
             class="topbar-icon-button research-sources-toggle"
             :class="{ active: researchSourcesOpen }"
             type="button"
@@ -3965,11 +4157,15 @@ function closePickerMenus() {
               </svg>
             </a>
           </template>
+          </div>
         </div>
       </div>
     </header>
 
     <SessionSidebar
+      ref="sidebarRef"
+      :navigator-focus-active="activeFocusScope === 'sidebar'"
+      :inert="workbenchDialogOpen"
       :activity-action-error="activityActionError"
       :active-backend-connection="activeBackendConnection"
       :agent-running="agentRunning"
@@ -4027,12 +4223,12 @@ function closePickerMenus() {
       @update:navigator="setSidebarNavigator"
     />
 
-    <section class="main-pane" :inert="traceWorkbenchCovered || (!!systemPromptEntry || traceMode === 'inspector') && systemPromptMobile" :aria-hidden="traceWorkbenchCovered || undefined">
+    <section ref="mainPane" class="main-pane" :inert="workbenchDialogOpen || traceWorkbenchCovered || (!!systemPromptEntry || traceMode === 'inspector') && systemPromptMobile" :aria-hidden="traceWorkbenchCovered || undefined">
       <div v-if="runtimeChromeVisible" class="runtime-chrome">
 
         <section v-if="activeGoal" class="goal-control-plane">
           <div class="goal-control-main">
-            <span class="goal-control-kicker">Goal</span>
+            <span class="goal-control-kicker">Goal<span v-if="goalStatusLabel"> · {{ goalStatusLabel }}</span></span>
             <strong>{{ activeGoal.objective }}</strong>
             <span v-if="goalBudgetLabel">{{ goalBudgetLabel }}</span>
           </div>
@@ -4454,6 +4650,7 @@ function closePickerMenus() {
         <section
           v-if="terminalOpen"
           class="terminal-panel"
+          :class="{ 'is-compact': terminalCompact }"
         >
           <div
             class="terminal-resize-handle"
@@ -4469,7 +4666,11 @@ function closePickerMenus() {
             <strong>Terminal</strong>
             <code>{{ terminalCwd || selectedSession?.cwd }}</code>
             <span>{{ terminalStatus }}</span>
-            <button type="button" @click="closeTerminalPanel">×</button>
+            <button class="terminal-keys-toggle" type="button" :aria-expanded="terminalKeysOpen" @click="terminalKeysOpen = !terminalKeysOpen">Keys</button>
+            <button type="button" aria-label="Close terminal" @click="closeTerminalPanel">×</button>
+          </div>
+          <div v-if="terminalKeysOpen" class="terminal-keys" role="group" aria-label="Terminal keys">
+            <button v-for="[key, label] in terminalKeys" :key="key" type="button" :disabled="terminalStatus !== 'connected'" @click="sendKey(key)">{{ label }}</button>
           </div>
           <div ref="terminalEl" class="terminal-frame"></div>
         </section>
@@ -4485,10 +4686,11 @@ function closePickerMenus() {
       ></div>
 
       <ExtensionConfirmations
-        v-if="selectedSession && extensionConfirmations.length"
+        v-if="selectedSession && (extensionConfirmations.length || extensionConfirmationNotices.length)"
         :key="`${activeBackendConnectionId}:${selectedSessionId}`"
         :session-id="selectedSessionId"
         :requests="extensionConfirmations"
+        :notices="extensionConfirmationNotices"
         :disabled="!eventStreamConnected"
         @resize="confirmationPanelHeight = $event"
       />
@@ -4518,8 +4720,8 @@ function closePickerMenus() {
       >
         <div
           class="composer-layer start-composer-layer"
-          :class="{ 'is-active': homeComposerVisible && !extensionConfirmations.length }"
-          :inert="!!composerMotionState || !homeComposerVisible || !!extensionConfirmations.length"
+          :class="{ 'is-active': homeComposerVisible && !extensionConfirmations.length && !confirmationPanelHeight }"
+          :inert="!!composerMotionState || !homeComposerVisible || !!extensionConfirmations.length || !!confirmationPanelHeight"
         >
           <StartComposer
             v-if="homeComposerVisible || composerMotionState?.kind === 'home'"
@@ -4562,6 +4764,10 @@ function closePickerMenus() {
             :tools-chip-label="toolsChipLabel"
             :tools-picker-open="toolsPickerOpen"
             @keydown="handleStartComposerKeydown"
+            @composition-start="handleComposerCompositionStart"
+            @composition-end="handleComposerCompositionEnd"
+            @input-blur="handleComposerInputBlur"
+            @pick-images="openComposerImagePicker"
             @open-image="openImageFullscreen"
             @open-project-browser="openProjectBrowser"
             @paste="handleComposerPaste"
@@ -4580,8 +4786,8 @@ function closePickerMenus() {
         </div>
         <div
           class="composer-layer session-composer-layer"
-          :class="{ 'is-active': !homeComposerVisible || extensionConfirmations.length }"
-          :inert="homeComposerVisible && !extensionConfirmations.length"
+          :class="{ 'is-active': !homeComposerVisible || extensionConfirmations.length || confirmationPanelHeight }"
+          :inert="homeComposerVisible && !extensionConfirmations.length && !confirmationPanelHeight"
         >
           <SessionComposer
             v-if="!initializing && (selectedSession || composerMotionState?.kind === 'home')"
@@ -4645,6 +4851,10 @@ function closePickerMenus() {
             @cancel-edit="cancelEditingEntry"
             @interrupt="interruptAgent"
             @keydown="handleComposerKeydown"
+            @composition-start="handleComposerCompositionStart"
+            @composition-end="handleComposerCompositionEnd"
+            @input-blur="handleComposerInputBlur"
+            @pick-images="openComposerImagePicker"
             @open-image="openImageFullscreen"
             @paste="handleComposerPaste"
             @queue-snapshot="applyQueueSnapshot"
@@ -4686,7 +4896,9 @@ function closePickerMenus() {
     <ReviewPane
       v-if="reviewAvailable && selectedSession"
       :cwd="selectedSession.cwd"
-      :expanded="reviewPaneExpanded"
+      ref="reviewPane"
+      :compact="!reviewDesktopAvailable"
+      :expanded="reviewDesktopAvailable && reviewPaneExpanded"
       :open="reviewOpen"
       :prepare="reviewOpenRequested"
       :refresh-token="reviewRefreshToken"
@@ -4706,6 +4918,7 @@ function closePickerMenus() {
       :open="researchSourcesOpen"
       :research="selectedResearch"
       @close="closeResearchSources"
+      @open-source="openResearchSource"
     />
 
     <Transition name="system-prompt">
@@ -4833,14 +5046,14 @@ function closePickerMenus() {
           :loading="memoryLoading"
           :memories="memoryData.memories"
           :saving="memorySaving"
+          :target="memoryTarget"
+          :save-memory="saveMemory"
           @archive="archiveMemories"
           @close="closeMemoryDrawer"
-          @create="createMemory"
           @delete="deleteMemories"
           @dirty-change="memoryDirty = $event"
           @refresh="loadVisibleMemory"
           @restore="restoreMemories"
-          @update="updateMemory"
         />
       </div>
     </Transition>
@@ -4857,7 +5070,7 @@ function closePickerMenus() {
       @close="closeGlobalSettings"
     >
       <template #connections>
-        <NetworkAccessSettings :copied-id="copiedEntryId" @copy="copyTranscriptItem" />
+        <NetworkAccessSettings ref="piSettingsPane" :copied-id="copiedEntryId" @copy="copyTranscriptItem" />
         <section class="settings-group backend-settings-group">
           <div class="settings-group-heading">
             <h2>Backend</h2>
@@ -5016,7 +5229,7 @@ function closePickerMenus() {
         <p class="settings-note">This setting does not change the model’s thinking level.</p>
       </template>
       <template #files>
-        <FileLinkSettings :backend-name="activeBackendConnection.name" />
+        <FileLinkSettings ref="piSettingsPane" :backend-name="activeBackendConnection.name" />
       </template>
       <template #providers>
         <p v-if="piSettingsActionError" class="settings-error" role="alert">{{ piSettingsActionError }}</p>
@@ -5126,15 +5339,18 @@ function closePickerMenus() {
           <div v-if="eventLog.length === 0" class="event-log-empty">
             No events yet
           </div>
-          <div
-            v-for="item in eventLog"
-            :key="item.loggedAt"
-            class="event-log-row"
-          >
-            <time>{{ eventTime(item) }}</time>
-            <code>{{ eventType(item) }}</code>
-            <span>{{ eventSummary(item) }}</span>
-          </div>
+          <details v-for="item in eventLog" :key="item.loggedAt" class="event-log-entry">
+            <summary class="event-log-row">
+              <time>{{ eventTime(item) }}</time>
+              <code>{{ eventType(item) }}</code>
+              <span>{{ eventSummary(item) }}</span>
+            </summary>
+            <div class="event-log-detail">
+              <strong>{{ eventType(item) }}</strong>
+              <p>{{ eventSummary(item) }}</p>
+              <button type="button" @click="copyTranscriptItem(`event-${item.loggedAt}`, `${eventType(item)}\n${eventSummary(item)}`)">{{ copiedEntryId === `event-${item.loggedAt}` ? 'Copied' : 'Copy event' }}</button>
+            </div>
+          </details>
         </aside>
       </div>
     </Transition>
@@ -5146,6 +5362,7 @@ function closePickerMenus() {
         @click="closeImageFullscreen"
       >
         <section
+          ref="imageDialog"
           class="tool-fullscreen"
           role="dialog"
           aria-modal="true"
@@ -5180,7 +5397,7 @@ function closePickerMenus() {
         class="tool-fullscreen-backdrop tool-preview-fullscreen-backdrop"
         @click="closeToolFullscreen"
       >
-        <section class="tool-fullscreen" @click.stop>
+        <section ref="toolDialog" class="tool-fullscreen" role="dialog" aria-modal="true" aria-label="Tool preview" tabindex="-1" @click.stop>
           <header class="tool-fullscreen-header">
             <div>
               <span>{{ fullscreenTool.label }}</span>
@@ -5218,7 +5435,7 @@ function closePickerMenus() {
               >
                 {{ copyGlyph(fullscreenTool.id) }}
               </button>
-              <button type="button" @click="closeToolFullscreen">×</button>
+              <button type="button" aria-label="Close tool preview" @click="closeToolFullscreen">×</button>
             </div>
           </header>
           <div class="tool-fullscreen-body">

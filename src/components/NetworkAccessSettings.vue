@@ -8,8 +8,30 @@ const config = ref(null)
 const busy = ref(false)
 const error = ref('')
 const portDraft = ref('')
+const portBaseline = ref('')
 const requestedPort = computed(() => Number(portDraft.value || 0))
-const portChanged = computed(() => requestedPort.value !== (config.value?.configuredPort || 0))
+const portChanged = computed(() => portDraft.value !== portBaseline.value)
+
+function acceptConfig(value, keepDraft) {
+  config.value = value
+  portBaseline.value = String(value.configuredPort || '')
+  if (!keepDraft) portDraft.value = portBaseline.value
+}
+
+function confirmLeave() {
+  if (busy.value) return false
+  if (portChanged.value && !window.confirm('Discard your unapplied proxy port?')) return false
+  portDraft.value = portBaseline.value
+  return true
+}
+
+function beforeUnload(event) {
+  if (!portChanged.value && !busy.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+defineExpose({ confirmLeave })
 
 async function load() {
   if (busy.value) return
@@ -17,8 +39,7 @@ async function load() {
   busy.value = true
   error.value = ''
   try {
-    config.value = await fetchNetworkAccess()
-    if (!keepDraft) portDraft.value = config.value.configuredPort || ''
+    acceptConfig(await fetchNetworkAccess(), keepDraft)
     error.value = config.value.error || ''
   } catch (failure) {
     error.value = failure.message
@@ -29,12 +50,16 @@ async function load() {
 
 async function save(values) {
   if (busy.value || !config.value?.available) return
+  if (values.port !== undefined && portDraft.value !== ''
+    && (!/^\d+$/.test(portDraft.value) || !Number.isInteger(values.port) || values.port < 1 || values.port > 65535)) {
+    error.value = 'Enter a port from 1 to 65535, or leave it blank.'
+    return
+  }
   const keepDraft = values.port === undefined && portChanged.value
   busy.value = true
   error.value = ''
   try {
-    config.value = await saveNetworkAccess(values)
-    if (!keepDraft) portDraft.value = config.value.configuredPort || ''
+    acceptConfig(await saveNetworkAccess(values), keepDraft)
   } catch (failure) {
     error.value = failure.message
   } finally {
@@ -45,8 +70,12 @@ async function save(values) {
 onMounted(() => {
   void load()
   window.addEventListener('focus', load)
+  window.addEventListener('beforeunload', beforeUnload)
 })
-onUnmounted(() => window.removeEventListener('focus', load))
+onUnmounted(() => {
+  window.removeEventListener('focus', load)
+  window.removeEventListener('beforeunload', beforeUnload)
+})
 </script>
 
 <template>
@@ -78,11 +107,10 @@ onUnmounted(() => window.removeEventListener('focus', load))
           <input
             id="network-access-port"
             v-model="portDraft"
-            type="number"
-            min="1"
-            max="65535"
-            step="1"
+            type="text"
             inputmode="numeric"
+            pattern="[0-9]*"
+            maxlength="5"
             placeholder="Automatic"
             aria-describedby="network-access-port-help"
             :disabled="busy || !config?.available"

@@ -1619,6 +1619,26 @@
   color: #7f7f7f;
 }
 
+.pi-settings-model-id,
+.pi-settings-catalog-source {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.pi-settings-catalog-source {
+  margin: 8px 0 0;
+  color: #aaa;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.pi-settings-catalog-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .pi-settings-catalog {
   display: grid;
   overflow: hidden;
@@ -2098,7 +2118,7 @@
 
   .global-settings-modal:has(.pi-settings-model-workspace) .global-settings-header small,
   .pi-settings-model-workspace > .pi-settings-heading,
-  .pi-settings-model-header .settings-note,
+  .pi-settings-model-editor:not(:has(.pi-settings-catalog)) .pi-settings-model-header .settings-note,
   .pi-settings-catalog-picker > span,
   .pi-settings-model-editor:has(.pi-settings-catalog) > .pi-settings-model-footer > .settings-note {
     display: none;
@@ -2129,6 +2149,43 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
   }
+
+  .global-settings-modal:has(.pi-settings-catalog) .global-settings-footer,
+  .pi-settings-model-editor:has(.pi-settings-catalog) .pi-settings-model-header h4,
+  .pi-settings-catalog-body .pi-settings-catalog-results {
+    display: none;
+  }
+
+  .workspace-settings .global-settings-content:has(.pi-settings-catalog) {
+    padding-block: 8px;
+  }
+
+  .pi-settings-model-editor:has(.pi-settings-catalog) .pi-settings-model-header .settings-note {
+    margin: 0;
+  }
+
+  .pi-settings-catalog-body {
+    display: block;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #3c3c3c transparent;
+  }
+
+  .pi-settings-catalog-body .pi-settings-catalog,
+  .pi-settings-catalog-body .pi-settings-catalog-review {
+    display: block;
+    overflow: visible;
+  }
+
+  .pi-settings-catalog-body .pi-settings-catalog-notices {
+    overflow: visible;
+    max-height: none;
+  }
+
+  .pi-settings-field.pi-settings-catalog-picker {
+    display: flex;
+  }
 }
 
 @keyframes global-settings-in {
@@ -2156,8 +2213,8 @@
 
   .global-settings-modal {
     width: 100%;
-    height: 100dvh;
-    max-height: 100dvh;
+    height: var(--app-height, 100dvh);
+    max-height: 100%;
     border: 0;
     border-radius: 0;
     box-shadow: none;
@@ -2242,6 +2299,55 @@
   .settings-choice-options button {
     padding: 6px;
     font-size: 9px;
+  }
+}
+
+@media (pointer: coarse) {
+  .global-settings-modal :is(input, textarea, select),
+  .context-settings-drawer :is(input, textarea, select),
+  .global-settings-modal .settings-row select,
+  .pi-settings :is(input, textarea, select),
+  .network-settings-port input,
+  .backend-connection-form input,
+  .file-settings-form select {
+    font-size: 16px;
+  }
+
+  .pi-settings-switch {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+  }
+
+  .pi-settings-switch::after {
+    position: absolute;
+    top: 13px;
+    left: 7px;
+    box-sizing: border-box;
+    width: 29px;
+    height: 18px;
+    border: 1px solid #4b4b4b;
+    border-radius: 10px;
+    background: #292929;
+    content: '';
+  }
+
+  .pi-settings-switch::before {
+    z-index: 1;
+    top: 16px;
+    left: 10px;
+  }
+
+  .pi-settings-switch[aria-checked='true'] {
+    background: transparent;
+  }
+
+  .pi-settings-switch[aria-checked='true']::after {
+    border-color: #746888;
+    background: #5a536b;
   }
 }
 

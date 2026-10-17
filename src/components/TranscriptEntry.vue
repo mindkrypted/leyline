@@ -257,6 +257,7 @@ function openMarkdownContent(event) {
   emit('open-research-source', {
     anchor: link,
     id,
+    origin: 'citation',
     rect: {
       bottom: rect.bottom,
       height: rect.height,
@@ -328,30 +329,36 @@ function openMarkdownContent(event) {
       'is-expanded': toolExpanded,
       'research-thread-card': entry.researchThreads,
     }"
-    @click="emit('toggle-tool', entry)"
   >
     <div class="subagent-header">
-      <span class="chevron">›</span>
-      <span class="subagent-icon" aria-hidden="true">
-        <svg viewBox="0 0 16 16" fill="none">
-          <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
-          <path d="m10 7 3 3-3 3" />
-        </svg>
-      </span>
-      <span class="subagent-label">
-        {{ entry.researchThreads ? 'Research threads' : 'Subagent' }}
-      </span>
-      <code v-if="subagentTarget(entry)">{{ subagentTarget(entry) }}</code>
-      <span v-if="subagentOutcome.counts.length" class="subagent-summary" aria-label="Task outcomes">
-        <span
-          v-for="outcome in subagentOutcome.counts"
-          :key="outcome.status"
-          :class="`status-${outcome.status}`"
-        >{{ outcome.text }}</span>
-      </span>
-      <em v-else :class="subagentOutcome.active ? 'status-running' : 'status-unknown'">
-        {{ subagentOutcome.active ? 'Running' : 'Results unavailable' }}
-      </em>
+      <button
+        class="tool-expand-button"
+        type="button"
+        :aria-expanded="toolExpanded"
+        @click="emit('toggle-tool', entry)"
+      >
+        <span class="chevron">›</span>
+        <span class="subagent-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
+            <path d="m10 7 3 3-3 3" />
+          </svg>
+        </span>
+        <span class="subagent-label">
+          {{ entry.researchThreads ? 'Research threads' : 'Subagent' }}
+        </span>
+        <code v-if="subagentTarget(entry)">{{ subagentTarget(entry) }}</code>
+        <span v-if="subagentOutcome.counts.length" class="subagent-summary" aria-label="Task outcomes">
+          <span
+            v-for="outcome in subagentOutcome.counts"
+            :key="outcome.status"
+            :class="`status-${outcome.status}`"
+          >{{ outcome.text }}</span>
+        </span>
+        <em v-else :class="subagentOutcome.active ? 'status-running' : 'status-unknown'">
+          {{ subagentOutcome.active ? 'Running' : 'Results unavailable' }}
+        </em>
+      </button>
       <button
         class="copy-button"
         type="button"
@@ -371,9 +378,11 @@ function openMarkdownContent(event) {
       v-if="entry.subagentDetails?.results?.length"
       class="subagent-results"
     >
-      <div
+      <component
+        :is="result.childSession ? 'button' : 'div'"
         v-for="(result, index) in entry.subagentDetails.results"
         :key="index"
+        :type="result.childSession ? 'button' : undefined"
         class="subagent-result-item"
         :class="{ 'has-session': result.childSession }"
         @click.stop="navigateChildSession(result.childSession, $event)"
@@ -408,7 +417,7 @@ function openMarkdownContent(event) {
             :title="subagentStatus(result) === 'running' ? 'View live session' : 'View session'"
           >↗</span>
         </template>
-      </div>
+      </component>
     </div>
 
     <div class="tool-expand-wrapper" :class="{ 'is-expanded': toolExpanded }">
@@ -456,27 +465,33 @@ function openMarkdownContent(event) {
     v-else-if="entry.type === 'tool'"
     class="tool-card transcript-tool"
     :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError }"
-    @click="emit('toggle-tool', entry)"
   >
     <div class="tool-card-header">
-      <span class="chevron">›</span>
-      <span>{{ entry.label }}</span>
-      <code v-if="entry.code" :title="entry.code">{{ entry.code }}</code>
-      <span
-        v-if="entry.contextLabel"
-        class="tool-context-pill"
-        :class="{ 'is-excluded': entry.excludeFromContext }"
+      <button
+        class="tool-expand-button"
+        type="button"
+        :aria-expanded="toolExpanded"
+        @click="emit('toggle-tool', entry)"
       >
-        {{ entry.contextLabel }}
-      </span>
-      <em :class="`status-${toolStatusTone(entryToolStatus(entry))}`">
-        {{ entryToolStatus(entry) }}
-      </em>
+        <span class="chevron">›</span>
+        <span class="tool-label">{{ entry.label }}</span>
+        <code v-if="entry.code" :title="entry.code">{{ entry.code }}</code>
+        <span
+          v-if="entry.contextLabel"
+          class="tool-context-pill"
+          :class="{ 'is-excluded': entry.excludeFromContext }"
+        >
+          {{ entry.contextLabel }}
+        </span>
+        <em :class="`status-${toolStatusTone(entryToolStatus(entry))}`">
+          {{ entryToolStatus(entry) }}
+        </em>
+      </button>
       <button
         class="copy-button"
         type="button"
         title="Open full screen"
-        @click.stop="emit('open-tool-fullscreen', entry)"
+        @click.stop="emit('open-tool-fullscreen', entry, $event)"
       >
         ⛶
       </button>
@@ -538,6 +553,7 @@ function openMarkdownContent(event) {
                 'open-image',
                 imageSrc(entry.preview),
                 'Read image preview',
+                $event,
               )"
             >
               <img :src="imageSrc(entry.preview)" alt="Read image preview" />
@@ -551,7 +567,7 @@ function openMarkdownContent(event) {
             <button
               class="tool-preview-cta"
               type="button"
-              @click="emit('open-tool-fullscreen', entry)"
+              @click="emit('open-tool-fullscreen', entry, $event)"
             >
               Open full screen
             </button>
@@ -568,7 +584,7 @@ function openMarkdownContent(event) {
             <button
               class="tool-preview-cta"
               type="button"
-              @click="emit('open-tool-fullscreen', entry)"
+              @click="emit('open-tool-fullscreen', entry, $event)"
             >
               Open full screen
             </button>
