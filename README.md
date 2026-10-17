@@ -42,53 +42,23 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 
 ## Features
 
-You can browse and run pi sessions in one workspace. You can pin sessions to keep them at the top of a project list. You can search across
-projects with **Go to** and monitor work through **Activity**. You can read
-live transcripts, use steering or **Up next** tasks, and examine tools, System
-changes, and local files. Pi's native MCP integration supplies configured
-tools, and extension confirmation cards let you accept or cancel requests.
+- Browse, search, pin, and run pi sessions across projects. Read live
+  transcripts and monitor work in **Activity**.
+- Steer active work or queue **Up next** tasks. Examine tools, System
+  changes, local files, and Git changes. Use configured MCP tools and
+  respond to extension requests in the workspace.
+- Use memory, subagents, HTML export, an embedded terminal, and deep
+  research with validated citations. A configured vision model can
+  describe images for models that cannot receive images.
+- Connect each window to the native backend or a saved backend
+  connection. Configure provider sign-in, custom endpoints, model
+  overrides, and MCP servers in [Model settings](docs/user-guide/settings.md#find-a-configuration-in-the-catalog).
+- Embedded Elune tracing records new runs by default. Examine one
+  session or traces across projects on the selected backend. Traces can
+  contain private prompts and tool results. See
+  [Tracing](docs/user-guide/tracing.md).
 
-Model controls include the optional `ultrafast` chip for supported OpenAI
-Responses models. It is off by default. OpenAI charges more for `ultrafast`. See
-[Runtime controls](docs/user-guide/runtime-controls.md#use-ultrafast).
-Memory, subagents, HTML export, and an embedded terminal help you complete
-session work.
-Each window can use the native backend or a saved backend connection.
-
-Embedded Elune tracing records new runs by default. **Session traces** opens the
-selected session's inspector. **Open workspace** shows its timeline, and the
-**Trace explorer** button in the sidebar shows all projects on the selected
-backend. Capture controls are in the trace footer.
-
-Traces can contain private prompts and tool results. Leyline keeps existing
-traces if you stop capture, delete a session, or reset the history. See
-[Tracing](docs/user-guide/tracing.md).
-
-Settings includes provider sign-in, custom endpoints, model definitions and
-overrides, and MCP server configuration. Select a configuration from the
-backend catalog. Examine the fields to use. Adjust the model limits, thinking
-maps, and developer-role compatibility.
-
-Provider costs are different from connection settings. Changes use pi's files
-on the selected backend. See
-[Model settings](docs/user-guide/settings.md#find-a-configuration-in-the-catalog).
-Project and session details hold their own agent overrides.
-
-Deep research sessions divide a question into parallel, source-backed threads.
-You can examine the plan and the worker sessions. Leyline validates numbered
-report citations. Each citation opens a source preview. The research ledger
-keeps records for sources that Leyline cited, used, or excluded.
-
-On desktop, Git Review updates its header summary when the pane is closed.
-Git Review prepares the selected diff before you open the pane. Git Review
-separates staged and working-tree changes. Git Review can expand across the
-workspace.
-
-When the parent model cannot receive images, Leyline can send each attachment
-to a configured vision model in a hidden child session. The parent model
-receives the descriptions while the transcript keeps the original images.
-
-Read [Motivations](docs/motivations.md) for more information about the project.
+Read [Motivations](docs/motivations.md) for the project direction.
 
 ## Requirements
 
