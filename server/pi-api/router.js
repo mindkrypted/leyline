@@ -552,7 +552,10 @@ async function piApiHandler(req, res) {
           })
           return finish(result)
         } catch (error) {
-          return finish({ error: error.message }, 500)
+          return finish({
+            error: error.message,
+            ...(error.name === 'AbortError' ? { stopReason: 'aborted' } : {}),
+          }, 500)
         }
       }
 

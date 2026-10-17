@@ -8,6 +8,7 @@ const PierrePreview = defineAsyncComponent(() => import('./PierrePreview.vue'))
 import { computed, ref, watch } from 'vue'
 import { researchSourcesMatch } from '../../lib/research-state.js'
 import { systemPromptInfo } from '../../lib/system-prompt.js'
+import { subagentStatus as resultStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
 import {
   entryClass,
   imageBlocksFor,
@@ -66,6 +67,7 @@ const noteOpen = ref(false)
 const thinkingExpanded = ref(props.thinkingInitiallyExpanded)
 const toolContentMounted = ref(props.toolExpanded)
 const systemInfo = computed(() => systemPromptInfo(props.entry))
+const subagentOutcome = computed(() => subagentSummary(props.entry, props.toolStatus))
 
 watch(() => props.toolExpanded, (expanded) => {
   if (expanded) toolContentMounted.value = true
@@ -174,31 +176,15 @@ function entryToolStatus(entry) {
 }
 
 function subagentStatus(result) {
-  if (result.status === 'queued') return 'queued'
-  if (result.status === 'running') return 'running'
-  if (result.status === 'error') return 'error'
-  if (result.status === 'done') return 'completed'
-  if (result.error || result.exitCode !== 0) return 'error'
-  if (!result.messages.length && !result.childSession) return 'running'
-  return 'completed'
-}
-
-function entrySubagentStatus(entry) {
-  const liveStatus = liveEntryToolStatus()
-  if (liveStatus) return liveStatus
-  if (entry.subagentDetails?.background) return 'running'
-  if (entry.isError || entry.subagentDetails?.results?.some((result) => subagentStatus(result) === 'error')) return 'error'
-  if (entry.subagentDetails?.results?.some((result) => {
-    return ['queued', 'running'].includes(subagentStatus(result))
-  })) return 'running'
-  return 'completed'
+  return resultStatus(result, subagentOutcome.value.active)
 }
 
 function subagentFinalOutput(result) {
   if (result.error) return result.error
   if (result.research?.summary) return result.research.summary
-  for (let i = result.messages.length - 1; i >= 0; i--) {
-    const message = result.messages[i]
+  const messages = result.messages || []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
     if (message.role === 'assistant' || message.role === 'error') return message.content.trim()
   }
   return ''
@@ -356,11 +342,15 @@ function openMarkdownContent(event) {
         {{ entry.researchThreads ? 'Research threads' : 'Subagent' }}
       </span>
       <code v-if="subagentTarget(entry)">{{ subagentTarget(entry) }}</code>
-      <em
-        class="subagent-status"
-        :class="`status-${toolStatusTone(entrySubagentStatus(entry))}`"
-      >
-        {{ entrySubagentStatus(entry) }}
+      <span v-if="subagentOutcome.counts.length" class="subagent-summary" aria-label="Task outcomes">
+        <span
+          v-for="outcome in subagentOutcome.counts"
+          :key="outcome.status"
+          :class="`status-${outcome.status}`"
+        >{{ outcome.text }}</span>
+      </span>
+      <em v-else :class="subagentOutcome.active ? 'status-running' : 'status-unknown'">
+        {{ subagentOutcome.active ? 'Running' : 'Results unavailable' }}
       </em>
       <button
         class="copy-button"
@@ -372,6 +362,11 @@ function openMarkdownContent(event) {
       </button>
     </div>
 
+    <p v-if="subagentOutcome.unavailable" class="subagent-result-note">
+      {{ entry.subagentDetails?.resultsUnavailable
+        ? 'Task outcomes are unavailable.'
+        : 'Some task outcomes are unavailable.' }}
+    </p>
     <div
       v-if="entry.subagentDetails?.results?.length"
       class="subagent-results"
@@ -399,14 +394,20 @@ function openMarkdownContent(event) {
         >
           {{ researchSourceCount(result) }} sources · {{ subagentStatus(result) }}
         </span>
-        <span
-          v-else-if="result.childSession"
-          class="subagent-child-link"
-        >
-          {{ subagentStatus(result) === 'running'
-            ? '→ view live session'
-            : '→ view session' }}
-        </span>
+        <template v-else>
+          <span class="subagent-task-status" :class="`status-${subagentStatus(result)}`">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <circle cx="8" cy="8" r="6" />
+              <path :d="subagentStatuses[subagentStatus(result)].path" />
+            </svg>
+            {{ subagentStatuses[subagentStatus(result)].label }}
+          </span>
+          <span
+            v-if="result.childSession"
+            class="subagent-child-link"
+            :title="subagentStatus(result) === 'running' ? 'View live session' : 'View session'"
+          >↗</span>
+        </template>
       </div>
     </div>
 
@@ -417,14 +418,7 @@ function openMarkdownContent(event) {
           class="tool-expanded-body subagent-expanded"
           @click.stop
         >
-          <div
-            v-if="entry.isError && entry.text"
-            class="tool-error-summary"
-          >
-            <strong>Error</strong>
-            <pre>{{ entry.text }}</pre>
-          </div>
-          <template v-if="entry.subagentDetails?.results?.length">
+          <template v-if="entry.subagentDetails?.results?.length && !entry.subagentDetails.resultsUnavailable">
             <div
               v-for="(result, index) in entry.subagentDetails.results"
               :key="index"
@@ -433,6 +427,9 @@ function openMarkdownContent(event) {
               <div class="subagent-detail-header">
                 <strong>{{ result.agent }}</strong>
                 <span class="subagent-detail-task">{{ result.task }}</span>
+                <span class="subagent-task-status" :class="`status-${subagentStatus(result)}`">
+                  {{ subagentStatuses[subagentStatus(result)].label }}
+                </span>
               </div>
               <pre v-if="subagentFinalOutput(result)" class="subagent-detail-output">{{ subagentFinalOutput(result) }}</pre>
               <div v-if="result.childSession" class="subagent-child-meta">

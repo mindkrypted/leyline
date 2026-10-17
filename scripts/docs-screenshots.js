@@ -673,6 +673,53 @@ const markdownPreviewEntries = [
   }),
 ]
 
+const subagentOutcomeResults = [
+  { agent: 'general', task: 'Check release verification' },
+  { agent: 'explore', task: 'Inspect packaging configuration' },
+  { agent: 'general', task: 'Review rollback handling' },
+  { agent: 'explore', task: 'Check release notes' },
+  { agent: 'general', task: 'Review publication conditions' },
+].map((task, index) => ({
+  ...task,
+  status: index === 2 ? 'stopped' : 'done',
+  stopReason: index === 2 ? 'aborted' : 'stop',
+  exitCode: index === 2 ? 1 : 0,
+  childSession: {
+    id: `release-check-${index + 1}`,
+    path: `/workspace/harbor/sessions/release-check-${index + 1}.jsonl`,
+  },
+  messages: index === 2 ? [] : [{ role: 'assistant', content: 'Check complete.' }],
+  error: index === 2 ? 'This operation was aborted' : undefined,
+}))
+const subagentOutcomeEntries = [
+  messageEntry({
+    id: 'subagent-outcomes-user',
+    role: 'user',
+    label: 'You',
+    text: 'Review the release flow. Split verification, packaging, rollback handling, release notes, and publication checks across five tasks.',
+    timestamp: '2026-08-06T15:43:00.000Z',
+  }),
+  {
+    ...toolEntry({
+      id: 'subagent-outcomes-tool',
+      label: 'Subagent · subagent',
+      code: '5 tasks',
+      toolName: 'subagent',
+      text: 'Four tasks completed. One task stopped.',
+      timestamp: '2026-08-06T15:44:00.000Z',
+    }),
+    isError: true,
+    subagentDetails: { mode: 'parallel', results: subagentOutcomeResults, background: false },
+  },
+  messageEntry({
+    id: 'subagent-outcomes-assistant',
+    role: 'assistant',
+    label: 'Agent',
+    text: 'Four checks completed. The rollback review stopped before it returned a result. The completed results are still available above.',
+    timestamp: '2026-08-06T15:45:00.000Z',
+  }),
+]
+
 const researchEntries = [
   messageEntry({
     id: 'research-user',
@@ -908,6 +955,7 @@ const traceFixtures = docsTraces(baseEntries, sessions)
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
+const subagentAssetNames = ['subagent-outcomes.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
@@ -915,6 +963,7 @@ const allowedNames = new Set([
   ...traceAssetNames,
   ...pinnedAssetNames,
   ...networkAssetNames,
+  ...subagentAssetNames,
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1422,6 +1471,21 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'subagent-outcomes.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-summary',
+    scenario: 'subagent-outcomes',
+    interact: async (page) => {
+      const card = page.locator('.subagent-card')
+      await card.locator('.subagent-summary').filter({ hasText: '4 completed' }).waitFor()
+      await card.locator('.subagent-task-status.status-stopped').waitFor()
+      if (await card.locator('.subagent-result-item').count() !== 5) {
+        throw new Error('Subagent outcome capture must show all five tasks')
+      }
+    },
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'vision-tool-call.png'),
     route: '/sessions/demo-session',
     ready: '.transcript-tool',
@@ -1785,6 +1849,7 @@ function runtimeFor(scenario) {
   const queued = ['queue', 'queue-held'].includes(scenario)
   const held = scenario === 'queue-held'
   const research = scenario === 'research'
+  const subagents = scenario === 'subagent-outcomes'
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
@@ -1810,10 +1875,11 @@ function runtimeFor(scenario) {
         : [],
       steeringMode: 'one-at-a-time',
       followUpMode: 'one-at-a-time',
-      activeToolCount: research ? 6 : 4,
+      activeToolCount: research ? 6 : subagents ? 5 : 4,
       activeToolNames: research
         ? ['read', 'grep', 'subagent', 'research_update', 'exa_search', 'exa_contents']
-        : ['read', 'grep', 'bash', 'edit'],
+        : subagents ? ['read', 'grep', 'bash', 'edit', 'subagent']
+          : ['read', 'grep', 'bash', 'edit'],
       contextUsage: {
         tokens: 12480,
         contextWindow: selectedModel.contextWindow,
@@ -1907,6 +1973,7 @@ function detailFor(scenario) {
     ultrafast: systemTranscriptEntries,
     export: systemTranscriptEntries,
     research: researchEntries,
+    'subagent-outcomes': subagentOutcomeEntries,
     markdown: markdownPreviewEntries,
     shell: shellEntries,
     vision: visionEntries,

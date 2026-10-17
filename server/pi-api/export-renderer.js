@@ -5,6 +5,7 @@ import MarkdownIt from 'markdown-it'
 import { parseDiffFromFile } from '@pierre/diffs'
 import { configureMarkdownLinks } from '../../lib/markdown-file-links.js'
 import { projectContextView, systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
+import { subagentStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
 import {
   imageBlocksFor,
   messageBlocksFor,
@@ -331,26 +332,40 @@ ${tool.removed ? '' : `<div class="system-prompt-prose markdown-body">${renderMa
 function renderExportSubagent(entry, index) {
   const details = entry.subagentDetails
   const results = details?.results || []
-  const hasErroredResult = results.some((result) => result.error || result.exitCode !== 0)
-  const status = details?.background ? 'running' : (entry.isError || hasErroredResult ? 'error' : 'completed')
+  const outcome = subagentSummary(entry)
   const target = exportSubagentTarget(entry)
   const research = entry.researchThreads === true
+  const status = (result) => {
+    const key = subagentStatus(result, outcome.active)
+    const { label, path } = subagentStatuses[key]
+    return `<span class="subagent-task-status status-${key}"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="${path}"/></svg>${label}</span>`
+  }
+  const rows = results.map((result) => `<div class="subagent-result-item">
+<span class="subagent-result-agent">${escapeHtml(research ? researchThreadId(result) : result.agent)}</span>
+<span class="subagent-result-task">${escapeHtml(research ? researchThreadTitle(result) : result.task)}</span>
+${status(result)}
+</div>`).join('')
+  const summary = outcome.counts.length
+    ? `<span class="subagent-summary">${outcome.counts.map((count) => `<span class="status-${count.status}">${count.text}</span>`).join('')}</span>`
+    : `<em class="status-${outcome.active ? 'running' : 'unknown'}">${outcome.active ? 'Running' : 'Results unavailable'}</em>`
 
   let resultsHtml = ''
-  for (const result of results) {
+  for (const result of details?.resultsUnavailable ? [] : results) {
     const output = subagentFinalOutput(result)
     resultsHtml += `
 <div class="subagent-detail-block">
 <div class="subagent-detail-header">
 <strong>${escapeHtml(research ? researchThreadId(result) : result.agent)}</strong>
 <span class="subagent-detail-task">${escapeHtml(research ? researchThreadTitle(result) : result.task)}</span>
+${status(result)}
 </div>
 ${output ? `<pre class="subagent-detail-output">${escapeHtml(output)}</pre>` : ''}
 </div>`
   }
 
-  return `<details class="tool-card subagent-card transcript-tool${entry.isError ? ' error-card' : ''}">
-<summary class="subagent-header">
+  return `<details class="tool-card subagent-card transcript-tool">
+<summary>
+<div class="subagent-header">
 <span class="chevron tool-chevron">›</span>
 <span class="subagent-icon" aria-hidden="true">
 <svg viewBox="0 0 16 16" fill="none">
@@ -360,10 +375,13 @@ ${output ? `<pre class="subagent-detail-output">${escapeHtml(output)}</pre>` : '
 </span>
 <span class="subagent-label">${research ? 'Research threads' : 'Subagent'}</span>
 ${target ? `<code>${escapeHtml(target)}</code>` : ''}
-<em class="subagent-status status-${status}">${status}</em>
+${summary}
+</div>
+${outcome.unavailable ? `<p class="subagent-result-note">${details?.resultsUnavailable ? 'Task outcomes are unavailable.' : 'Some task outcomes are unavailable.'}</p>` : ''}
+${rows ? `<div class="subagent-results">${rows}</div>` : ''}
 </summary>
 <div class="tool-expanded-body subagent-expanded" data-tool-index="${index}" data-rendered="true">
-${resultsHtml || '<div class="tool-lazy-placeholder">Open to render details</div>'}
+${resultsHtml || `<pre class="subagent-detail-output">${escapeHtml(entry.text || '(no output)')}</pre>`}
 </div>
 </details>`
 }
@@ -389,8 +407,9 @@ function exportSubagentTarget(entry) {
 
 function subagentFinalOutput(result) {
   if (result.error) return result.error
-  for (let i = result.messages.length - 1; i >= 0; i--) {
-    const message = result.messages[i]
+  const messages = result.messages || []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
     if (message.role === 'assistant' || message.role === 'error') return message.content.trim()
   }
   return ''
@@ -1829,6 +1848,92 @@ button, input, textarea { color: inherit; font: inherit; }
 .subagent-header em.status-running { color: #a99cff; }
 .subagent-header em.status-error { color: #fca5a5; }
 
+.subagent-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+}
+.subagent-summary > span { white-space: nowrap; }
+.subagent-summary > span + span::before {
+  margin-right: 6px;
+  color: #62626a;
+  content: '·';
+}
+.subagent-task-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.subagent-task-status svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.subagent-summary .status-completed,
+.subagent-task-status.status-completed { color: #8abb97; }
+.subagent-summary .status-running,
+.subagent-task-status.status-running { color: #b0a2f4; }
+.subagent-summary .status-stopped,
+.subagent-task-status.status-stopped { color: #c6ad83; }
+.subagent-summary .status-failed,
+.subagent-task-status.status-failed { color: #d88a96; }
+.subagent-summary .status-queued,
+.subagent-summary .status-not-started,
+.subagent-summary .status-unknown,
+.subagent-task-status.status-queued,
+.subagent-task-status.status-not-started,
+.subagent-task-status.status-unknown,
+.subagent-header em.status-unknown { color: #93939b; }
+.subagent-card .subagent-result-note {
+  margin: 9px 0 0 39px;
+  color: #93939b;
+  font-size: 12px;
+}
+.subagent-results {
+  display: grid;
+  margin: 9px 0 0 39px;
+  border-top: 1px solid rgb(255 255 255 / 5%);
+}
+.subagent-result-item {
+  display: grid;
+  grid-template-columns: minmax(64px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 5%);
+  padding: 7px 6px;
+}
+.subagent-result-item:last-child { border-bottom: 0; }
+.subagent-result-agent {
+  overflow: hidden;
+  max-width: 150px;
+  color: #aaa;
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subagent-result-task {
+  overflow: hidden;
+  min-width: 0;
+  color: #8f8f95;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .subagent-expanded {
   display: flex;
   flex-direction: column;
@@ -1862,6 +1967,7 @@ button, input, textarea { color: inherit; font: inherit; }
 }
 
 .subagent-detail-task {
+  flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
   color: #8f8f95;
@@ -1881,5 +1987,21 @@ button, input, textarea { color: inherit; font: inherit; }
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
-}`
+}
+@media (max-width: 600px) {
+  .subagent-header { flex-wrap: wrap; row-gap: 6px; }
+  .subagent-header code { max-width: calc(100% - 130px); }
+  .subagent-summary {
+    order: 1;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    margin-left: 39px;
+  }
+  .subagent-results,
+  .subagent-expanded,
+  .subagent-card .subagent-result-note { margin-left: 0; }
+  .subagent-result-item { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .subagent-result-item > .subagent-result-agent { display: none; }
+}
+`
 }

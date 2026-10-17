@@ -36,7 +36,7 @@ interface SingleResult {
   agent: string;
   agentSource: "user" | "project" | "bundled" | "unknown";
   task: string;
-  status?: "queued" | "running" | "done" | "error";
+  status?: "queued" | "running" | "done" | "error" | "stopped" | "not-started" | "unknown";
   research?: {
     threadId?: string;
     title?: string;
@@ -224,6 +224,7 @@ async function runSubagentViaApi(params: {
   excludeTools?: string[];
   systemPrompt: string;
   signal?: AbortSignal;
+  onDispatch?: () => void;
   onStart?: (childSession: ChildSession) => void;
 }): Promise<{
   childSession: ChildSession;
@@ -233,6 +234,8 @@ async function runSubagentViaApi(params: {
   thinkingLevel?: ThinkingLevel;
   stopReason?: string;
 }> {
+  params.signal?.throwIfAborted();
+  params.onDispatch?.();
   const response = await fetch(`${leylineApiBaseUrl()}/api/pi/subagent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -259,7 +262,9 @@ async function runSubagentViaApi(params: {
 
   const data = await response.json() as any;
   if (!response.ok || data?.error) {
-    throw new Error(data?.error || `API error: ${response.status}`);
+    const error = new Error(data?.error || `API error: ${response.status}`);
+    if (data?.stopReason === "aborted") error.name = "AbortError";
+    throw error;
   }
   return data;
 }
@@ -508,14 +513,13 @@ export default function subagentExtension(pi: ExtensionAPI) {
         }
 
         const maxConcurrency = 4;
-        const results = new Array<SingleResult>(tasks.length);
         const progress = tasks.map((task: any, index: number) => pendingResult(
           task,
           index < maxConcurrency ? "running" : "queued",
         ));
         const publishProgress = () => {
           const completed = progress.filter((result) => {
-            return result.status === "done" || result.status === "error";
+            return ["done", "error", "stopped", "not-started"].includes(result.status || "");
           }).length;
           onUpdate?.({
             content: [{
@@ -532,6 +536,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
         publishProgress();
 
         for (let i = 0; i < tasks.length; i += maxConcurrency) {
+          if (signal?.aborted) break;
           const batch = tasks.slice(i, i + maxConcurrency);
           if (i > 0) {
             batch.forEach((_task: any, batchIndex: number) => {
@@ -562,13 +567,16 @@ export default function subagentExtension(pi: ExtensionAPI) {
                   usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, turns: 0 },
                   error: `Unknown agent: ${task.agent}`,
                 };
-            results[resultIndex] = result;
             progress[resultIndex] = result;
             publishProgress();
           }));
         }
 
-        const finalResults = results.filter(Boolean);
+        const finalResults = progress.map((result: SingleResult) => {
+          return result.status === "queued" || result.status === "running"
+            ? { ...result, status: "not-started" as const, exitCode: 1, error: "Task did not start" }
+            : result;
+        });
         const output = finalResults.map((result, index) => {
           return `### Agent ${index + 1}: ${result.agent}\n${resultOutput(result)}`;
         }).join("\n\n");
@@ -587,6 +595,15 @@ export default function subagentExtension(pi: ExtensionAPI) {
         }
 
         const results: SingleResult[] = [];
+        const chainResults = () => [
+          ...results,
+          ...chain.slice(results.length).map((step: any) => ({
+            ...pendingResult(step, "queued"),
+            status: "not-started" as const,
+            exitCode: 1,
+            error: "Task did not start",
+          })),
+        ];
         let previousOutput = "";
 
         for (const step of chain) {
@@ -605,7 +622,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
             results.push(result);
             return {
               content: [{ type: "text", text: `Chain stopped at step ${results.length} (${step.agent}): ${resultOutput(result)}` }],
-              details: { mode: "chain", results, background: false } as SubagentDetails,
+              details: { mode: "chain", results: chainResults(), background: false } as SubagentDetails,
               isError: true,
             };
           }
@@ -619,17 +636,17 @@ export default function subagentExtension(pi: ExtensionAPI) {
                 content: [{ type: "text", text: `${started.agent} chain step running` }],
                 details: {
                   mode: "chain",
-                  results: [...results, started],
+                  results: [...results, started, ...chain.slice(results.length + 1).map((step: any) => pendingResult(step, "queued"))],
                   background: true,
                 } as SubagentDetails,
               });
             },
           );
           results.push(result);
-          if (result.error || result.exitCode !== 0) {
+          if (resultFailed(result)) {
             return {
               content: [{ type: "text", text: `Chain stopped at step ${results.length} (${step.agent}): ${resultOutput(result)}` }],
-              details: { mode: "chain", results, background: false } as SubagentDetails,
+              details: { mode: "chain", results: chainResults(), background: false } as SubagentDetails,
               isError: true,
             };
           }
@@ -725,7 +742,7 @@ function failedResult(result: any): boolean {
 }
 
 function resultFailed(result: SingleResult): boolean {
-  return Boolean(result.error || result.exitCode !== 0);
+  return Boolean(result.error || result.exitCode !== 0 || result.status === "not-started");
 }
 
 async function executeSingle(
@@ -743,6 +760,7 @@ async function executeSingle(
 ): Promise<SingleResult> {
   const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, turns: 0 };
   let childSession: ChildSession | null = null;
+  let dispatched = false;
 
   try {
     const configured = await resolveSubagentConfig({ agent, cwd: ctx.cwd, parentSessionPath, signal });
@@ -760,6 +778,7 @@ async function executeSingle(
       excludeTools: agent.excludeTools,
       systemPrompt: agent.systemPrompt,
       signal,
+      onDispatch: () => { dispatched = true; },
       onStart: (session) => {
         childSession = session;
         onStart?.({
@@ -784,7 +803,7 @@ async function executeSingle(
       agent: agent.name,
       agentSource: agent.source,
       task,
-      status: failed ? "error" : "done",
+      status: data.stopReason === "aborted" ? "stopped" : failed ? "error" : "done",
       research: agent.name === BUNDLED_RESEARCHER.name
         ? researchResultFromMessages(messages)
         : undefined,
@@ -800,12 +819,13 @@ async function executeSingle(
       error: data.error,
     };
   } catch (error: any) {
-    if (signal?.aborted) throw error;
+    const stopped = signal?.aborted || error?.name === "AbortError";
     return {
       agent: agent.name,
       agentSource: agent.source,
       task,
-      status: "error",
+      status: stopped ? (childSession ? "stopped" : dispatched ? "unknown" : "not-started") : "error",
+      stopReason: stopped ? "aborted" : "error",
       requestedModel: modelOverride,
       requestedThinking: thinkingOverride,
       childSession,

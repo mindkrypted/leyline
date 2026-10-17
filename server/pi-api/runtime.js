@@ -2161,7 +2161,9 @@ const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, 
     }
     return result
   } catch (error) {
-    if (signal?.aborted) throw new Error('Subagent cancelled')
+    if (signal?.aborted) {
+      throw Object.assign(new Error('Subagent cancelled'), { name: 'AbortError' })
+    }
     throw error
   } finally {
     signal?.removeEventListener?.('abort', abortSubagent)

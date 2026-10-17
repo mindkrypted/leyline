@@ -82,9 +82,9 @@ Select the row again when it shows **hide**.
 
 ## Read a subagent card
 
-A subagent tool call appears as a subagent card. The card shows the agent name and **running**, **completed**, or **error**.
+A subagent card shows outcome counts in its header and a status beside each task. **Stopped** means cancellation. **Failed** means a task error. Missing outcomes show **Unknown**.
 
-Select the card to expand its result. Select **→ view session** on a result to open that child session.
+Select the card to expand its result. Select a task row to open that child session. See [Subagents](./subagents#read-a-subagent-card) for an example.
 
 ## Copy transcript content
 

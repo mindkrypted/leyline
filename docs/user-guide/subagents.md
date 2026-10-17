@@ -65,11 +65,13 @@ A model or thinking value on one task takes priority over the mode-level value.
 
 ## Read a subagent card
 
-A subagent tool call appears as a card in the parent transcript. It shows the agent name, task results, and status.
+![Subagent group with four completed tasks and one stopped task](../assets/screenshots/subagent-outcomes.png)
 
-Select the card to expand final output. Select **→ view session** to open a
-child session. Use Command-click, Ctrl-click, or middle-click to open the child
-in a new tab or window.
+The header shows outcome counts. Each task has its own status. A stopped task does not mark the other tasks as failed.
+
+Select the card to expand final output. Select a task row to open its child
+session. Use Command-click, Ctrl-click, or middle-click to open the child in a
+new tab or window.
 
 ## Inspect delegated runs
 
