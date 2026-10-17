@@ -36,7 +36,8 @@ export async function startLeylineServer(options = {}) {
   })
 
   configurePiWebSocketServer(server)
-  const closeNetworkAccess = configureNetworkAccess(server, readNetworkAccessSettings())
+  const owner = options.networkAccessOwner || JSON.stringify(['server', root, host, port])
+  const closeNetworkAccess = configureNetworkAccess(server, readNetworkAccessSettings(owner))
 
   await new Promise((resolveServer, reject) => {
     server.once('error', reject)

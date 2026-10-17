@@ -16,12 +16,14 @@ export function piApi() {
     configureServer(server) {
       configurePiWebSocketServer(server.httpServer)
       const protocol = server.config.server.https ? 'https' : 'http'
-      closeNetworkAccess = configureNetworkAccess(server.httpServer, {
-        ...readNetworkAccessSettings(),
-        protocol,
-      })
       server.httpServer.once('listening', () => {
-        process.env.LEYLINE_SERVER_URL = localServerUrl(server.httpServer, protocol)
+        const url = localServerUrl(server.httpServer, protocol)
+        const owner = JSON.stringify(['vite', server.config.root, url])
+        closeNetworkAccess = configureNetworkAccess(server.httpServer, {
+          ...readNetworkAccessSettings(owner),
+          protocol,
+        })
+        process.env.LEYLINE_SERVER_URL = url
       })
       server.middlewares.use('/api/leyline', backendConnectionsHandler)
       server.middlewares.use('/api/pi', piApiHandler)

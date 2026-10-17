@@ -3,9 +3,9 @@ import { networkInterfaces } from 'node:os'
 
 let binding
 
-export function configureNetworkAccess(server, { enabled = false, port = 0, protocol = 'http' } = {}) {
+export function configureNetworkAccess(server, { enabled = false, port = 0, protocol = 'http', persist } = {}) {
   const state = {
-    server, protocol, configuredPort: port, listener: null, connections: new Set(), closing: new Set(),
+    server, protocol, persist, configuredPort: port, listener: null, connections: new Set(), closing: new Set(),
     pending: Promise.resolve(), closed: false, error: '',
   }
   binding = state
@@ -29,7 +29,7 @@ export async function networkAccessStatus() {
   return statusFor(state)
 }
 
-export function setNetworkAccess({ enabled, port }, persist, response) {
+export function setNetworkAccess({ enabled, port }, response) {
   const state = binding
   if (!state) return Promise.reject(new Error('Network access is unavailable'))
   return change(state, async () => {
@@ -42,7 +42,7 @@ export function setNetworkAccess({ enabled, port }, persist, response) {
       listener = await startListener(state, configuredPort)
     }
     try {
-      persist({ enabled: nextEnabled, port: configuredPort })
+      state.persist({ enabled: nextEnabled, port: configuredPort })
     } catch (error) {
       if (listener !== previous) await stopListener(state, listener)
       throw error

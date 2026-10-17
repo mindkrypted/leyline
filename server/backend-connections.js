@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -41,12 +41,7 @@ export async function backendConnectionsHandler(req, res) {
       if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 0 || body.port > 65535)) {
         return json(res, { error: 'Port must be an integer from 0 through 65535' }, 400)
       }
-      return json(res, await setNetworkAccess(body, ({ enabled, port }) => {
-        writeBackendSettings({
-          [NETWORK_ACCESS_SETTING_KEY]: String(enabled),
-          [NETWORK_ACCESS_PORT_SETTING_KEY]: String(port),
-        })
-      }, res))
+      return json(res, await setNetworkAccess(body, res))
     }
 
     if (url.pathname === '/connections') {
@@ -243,12 +238,19 @@ function registryDto(db) {
   return { connections, defaultConnectionId }
 }
 
-export function readNetworkAccessSettings() {
-  const values = readBackendSettings([NETWORK_ACCESS_SETTING_KEY, NETWORK_ACCESS_PORT_SETTING_KEY])
-  const port = Number(values[NETWORK_ACCESS_PORT_SETTING_KEY])
+export function readNetworkAccessSettings(owner) {
+  const scope = createHash('sha256').update(owner).digest('hex')
+  const enabledKey = `${NETWORK_ACCESS_SETTING_KEY}.${scope}`
+  const portKey = `${NETWORK_ACCESS_PORT_SETTING_KEY}.${scope}`
+  const values = readBackendSettings([enabledKey, portKey])
+  const port = Number(values[portKey])
   return {
-    enabled: values[NETWORK_ACCESS_SETTING_KEY] === 'true',
+    enabled: values[enabledKey] === 'true',
     port: Number.isInteger(port) && port >= 0 && port <= 65535 ? port : 0,
+    persist: ({ enabled, port }) => writeBackendSettings({
+      [enabledKey]: String(enabled),
+      [portKey]: String(port),
+    }),
   }
 }
 
