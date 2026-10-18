@@ -1034,7 +1034,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'trace-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     scenario: 'trace',
     interact: async (page) => {
@@ -1197,7 +1197,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'network-access-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     scenario: 'network',
     viewport: { width: 390, height: 844 },
     interact: (page) => openBackendConnections(page, true),
@@ -1208,7 +1208,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1223,7 +1223,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1277,7 +1277,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1296,11 +1296,11 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
-      await dialog.getByRole('button', { name: 'Edit MiniMax M2.7', exact: true }).click()
+      await dialog.getByRole('button', { name: 'Edit MiniMax M2.7 (minimax-m2.7)', exact: true }).click()
       await dialog.getByRole('textbox', { name: /^Display name/ }).fill('MiniMax M2.7 (draft)')
       const actions = dialog.locator('.pi-settings-draft-actions')
       await actions.getByRole('button', { name: 'Test connection', exact: true }).click()
@@ -1314,7 +1314,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'MCP servers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1340,11 +1340,11 @@ try {
     browser,
     file: path.join(docsOutputDir, 'settings-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     interact: async (page) => {
       await page.getByRole('button', { name: 'Open sessions' }).click()
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('combobox', { name: 'Settings category' }).selectOption('providers')
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1356,7 +1356,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'model-catalog-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     scenario: 'model-catalog',
     viewport: { width: 390, height: 844 },
     interact: openModelCatalog,
@@ -1455,7 +1455,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Agent defaults', exact: true }).click()
       await dialog.locator('section[aria-label="Vision agent"][aria-busy="false"]').waitFor()
@@ -1504,7 +1504,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Agent defaults', exact: true }).click()
       await dialog.locator('section[aria-label="Subagents"][aria-busy="false"]').waitFor()
@@ -1613,7 +1613,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'mobile-session.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     scenario: 'ultrafast',
   })
@@ -1621,7 +1621,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'mobile-sidebar.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     interact: async (page) => {
       await page.getByRole('button', { name: 'Open sessions' }).click()
@@ -1632,7 +1632,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'activity-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     scenario: 'activity',
     interact: async (page) => {
@@ -1677,11 +1677,14 @@ console.log('Screenshot capture complete')
 async function waitForTrace(page) {
   await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: 'Verify before publication' }).waitFor()
   await page.locator('[data-observation-id="release-edit"]').waitFor()
-  await page.locator('.trace-host-footer').getByText('New runs will be captured.', { exact: false }).waitFor()
+  await page.locator('.trace-host-footer summary').filter({ hasText: 'Capture new runs' }).waitFor()
   await page.locator('.elune-observations > .elune-pagination').getByText('1–8 of 8 loaded observations', { exact: false }).waitFor()
 }
 
 async function openTraceInspector(page) {
+  if (await page.locator('.header-more-button').isVisible().catch(() => false)) {
+    await page.locator('.header-more-button').click()
+  }
   await page.getByRole('button', { name: 'Session traces', exact: true }).click()
   await waitForTrace(page)
   await page.locator('[data-observation-id="release-edit"]').click()
@@ -2012,7 +2015,7 @@ async function openBackendConnections(page, enabled = false) {
   if (await toggle.getAttribute('aria-checked') !== 'false' || await toggle.isDisabled()) {
     throw new Error('Network access must start off and available')
   }
-  const port = network.getByRole('spinbutton', { name: 'Proxy port', exact: true })
+  const port = network.getByRole('textbox', { name: 'Proxy port', exact: true })
   if (await port.inputValue() !== '') throw new Error('Proxy port must start in automatic mode')
   await dialog.locator('.backend-connection-card').filter({ hasText: 'Team backend' }).waitFor()
   await dialog.getByRole('button', { name: 'Add connection', exact: true }).waitFor()
@@ -2269,12 +2272,24 @@ async function capture({
     await page.evaluate(() => window.scrollTo(0, 0))
     await assertPrivateDataAbsent(page)
     if (!exportPage) {
-      await assertModelLabel(page, `${runtime.state.model.provider}/${runtime.state.model.id}`)
+      await assertModelLabel(
+        page,
+        `${runtime.state.model.provider}/${runtime.state.model.id}`,
+        runtime.state.model.name,
+      )
       if (['home', 'ultrafast'].includes(scenario)) {
-        const chip = page.locator('.ultrafast-toggle:visible').first()
-        if ((await chip.innerText()).trim() !== 'ultrafast'
-          || await chip.getAttribute('aria-pressed') !== String(scenario === 'ultrafast')) {
-          throw new Error('Unexpected Ultrafast control state')
+        const enabled = scenario === 'ultrafast'
+        if (await page.locator('.mobile-model-control:visible').count()) {
+          const indicator = await page.locator('.mobile-ultrafast:visible').count()
+          if (indicator !== (enabled ? 1 : 0)) {
+            throw new Error('Unexpected mobile Ultrafast indicator state')
+          }
+        } else {
+          const chip = page.locator('.ultrafast-toggle:visible').first()
+          if ((await chip.innerText()).trim() !== 'ultrafast'
+            || await chip.getAttribute('aria-pressed') !== String(enabled)) {
+            throw new Error('Unexpected Ultrafast control state')
+          }
         }
       }
     }
@@ -2495,7 +2510,19 @@ async function assertPrivateDataAbsent(page) {
   }
 }
 
-async function assertModelLabel(page, expected) {
+async function assertModelLabel(page, expected, mobileExpected = expected) {
+  const mobileControl = page.locator('.mobile-model-control:visible').first()
+  if (await mobileControl.count()) {
+    await page.waitForFunction(({ expected }) => {
+      const controls = [...document.querySelectorAll('.mobile-model-control')]
+        .filter((control) => control.getClientRects().length)
+      return controls.length > 0 && controls.every((control) => {
+        const title = control.querySelector('.mobile-model-title > span')
+        return title && title.textContent.trim() === expected
+      })
+    }, { expected: mobileExpected }, { timeout: 15000 })
+    return
+  }
   const selector = '.model-picker:not(.small-picker):not(.tool-picker) > .model-picker-button'
   await page.waitForFunction(({ expected, selector }) => {
     const buttons = [...document.querySelectorAll(selector)]
