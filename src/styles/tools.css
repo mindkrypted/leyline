@@ -76,14 +76,62 @@
   font-size: 12px;
 }
 
-.tool-card-header em {
+.tool-status-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   margin-left: auto;
+  border-radius: 6px;
+  background: rgb(120 189 139 / 13%);
   color: #78bd8b;
-  font-style: normal;
-  font-size: 10px;
+}
+
+.tool-status-mark svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tool-status-mark.status-running {
+  background: rgb(169 156 255 / 13%);
+  color: #a99cff;
+}
+
+.tool-status-mark.status-error {
+  background: rgb(216 138 150 / 13%);
+  color: #d88a96;
+}
+
+.tool-status-mark.status-stopped {
+  background: rgb(198 173 131 / 13%);
+  color: #c6ad83;
+}
+
+.tool-status-mark.status-unknown {
+  background: rgb(147 147 155 / 13%);
+  color: #93939b;
+}
+
+.tool-status-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.4px solid rgb(191 181 255 / 24%);
+  border-top-color: #bfb5ff;
+  border-radius: 999px;
+  animation: session-loading-spin 800ms linear infinite;
+}
+
+.tool-status-question {
+  font-size: 11px;
   font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  line-height: 1;
 }
 
 .system-prompt-inspector {
@@ -1171,10 +1219,6 @@
   border-color: rgb(160 78 90 / 42%);
 }
 
-.error-card .tool-card-header em {
-  color: #d88a96;
-}
-
 .tool-card-header code {
   overflow: hidden;
   min-width: 0;
@@ -1359,18 +1403,6 @@
   flex: 0 0 auto;
   color: #929299;
   font-weight: 650;
-}
-
-.tool-card-header em.status-completed {
-  color: #78bd8b;
-}
-
-.tool-card-header em.status-running {
-  color: #a99cff;
-}
-
-.tool-card-header em.status-error {
-  color: #d88a96;
 }
 
 .subagent-summary {
@@ -2164,12 +2196,6 @@ dialog.subagent-inspector:not([open]) {
   white-space: nowrap;
 }
 
-.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header em {
-  flex: none;
-  white-space: nowrap;
-  font-size: 9px;
-}
-
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header .copy-button {
   display: none;
 }
@@ -2201,14 +2227,6 @@ dialog.subagent-inspector:not([open]) {
 .mobile-activity-card.has-subagents .mobile-activity-state {
   flex: 1;
   justify-content: flex-end;
-}
-
-.tool-card-header em.status-stopped {
-  color: #c6ad83;
-}
-
-.tool-card-header em.status-unknown {
-  color: #93939b;
 }
 
 .mobile-activity-summary:focus-visible {
@@ -2313,12 +2331,6 @@ dialog.subagent-inspector:not([open]) {
     font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .tool-card:not(.subagent-card) .tool-card-header em {
-    flex: none;
-    white-space: nowrap;
-    font-size: 9px;
   }
 
   .live-tool-card:not(.subagent-card) .tool-card-header {

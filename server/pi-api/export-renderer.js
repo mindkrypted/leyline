@@ -7,7 +7,7 @@ import { configureMarkdownLinks } from '../../lib/markdown-file-links.js'
 import { projectContextView, systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
 import { subagentStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
 import { subagentCallTitle, subagentEmptyText, subagentFallback, subagentOutput, subagentTasks, subagentTaskTitle } from '../../lib/subagent-view.js'
-import { activityEntry, activitySummary, groupToolActivity, mobileToolStatus, singleSubagentEntry } from '../../lib/tool-activity.js'
+import { activityEntry, activitySummary, groupToolActivity, mobileToolStatus, singleSubagentEntry, toolStatusTone } from '../../lib/tool-activity.js'
 import {
   imageBlocksFor,
   messageBlocksFor,
@@ -229,18 +229,29 @@ function renderExportModelChange(entry) {
 </div>`
 }
 
+function toolStatusMark(tone) {
+  if (tone === 'running') return '<span class="tool-status-spinner" aria-hidden="true"></span>'
+  if (tone === 'stopped') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 5h6v6H5z" /></svg>'
+  if (tone === 'unknown') return '<span class="tool-status-question" aria-hidden="true">?</span>'
+  const path = tone === 'error'
+    ? 'M4.3 4.3 11.7 11.7M11.7 4.3 4.3 11.7'
+    : 'M3.1 8.5 6.4 11.7 12.9 4.4'
+  return `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${path}" /></svg>`
+}
+
 function renderExportTool(entry, index) {
   if (entry.toolName === 'subagent') {
     return renderExportSubagent(entry, index)
   }
   const status = mobileToolStatus(entry)
+  const tone = toolStatusTone(status)
   return `<details class="tool-card transcript-tool${['error', 'failed'].includes(status) ? ' error-card' : ''}">
 <summary class="tool-card-header">
 <span class="chevron tool-chevron">›</span>
 <span>${escapeHtml(entry.label)}</span>
 ${entry.code ? `<code>${escapeHtml(entry.code)}</code>` : ''}
 ${entry.contextLabel ? renderToolContext(entry) : ''}
-<em><span class="mobile-tool-status status-${status}">${escapeHtml(status)}</span></em>
+<span class="tool-status-mark status-${tone}" title="${escapeHtml(status)}" role="img" aria-label="${escapeHtml(status)}">${toolStatusMark(tone)}</span>
 </summary>
 ${entry.code && !['bash', 'search_memory'].includes(entry.toolName) ? `<div class="mobile-tool-target"><code>${escapeHtml(entry.preview?.path || entry.code)}</code></div>` : ''}
 <div class="tool-expanded-body" data-tool-index="${index}">
@@ -1508,16 +1519,40 @@ button, input, textarea { color: inherit; font: inherit; }
   transition-duration: var(--motion-quick);
   transition-timing-function: var(--ease-accelerate);
 }
-.tool-card-header em {
+.tool-status-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   margin-left: auto;
+  border-radius: 6px;
+  background: rgb(120 189 139 / 13%);
   color: #78bd8b;
-  font-style: normal;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
-.error-card .tool-card-header em { color: #fca5a5; }
+.tool-status-mark svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tool-status-mark.status-running { background: rgb(169 156 255 / 13%); color: #a99cff; }
+.tool-status-mark.status-error { background: rgb(216 138 150 / 13%); color: #d88a96; }
+.tool-status-mark.status-stopped { background: rgb(198 173 131 / 13%); color: #c6ad83; }
+.tool-status-mark.status-unknown { background: rgb(147 147 155 / 13%); color: #93939b; }
+.tool-status-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.4px solid rgb(191 181 255 / 24%);
+  border-top-color: #bfb5ff;
+  border-radius: 999px;
+  animation: session-loading-spin 800ms linear infinite;
+}
+.tool-status-question { font-size: 11px; font-weight: 650; line-height: 1; }
 .tool-card-header code {
   overflow: hidden;
   min-width: 0;
@@ -2621,13 +2656,9 @@ dialog.subagent-inspector[open] {
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header { flex-wrap: nowrap; gap: 7px; min-height: var(--activity-row-height); }
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; font-size: 12px; }
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header em { flex: none; white-space: nowrap; font-size: 9px; }
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header .copy-button { display: none; }
 .mobile-activity-list .tool-card:not(.subagent-card)[open] .tool-card-header .copy-button { display: grid; place-items: center; min-width: 30px; min-height: 30px; }
 .tool-card[open] .tool-chevron { transform: none; }
-.mobile-tool-status { display: inline; }
-.mobile-tool-status.status-stopped { color: #c6ad83; }
-.mobile-tool-status.status-unknown { color: #93939b; }
 .tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
 .mobile-activity-list .subagent-header .tool-inspect-button { height: var(--activity-row-height); min-height: var(--activity-row-height); }
 .mobile-activity-card.has-subagents .mobile-activity-state { flex: 1; justify-content: flex-end; }
@@ -2648,7 +2679,6 @@ dialog.subagent-inspector[open] {
   .tool-card:not(.subagent-card) .tool-card-header { flex-wrap: nowrap; gap: 7px; min-height: 44px; }
   .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; max-width: 40%; font-size: 11px; }
   .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-  .tool-card:not(.subagent-card) .tool-card-header em { flex: none; white-space: nowrap; font-size: 9px; }
   .tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
 }
 `

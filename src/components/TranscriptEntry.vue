@@ -7,7 +7,7 @@ const PierrePreview = defineAsyncComponent(() => import('./PierrePreview.vue'))
 <script setup>
 import { computed, ref, watch } from 'vue'
 import CopyIcon from './CopyIcon.vue'
-import { mobileToolStatus } from '../../lib/tool-activity.js'
+import { mobileToolStatus, toolStatusTone } from '../../lib/tool-activity.js'
 import { researchSourcesMatch } from '../../lib/research-state.js'
 import { systemPromptInfo } from '../../lib/system-prompt.js'
 import { subagentCallTitle } from '../../lib/subagent-view.js'
@@ -158,16 +158,11 @@ function isSubagentEntry(entry) {
   return entry.type === 'tool' && entry.toolName === 'subagent'
 }
 
-function toolStatusTone(status) {
-  if (['preparing', 'running', 'reading result'].includes(status)) return 'running'
-  if (['stopped', 'unknown'].includes(status)) return status
-  if (['error', 'failed', 'aborted'].includes(status)) return 'error'
-  return 'completed'
-}
-
 function entryToolStatus(entry) {
   return mobileToolStatus(entry, props.toolStatus)
 }
+
+const toolTone = computed(() => toolStatusTone(entryToolStatus(props.entry)))
 
 function citationTarget(value) {
   try {
@@ -324,9 +319,25 @@ function openMarkdownContent(event) {
         >
           {{ entry.contextLabel }}
         </span>
-        <em :class="`status-${toolStatusTone(entryToolStatus(entry))}`">
-          {{ entryToolStatus(entry) }}
-        </em>
+        <span
+          class="tool-status-mark"
+          :class="`status-${toolTone}`"
+          :title="entryToolStatus(entry)"
+          role="img"
+          :aria-label="entryToolStatus(entry)"
+        >
+          <span v-if="toolTone === 'running'" class="tool-status-spinner" aria-hidden="true"></span>
+          <svg v-else-if="toolTone === 'completed'" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3.1 8.5 6.4 11.7 12.9 4.4" />
+          </svg>
+          <svg v-else-if="toolTone === 'error'" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4.3 4.3 11.7 11.7M11.7 4.3 4.3 11.7" />
+          </svg>
+          <svg v-else-if="toolTone === 'stopped'" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M5 5h6v6H5z" />
+          </svg>
+          <span v-else class="tool-status-question" aria-hidden="true">?</span>
+        </span>
       </button>
       <button
         v-if="hasToolResult(entry)"
