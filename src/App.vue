@@ -28,6 +28,7 @@ const AgentSettings = defineAsyncComponent(() => import('./components/AgentSetti
 const GlobalSettingsModal = defineAsyncComponent(() => import('./components/GlobalSettingsModal.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./components/ProviderSettings.vue'))
 const McpSettings = defineAsyncComponent(() => import('./components/McpSettings.vue'))
+import CopyIcon from './components/CopyIcon.vue'
 import ExtensionConfirmations from './components/ExtensionConfirmations.vue'
 import StartComposer from './components/StartComposer.vue'
 import SessionComposer from './components/SessionComposer.vue'
@@ -751,7 +752,6 @@ const {
   copyEntry,
   copyTranscriptItem,
   copyTitle,
-  copyGlyph,
 } = toolExpansion
 const {
   filePreview,
@@ -5396,21 +5396,21 @@ function closePickerMenus() {
                 <dt>Session ID</dt>
                 <dd class="settings-copy-row">
                   <span>{{ settingsSessionId || '—' }}</span>
-                  <button v-if="settingsSessionId" type="button" class="copy-button" :title="copyTitle('settings-session-id')" aria-label="Copy session ID" @click="copyTranscriptItem('settings-session-id', settingsSessionId)">{{ copyGlyph('settings-session-id') }}</button>
+                  <button v-if="settingsSessionId" type="button" class="copy-button" :title="copyTitle('settings-session-id')" aria-label="Copy session ID" @click="copyTranscriptItem('settings-session-id', settingsSessionId)"><CopyIcon :copied="copiedEntryId === 'settings-session-id'" /></button>
                 </dd>
               </div>
               <div>
                 <dt>CWD</dt>
                 <dd class="settings-copy-row">
                   <span>{{ settingsCwd }}</span>
-                  <button type="button" class="copy-button" :title="copyTitle('settings-cwd')" aria-label="Copy CWD" @click="copyTranscriptItem('settings-cwd', settingsCwd)">{{ copyGlyph('settings-cwd') }}</button>
+                  <button type="button" class="copy-button" :title="copyTitle('settings-cwd')" aria-label="Copy CWD" @click="copyTranscriptItem('settings-cwd', settingsCwd)"><CopyIcon :copied="copiedEntryId === 'settings-cwd'" /></button>
                 </dd>
               </div>
               <div>
                 <dt>Path</dt>
                 <dd class="settings-copy-row">
                   <span>{{ settingsPath || '—' }}</span>
-                  <button v-if="settingsPath" type="button" class="copy-button" :title="copyTitle('settings-path')" aria-label="Copy path" @click="copyTranscriptItem('settings-path', settingsPath)">{{ copyGlyph('settings-path') }}</button>
+                  <button v-if="settingsPath" type="button" class="copy-button" :title="copyTitle('settings-path')" aria-label="Copy path" @click="copyTranscriptItem('settings-path', settingsPath)"><CopyIcon :copied="copiedEntryId === 'settings-path'" /></button>
                 </dd>
               </div>
               <div><dt>Messages</dt><dd>{{ selectedSession.messageCount ?? '—' }}</dd></div>
@@ -5528,7 +5528,7 @@ function closePickerMenus() {
                 :title="copyTitle(fullscreenTool.id)"
                 @click="copyTranscriptItem(fullscreenTool.id, entryCopyText(fullscreenTool))"
               >
-                {{ copyGlyph(fullscreenTool.id) }}
+                <CopyIcon :copied="copiedEntryId === fullscreenTool.id" />
               </button>
               <button type="button" aria-label="Close tool preview" @click="closeToolFullscreen">×</button>
             </div>

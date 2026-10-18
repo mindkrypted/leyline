@@ -1770,7 +1770,7 @@ button, input, textarea { color: inherit; font: inherit; }
   .user-message { padding: 9px 10px; }
   .tool-card-header { gap: 7px; }
 }
-@media (any-pointer: coarse) {
+@media (pointer: coarse) {
   .tool-card > summary,
   .thinking-trigger,
   .skill-summary,

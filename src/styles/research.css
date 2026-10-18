@@ -851,7 +851,8 @@ button.research-source-select {
   }
 }
 
-@media (any-pointer: coarse) {
+/* Use the primary pointer so touchscreens do not enlarge hybrid desktop controls. */
+@media (pointer: coarse) {
   .research-sources-toggle,
   .research-phase-summary button,
   button.research-mode-chip,

@@ -6,6 +6,7 @@ const PierrePreview = defineAsyncComponent(() => import('./PierrePreview.vue'))
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import CopyIcon from './CopyIcon.vue'
 import { mobileToolStatus } from '../../lib/tool-activity.js'
 import { researchSourcesMatch } from '../../lib/research-state.js'
 import { systemPromptInfo } from '../../lib/system-prompt.js'
@@ -105,10 +106,6 @@ function skillUserMessage(entry) {
 
 function copyTitle(id) {
   return props.copiedEntryId === id ? 'Copied' : 'Copy'
-}
-
-function copyGlyph(id) {
-  return props.copiedEntryId === id ? '✓' : '⧉'
 }
 
 function isLocalEntry(entry) {
@@ -300,7 +297,7 @@ function openMarkdownContent(event) {
       :title="copyTitle(entry.id)"
       @click="emit('copy', entry)"
     >
-      {{ copyGlyph(entry.id) }}
+      <CopyIcon :copied="copiedEntryId === entry.id" />
     </button>
   </div>
 
@@ -369,7 +366,7 @@ function openMarkdownContent(event) {
         :title="copyTitle(entry.id)"
         @click.stop="emit('copy', entry)"
       >
-        {{ copyGlyph(entry.id) }}
+        <CopyIcon :copied="copiedEntryId === entry.id" />
       </button>
     </div>
 
@@ -497,7 +494,9 @@ function openMarkdownContent(event) {
         title="Open full screen"
         @click.stop="emit('open-tool-fullscreen', entry, $event)"
       >
-        ⛶
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+          <path d="M8 3H3v5m13-5h5v5m0 8v5h-5M3 16v5h5" />
+        </svg>
       </button>
       <button
         v-if="!isLocalEntry(entry)"
@@ -527,7 +526,7 @@ function openMarkdownContent(event) {
         :title="copyTitle(entry.id)"
         @click.stop="emit('copy', entry)"
       >
-        {{ copyGlyph(entry.id) }}
+        <CopyIcon :copied="copiedEntryId === entry.id" />
       </button>
     </div>
     <div class="tool-expand-wrapper" :class="{ 'is-expanded': toolExpanded }">
@@ -699,7 +698,7 @@ function openMarkdownContent(event) {
         :title="copyTitle(entry.id)"
         @click="emit('copy', entry)"
       >
-        {{ copyGlyph(entry.id) }}
+        <CopyIcon :copied="copiedEntryId === entry.id" />
       </button>
     </div>
     <div

@@ -1430,7 +1430,7 @@
   }
 }
 
-@media (any-pointer: coarse) {
+@media (pointer: coarse) {
   .message-meta-row {
     flex-wrap: wrap;
     gap: 4px;
