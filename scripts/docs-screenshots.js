@@ -1476,12 +1476,21 @@ try {
     ready: '.subagent-summary',
     scenario: 'subagent-outcomes',
     interact: async (page) => {
-      const card = page.locator('.subagent-card')
+      const activity = page.locator('.mobile-activity-card')
+      const card = activity.locator('.subagent-card')
+      await activity.locator('.mobile-activity-summary').click()
+      await card.locator('.tool-expand-button').click()
       await card.locator('.subagent-summary').filter({ hasText: '4 completed' }).waitFor()
-      await card.locator('.subagent-task-status.status-stopped').waitFor()
+      await card.locator('.subagent-result-item').nth(4).waitFor({ state: 'visible' })
+      await card.locator('.subagent-task-status.status-stopped').first().waitFor()
       if (await card.locator('.subagent-result-item').count() !== 5) {
         throw new Error('Subagent outcome capture must show all five tasks')
       }
+      await activity.scrollIntoViewIfNeeded()
+      await page.mouse.wheel(0, -10000)
+      await page.waitForFunction(() => {
+        return document.querySelector('.workbench')?.scrollTop === 0
+      })
     },
   })
   await capture({
@@ -1491,11 +1500,14 @@ try {
     ready: '.transcript-tool',
     scenario: 'vision',
     interact: async (page) => {
-      const tool = page.locator('.transcript-tool').filter({ hasText: 'Tool · vision_agent' })
-      await tool.click()
+      const activity = page.locator('.mobile-activity-card')
+      const tool = activity.locator('.transcript-tool')
+        .filter({ hasText: 'Tool · vision_agent' })
+      await activity.locator('.mobile-activity-summary').click()
+      await tool.locator('.tool-expand-button').click()
       await tool.locator('.tool-output').waitFor()
     },
-    clipSelectors: ['.transcript-message.user-message', '.transcript-tool'],
+    clipSelectors: ['.transcript-message.user-message', '.mobile-activity-card'],
     padding: 18,
   })
   await capture({
