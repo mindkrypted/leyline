@@ -112,6 +112,10 @@ function isLocalEntry(entry) {
     || String(entry?.id || '').startsWith('local-')
 }
 
+function hasToolResult(entry) {
+  return Boolean(entry.text || entry.preview)
+}
+
 function canEditEntry(entry) {
   return entry.role === 'user' && !isLocalEntry(entry)
 }
@@ -157,7 +161,7 @@ function isSubagentEntry(entry) {
 function toolStatusTone(status) {
   if (['preparing', 'running', 'reading result'].includes(status)) return 'running'
   if (['stopped', 'unknown'].includes(status)) return status
-  if (['error', 'aborted'].includes(status)) return 'error'
+  if (['error', 'failed', 'aborted'].includes(status)) return 'error'
   return 'completed'
 }
 
@@ -167,6 +171,22 @@ function entryToolStatus(entry) {
 
 function subagentStatus(result) {
   return resultStatus(result, subagentOutcome.value.active)
+}
+
+function subagentFallbackClass(entry) {
+  const status = entryToolStatus(entry)
+  if (['preparing', 'running', 'reading result'].includes(status)) return 'status-running'
+  if (status === 'stopped') return 'status-stopped'
+  if (['error', 'failed'].includes(status)) return 'status-error'
+  return 'status-unknown'
+}
+
+function subagentFallbackText(entry) {
+  const status = entryToolStatus(entry)
+  if (['preparing', 'running', 'reading result'].includes(status)) return 'Running'
+  if (status === 'stopped') return 'Stopped'
+  if (['error', 'failed'].includes(status)) return 'Failed'
+  return 'Results unavailable'
 }
 
 function subagentFinalOutput(result) {
@@ -345,8 +365,8 @@ function openMarkdownContent(event) {
             :class="`status-${outcome.status}`"
           >{{ outcome.text }}</span>
         </span>
-        <em v-else :class="subagentOutcome.active ? 'status-running' : 'status-unknown'">
-          {{ subagentOutcome.active ? 'Running' : 'Results unavailable' }}
+        <em v-else :class="subagentFallbackClass(entry)">
+          {{ subagentFallbackText(entry) }}
         </em>
       </button>
       <button
@@ -454,7 +474,7 @@ function openMarkdownContent(event) {
   <article
     v-else-if="entry.type === 'tool'"
     class="tool-card transcript-tool"
-    :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError && entryToolStatus(entry) !== 'stopped' }"
+    :class="{ 'is-expanded': toolExpanded, 'error-card': ['error', 'failed'].includes(entryToolStatus(entry)) }"
   >
     <div class="tool-card-header">
       <button
@@ -478,6 +498,7 @@ function openMarkdownContent(event) {
         </em>
       </button>
       <button
+        v-if="hasToolResult(entry)"
         class="copy-button"
         type="button"
         title="Open full screen"
@@ -510,6 +531,7 @@ function openMarkdownContent(event) {
         </svg>
       </button>
       <button
+        v-if="hasToolResult(entry)"
         class="copy-button"
         type="button"
         :title="copyTitle(entry.id)"
@@ -565,7 +587,7 @@ function openMarkdownContent(event) {
               Open full screen
             </button>
           </template>
-          <template v-else>
+          <template v-else-if="hasToolResult(entry)">
             <div class="tool-preview-clip tool-plain-preview">
               <pre
                 v-if="renderedToolJson(entry)"

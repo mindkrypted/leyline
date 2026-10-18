@@ -2233,28 +2233,6 @@ function eventSummary(item) {
   return item.activeSessionId ? item.activeSessionId.slice(0, 8) : 'runtime'
 }
 
-function liveToolStatus(tool) {
-  if (tool.status === 'aborted') return 'stopped'
-  if (tool.status === 'completed'
-    && !tool.persistedEntry && !tool.resultEntry) return 'unknown'
-  if (tool.status === 'preparing') return 'preparing'
-  if (tool.status === 'running') return 'running'
-  if (tool.status === 'reading') return 'reading result'
-  if (tool.status === 'error') return 'error'
-  if (tool.status === 'aborted') return 'aborted'
-  return 'completed'
-}
-
-function isLiveSubagentTool(item) {
-  return item.toolName === 'subagent'
-}
-
-function liveSubagentTarget(item) {
-  const agent = item.label?.replace(/^Subagent · /, '') || ''
-  if (agent && agent !== 'subagent' && agent !== item.code) return agent
-  return item.code || ''
-}
-
 function liveItemClass(item) {
   return [
     `live-${item.type}-item`,
@@ -4681,56 +4659,6 @@ function closePickerMenus() {
               @retry="retryEntry"
               @toggle-skill="toggleSkill"
             />
-
-            <TranscriptEntry
-              v-else-if="item.type === 'tool'
-                && (item.persistedEntry
-                  || (item.resultEntry && item.status !== 'reading'))"
-              :copied-entry-id="copiedEntryId"
-              :entry="item.persistedEntry || item.resultEntry"
-              :research-cwd="selectedSession?.cwd || ''"
-              :tool-expanded="isToolExpanded(item.persistedEntry || item.resultEntry)"
-              :tool-status="activityStatus(item)"
-              @copy="copyEntry"
-              @fork="forkSession"
-              @mark-feedback="markEntryFeedback"
-              @navigate-child-session="navigateChildSession"
-              @open-image="openImageFullscreen"
-              @open-research-source="openResearchSource"
-              @reset="resetSessionToEntry"
-              @open-tool-fullscreen="openToolFullscreen"
-              @toggle-tool="toggleTool"
-            />
-
-            <article
-              v-else-if="item.type === 'tool'"
-              class="tool-card transcript-tool live-tool-card"
-              :class="{
-                'subagent-card': isLiveSubagentTool(item),
-                'is-running': item.status === 'running',
-                'is-completed': item.status === 'completed',
-                'error-card': item.status === 'error',
-              }"
-            >
-              <div v-if="isLiveSubagentTool(item)" class="subagent-header">
-                <span class="live-tool-spinner"></span>
-                <span class="subagent-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" fill="none">
-                    <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
-                    <path d="m10 7 3 3-3 3" />
-                  </svg>
-                </span>
-                <span class="subagent-label">Subagent</span>
-                <code v-if="liveSubagentTarget(item)" :title="liveSubagentTarget(item)">{{ liveSubagentTarget(item) }}</code>
-                <em>{{ liveToolStatus(item) }}</em>
-              </div>
-              <div v-else class="tool-card-header">
-                <span class="live-tool-spinner"></span>
-                <span>{{ item.label }}</span>
-                <code v-if="item.code" :title="item.code">{{ item.code }}</code>
-                <em>{{ liveToolStatus(item) }}</em>
-              </div>
-            </article>
 
             <LiveAssistantMessage
               v-else-if="item.type === 'assistant'"

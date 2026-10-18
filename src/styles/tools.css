@@ -1685,23 +1685,51 @@
   white-space: nowrap;
 }
 
-.mobile-activity-check {
+.mobile-activity-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   margin-left: auto;
+  font-size: 11px;
+  font-weight: 550;
+}
+
+.mobile-activity-check {
   color: #8fbc9b;
   font-size: 13px;
 }
 
 .mobile-activity-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
   color: #b8aafa;
-  font-size: 11px;
-  font-weight: 550;
+}
+
+.mobile-activity-outcomes {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-activity-outcomes > span + span::before {
+  content: ' · ';
+  color: #93939b;
+}
+
+.mobile-activity-outcomes .status-error {
+  color: #fca5a5;
+}
+
+.mobile-activity-outcomes .status-stopped {
+  color: #c6ad83;
+}
+
+.mobile-activity-outcomes .status-unknown,
+.mobile-activity-outcomes .status-not-started {
+  color: #93939b;
 }
 
 .mobile-activity-spinner {
+  flex: none;
   width: 11px;
   height: 11px;
   border: 1.5px solid rgb(191 181 255 / 24%);
@@ -1711,6 +1739,7 @@
 }
 
 .mobile-activity-chevron {
+  flex: none;
   color: #aaa;
   transition: transform var(--motion-base) var(--ease-emphasized);
 }
@@ -1825,8 +1854,16 @@
 }
 
 .mobile-activity-list .subagent-card:not(.is-expanded) .subagent-results,
-.mobile-activity-list .subagent-card:not(.is-expanded) .subagent-summary {
+.mobile-activity-list .subagent-card:not(.is-expanded) .subagent-result-note {
   display: none;
+}
+
+.mobile-activity-list .subagent-summary {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mobile-activity-list .subagent-header .tool-expand-button {
@@ -1835,7 +1872,7 @@
 }
 
 .mobile-activity-list .subagent-header code {
-  flex: 1;
+  flex: 1 0 25%;
   max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
