@@ -674,7 +674,7 @@ const markdownPreviewEntries = [
 ]
 
 const subagentOutcomeResults = [
-  { agent: 'general', task: 'Check release verification' },
+  { agent: 'general', task: 'Check release verification\n\nInspect the release script. Confirm that validation finishes before publication and that failed checks stop the release.' },
   { agent: 'explore', task: 'Inspect packaging configuration' },
   { agent: 'general', task: 'Review rollback handling' },
   { agent: 'explore', task: 'Check release notes' },
@@ -688,7 +688,9 @@ const subagentOutcomeResults = [
     id: `release-check-${index + 1}`,
     path: `/workspace/harbor/sessions/release-check-${index + 1}.jsonl`,
   },
-  messages: index === 2 ? [] : [{ role: 'assistant', content: 'Check complete.' }],
+  messages: index === 2 ? [] : [{ role: 'assistant', content: index === 0
+    ? '## Verification precedes publication\n\nThe release script completes validation before it publishes artifacts.\n\n- Build checks run first.\n- A failed check stops publication.\n- The parent session keeps the error details.'
+    : 'Check complete.' }],
   error: index === 2 ? 'This operation was aborted' : undefined,
 }))
 const subagentOutcomeEntries = [
@@ -719,6 +721,22 @@ const subagentOutcomeEntries = [
     timestamp: '2026-08-06T15:45:00.000Z',
   }),
 ]
+
+const subagentMobileEntries = subagentOutcomeEntries.map((entry) => {
+  if (entry.type === 'tool') return {
+    ...entry,
+    code: '3 tasks',
+    text: 'Two tasks completed. One task stopped.',
+    copyText: 'Two tasks completed. One task stopped.',
+    subagentDetails: { ...entry.subagentDetails, results: subagentOutcomeResults.slice(0, 3) },
+  }
+  return messageEntry({
+    id: entry.id, role: entry.role, label: entry.label, timestamp: entry.timestamp,
+    text: entry.role === 'user'
+      ? 'Review release verification, packaging, and rollback handling in three parallel tasks.'
+      : 'Two checks completed. The rollback review stopped before it returned a result.',
+  })
+})
 
 const researchEntries = [
   messageEntry({
@@ -787,9 +805,7 @@ const researchEntries = [
 
 **Recommendation:** Use signed artifacts, protected promotion stages, and a rehearsed rollback action.
 
-## Release controls
-
-Use a preview channel before broad rollout. Electron exposes the update lifecycle needed to check, download, and install releases [1](https://www.electronjs.org/docs/latest/api/auto-updater).
+Validate update checks, downloads, and installation in a preview channel before broad rollout [1](https://www.electronjs.org/docs/latest/api/auto-updater).
 
 Sign each platform artifact [2](https://www.electronjs.org/docs/latest/tutorial/code-signing) and publish build provenance from CI [3](https://docs.npmjs.com/generating-provenance-statements).
 
@@ -955,7 +971,7 @@ const traceFixtures = docsTraces(baseEntries, sessions)
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
-const subagentAssetNames = ['subagent-outcomes.png']
+const subagentAssetNames = ['subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
@@ -1473,25 +1489,27 @@ try {
     browser,
     file: path.join(docsOutputDir, 'subagent-outcomes.png'),
     route: '/sessions/demo-session',
-    ready: '.subagent-summary',
+    ready: '.subagent-card .tool-inspect-button',
     scenario: 'subagent-outcomes',
-    interact: async (page) => {
-      const activity = page.locator('.mobile-activity-card')
-      const card = activity.locator('.subagent-card')
-      await activity.locator('.mobile-activity-summary').click()
-      await card.locator('.tool-expand-button').click()
-      await card.locator('.subagent-summary').filter({ hasText: '4 completed' }).waitFor()
-      await card.locator('.subagent-result-item').nth(4).waitFor({ state: 'visible' })
-      await card.locator('.subagent-task-status.status-stopped').first().waitFor()
-      if (await card.locator('.subagent-result-item').count() !== 5) {
-        throw new Error('Subagent outcome capture must show all five tasks')
-      }
-      await activity.scrollIntoViewIfNeeded()
-      await page.mouse.wheel(0, -10000)
-      await page.waitForFunction(() => {
-        return document.querySelector('.workbench')?.scrollTop === 0
-      })
-    },
+    interact: (page) => openSubagentInspector(page, 5),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-inspector-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    viewport: { width: 390, height: 844 },
+    scenario: 'subagent-mobile',
+    interact: (page) => openSubagentInspector(page, 3),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-inspector-export.png'),
+    route: '/api/pi/sessions/demo-session/export?disposition=inline',
+    ready: '.subagent-card .tool-inspect-button',
+    scenario: 'subagent-outcomes',
+    exportPage: true,
+    interact: (page) => openSubagentInspector(page, 5, true),
   })
   await capture({
     browser,
@@ -1741,11 +1759,51 @@ async function assertTraceContentReachable(page) {
   if (!reachable) throw new Error('Trace payload last line or capture footer is inaccessible')
 }
 
+async function openSubagentInspector(page, taskCount, exportPage = false) {
+  if (!exportPage) await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
+  await disableMotion(page)
+  const activity = page.locator('.mobile-activity-card').filter({ has: page.locator('.subagent-card') })
+  await activity.scrollIntoViewIfNeeded()
+  const before = await activity.boundingBox()
+  await activity.locator('.mobile-activity-summary').click()
+  const inspector = page.locator('.subagent-inspector')
+  await inspector.waitFor()
+  const tasks = inspector.locator('.subagent-inspector-task')
+  if (await tasks.count() !== taskCount) throw new Error('Subagent inspector task count changed')
+  await inspector.locator('.subagent-summary').filter({ hasText: `${taskCount - 1} completed` }).waitFor()
+  await inspector.locator('.subagent-summary').filter({ hasText: '1 stopped' }).waitFor()
+  await tasks.nth(2).click()
+  await inspector.locator('.subagent-inspector-empty').filter({ hasText: 'This task was stopped.' }).waitFor()
+  await tasks.first().click()
+  await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
+  await inspector.locator('.subagent-inspector-prompt > summary').click()
+  if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentOutcomeResults[0].task) {
+    throw new Error('Subagent inspector changed the full task prompt')
+  }
+  await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
+  await inspector.waitFor({ state: 'detached' })
+  await activity.locator('.tool-inspect-button').click()
+  await inspector.locator('.subagent-inspector-output h2').waitFor()
+  if (exportPage) await inspector.getByText('Child sessions are available in Leyline', { exact: true }).waitFor()
+  else await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
+  const after = await activity.boundingBox()
+  if (before.height !== after.height || before.y !== after.y || await activity.evaluate(element => element.classList.contains('is-expanded'))) {
+    throw new Error(`Single-call subagent inspection expanded or moved the Activity card: ${JSON.stringify({ before, after })}`)
+  }
+}
+
 async function waitForResearchSources(page) {
   const pane = page.locator('aside[aria-label="Research sources"].open')
   await pane.waitFor()
   await pane.getByRole('button', { name: 'Cited 4', pressed: true }).waitFor()
   await pane.locator('.research-source-card').first().waitFor()
+  await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
+  await disableMotion(page)
+  await page.locator('.workbench').dispatchEvent('wheel', { deltaY: -1 })
+  await page.locator('.mobile-activity-card').evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }))
+  const report = await page.locator('.research-report-message').boundingBox()
+  const composer = await page.locator('.composer').boundingBox()
+  if (report.y + report.height > composer.y) throw new Error('Research report is hidden behind the composer')
 }
 
 async function openActivity(page) {
@@ -1864,7 +1922,7 @@ function runtimeFor(scenario) {
   const queued = ['queue', 'queue-held'].includes(scenario)
   const held = scenario === 'queue-held'
   const research = scenario === 'research'
-  const subagents = scenario === 'subagent-outcomes'
+  const subagents = ['subagent-outcomes', 'subagent-mobile'].includes(scenario)
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
@@ -1989,6 +2047,7 @@ function detailFor(scenario) {
     export: systemTranscriptEntries,
     research: researchEntries,
     'subagent-outcomes': subagentOutcomeEntries,
+    'subagent-mobile': subagentMobileEntries,
     markdown: markdownPreviewEntries,
     shell: shellEntries,
     vision: visionEntries,

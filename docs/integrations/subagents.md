@@ -53,7 +53,7 @@ The extension uses two internal integration routes:
 
 The server creates a pi session with `parentSession` set to the parent session file. It also appends a `leyline-subagent-session` custom record. This explicit marker distinguishes a child session from a normal fork.
 
-For older records without the marker, Leyline also finds child paths in parent `subagent` tool results. The transcript card links to each child session, and the child session links back to its parent.
+For older records without the marker, Leyline also finds child paths in parent `subagent` tool results. Each call stays in a compact Activity row. The subagent inspector provides an **Open child session** action for the selected task, and the child session links back to its parent.
 
 Normal subagents load all seven bundled extensions, inline Elune capture, and native MCP and tool search. The server applies the selected model, thinking level, and tool allowlist. It excludes nested `subagent` delegation and `codemode`. The agent definition body precedes the task text. Provider authentication must be available to the server process.
 

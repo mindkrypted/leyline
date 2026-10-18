@@ -72,6 +72,23 @@ DOCS_SCREENSHOT_FILTER=backend-connections.png,models-providers.png,provider-mod
 
 These images show Connections with network access off, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
 
+For subagent inspection and the affected research views:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagent-outcomes.png,subagent-inspector-mobile.png,subagent-inspector-export.png,deep-research.png,deep-research-mobile.png npm run docs:screenshots
+```
+
+| Asset | Captured state |
+| --- | --- |
+| `docs/assets/screenshots/subagent-outcomes.png` | Desktop subagent inspector with four completed tasks, one stopped task, and a selected Markdown result. |
+| `docs/assets/screenshots/subagent-inspector-mobile.png` | Mobile bottom sheet with two completed tasks, one stopped task, and the child-session control. |
+| `docs/assets/screenshots/subagent-inspector-export.png` | Offline HTML inspector with the five-task fixture and no live child-session navigation. |
+| `docs/assets/screenshots/deep-research.png` | Completed report with the compact Research threads row in Activity. |
+| `docs/assets/screenshots/deep-research-mobile.png` | The same report with a mobile citation preview. |
+| `assets/readme/deep-research.png` | The research view in the README frame. |
+
+The inspector helper opens the single-call Activity card from its header, checks task selection and the full prompt, then reopens it from its row. Both entry points must keep the card collapsed and preserve its height and position. The export capture blocks the external preview renderer to verify that the inspector works offline.
+
 For network access:
 
 ```bash
@@ -123,6 +140,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Git review captures: `release-safety` with four sanitized changed files
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
+- Subagent captures: compact Activity rows and separate task inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, goals, events, terminal, export, and mobile navigation
 
@@ -170,7 +188,8 @@ Open every changed image. Check these items:
 5. General model selectors show `local/minimax-m2.7`. Ultrafast captures use an eligible OpenAI model and authentication path.
 6. The vision selector shows `local/qwen3.6-27b` and excludes text-only models.
 7. System captures show the intended prompt and tool deltas without clipping.
-8. Each Markdown image reference resolves in both documentation base paths.
+8. Subagent inspectors show the selected task, its outcome, and the result without inline task bodies in Activity.
+9. Each Markdown image reference resolves in both documentation base paths.
 
 Run the PNG structure audit from the documentation screenshot skill when it is available. Check whitespace and both documentation base paths:
 

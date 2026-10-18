@@ -22,11 +22,11 @@ Avoid decorative glow, gradients, and extra panels. Existing gradients serve fad
 | `topbar.css` | Runtime chrome and workbench header |
 | `workbench.css` | Workbench layout, loading, start, and empty states |
 | `transcript.css` | Messages, System dividers, Markdown, thinking, feedback, and entry actions |
-| `tools.css` | Prompt inspector, tools, skills, subagents, files, diffs, and fullscreen previews |
+| `tools.css` | Prompt and subagent inspectors, Activity cards, compact tool rows, skills, files, diffs, and fullscreen previews |
 | `composer.css` | Composer, menus, attachments, context, and send states |
 | `memory.css` | Memory Inspector |
 | `review.css` | Git review rail, file list, diff states, resizing, and expanded layout |
-| `research.css` | Research progress, reports, thread cards, source rail, citation preview, and sidebar markers |
+| `research.css` | Research progress, reports, source rail, citation preview, and sidebar markers |
 | `settings.css` | Global Settings, provider/MCP workspaces, scoped agent controls, contextual drawers, and Runtime events |
 | `modals.css` | Project browser and confirmation dialogs |
 | `terminal.css` | Terminal drawer |
@@ -36,7 +36,15 @@ Put a rule in the narrowest owning module. Keep `src/style.css` free of componen
 
 System events use muted, centered dividers with document and panel icons and plain summary text. Keep them separate from tool cards. The prompt inspector uses **Prompt**/**Changes** and **Tools** tabs, readable Markdown, and simple section separators. Do not add nested section cards.
 
-The app inspector always overlays the right side below the header. At 760 pixels or less, it fills the width below the header. Export reserves space above 1120 pixels and uses a full-height overlay below that width. Its inspector fills the viewport width at 760 pixels or less.
+The app's System prompt inspector always overlays the right side below the header. At 760 pixels or less, it fills the width below the header. The export's System prompt inspector reserves space above 1120 pixels and uses a full-height overlay below that width. It fills the viewport width at 760 pixels or less.
+
+## Activity and subagent inspector layout
+
+Activity cards retain full message width and assistant-message colors. The collapsed card shows only the newest call in a fixed-height row, with outcome counts in its header. When the only top-level call is `subagent`, the header and row open the inspector without expansion, even for parallel tasks. Multi-call groups retain expansion.
+
+The subagent inspector floats on the right, with a 660-pixel width cap and 16-pixel desktop margins. At 760 pixels or less, it becomes a full-width bottom sheet at roughly 90 percent of the available viewport height. Its bounded task list and reader scroll independently. Task selection and focus use neutral colors. Opening the inspector does not expand the transcript layout.
+
+`tools.css` owns these styles, including research-thread results in the subagent inspector. `research.css` no longer contains legacy subagent result-row styles. Export uses matching rules in `exportCss()` for its native dialog. Keep this layout separate from the System prompt inspector and trace Inspector layouts.
 
 ## Settings layout
 
@@ -75,6 +83,8 @@ The current motion families include:
 
 The prompt inspector uses short opacity and horizontal transform transitions in `tools.css`. Its local reduced-motion rule removes those transitions.
 
+The subagent inspector uses opacity and horizontal transforms on desktop, with vertical transforms for the mobile bottom sheet. Its local reduced-motion rules remove transitions. Export uses corresponding dialog entry animations and disables them for reduced motion.
+
 ## Reduced motion
 
 `responsive.css` starts with the `prefers-reduced-motion: reduce` rules. These rules shorten transitions and remove keyframe animation.
@@ -97,7 +107,8 @@ When transcript visuals change, compare and update both implementations. Check t
 - Markdown and code blocks
 - syntax colors
 - System dividers and prompt inspectors
-- collapsed tool, skill, and subagent rows
+- Activity cards, outcome counts, compact tool rows, and skill rows
+- subagent inspector layout, task selection, and Markdown results
 - research reports, threads, citations, and source ledgers
 - image, file, patch, and diff previews
 - responsive and reduced-motion behavior

@@ -35,7 +35,9 @@ Muted **System** rows mark prompt and tool changes that pi recorded. Select a ro
 
 Assistant output and tool activity appear while the run is active. Saved rows replace live rows after pi records the turn. Leyline keeps one visible copy of each item.
 
-A [deep research session](./deep-research) adds a phase bar, Research threads card, cited report artifact, source pane, and citation previews. Each thread can link to its child transcript.
+Subagent calls stay compact in Activity cards. Their [inspector](./subagents#read-a-subagent-card) shows tasks and results in a side sheet, or a bottom sheet on mobile, without expanding the transcript.
+
+A [deep research session](./deep-research) adds a phase bar, a Research threads row in Activity, a cited report artifact, a source pane, and citation previews. Select a thread in the inspector to read its result or open its child transcript.
 
 ## Reply to a confirmation
 

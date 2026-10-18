@@ -102,13 +102,13 @@ Persisted state survives a process restart. In-flight worker calls do not restar
 The browser renders:
 
 - A Plan, Gather, Synthesize, and Report phase bar.
-- A compact Research threads card with child-session links.
+- A compact Research threads row inside Activity. The subagent inspector shows thread results, source counts, and child-session links.
 - A report artifact with validated citation targets.
 - A source rail with a primary cited view and a complete research ledger.
 - An anchored citation preview with claim and evidence details.
 
 Research state also travels in `active_session` snapshots. This state updates progress, counts, and sidebar status during the run.
 
-HTML export renders the report artifact, research-thread results, and every ledger source. Each source shows one evidence summary. An exclusion reason takes priority over evidence and claim text.
+HTML export renders the report artifact, research-thread results, and every ledger source. Thread results open in the offline subagent inspector; child-session navigation remains available only in Leyline. Each source shows one evidence summary. An exclusion reason takes priority over evidence and claim text.
 
 See [Deep research](../user-guide/deep-research) for the user workflow and [API reference](../reference/api) for DTO and session-creation contracts.

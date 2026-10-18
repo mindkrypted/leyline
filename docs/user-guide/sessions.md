@@ -104,7 +104,7 @@ Session deletion does not delete its Elune traces. Trace data can retain prompts
 
 ## Open a subagent session
 
-Subagent child sessions do not appear in the sidebar. Open a child session from its subagent card or an available **Child sessions** link in a trace observation.
+Subagent child sessions do not appear in the sidebar. Open the [subagent inspector](./subagents#read-a-subagent-card), select a task, then select **Open child session**. An available **Child sessions** link in a trace observation also opens the child transcript.
 
 The child-session header shows **← parent session**. Select it to return to the
 parent session. Use a modified click on either session target to open it in a

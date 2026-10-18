@@ -65,13 +65,29 @@ A model or thinking value on one task takes priority over the mode-level value.
 
 ## Read a subagent card
 
-![Subagent group with four completed tasks and one stopped task](../assets/screenshots/subagent-outcomes.png)
+Each subagent call stays in one compact row inside an Activity card. Task details open in the subagent inspector instead of expanding the transcript.
 
-The header shows outcome counts. Each task has its own status. A stopped task does not mark the other tasks as failed.
+If the card contains only one subagent call, select its header or row to open the inspector directly. This also applies to a call with several parallel tasks. If the card contains several tool calls, expand it first, then select the subagent row.
 
-Select the card to expand final output. Select a task row to open its child
-session. Use Command-click, Ctrl-click, or middle-click to open the child in a
-new tab or window.
+![Subagent inspector with four completed tasks, one stopped task, and a selected Markdown result](../assets/screenshots/subagent-outcomes.png)
+
+*The Activity card keeps its outcome counts while the inspector shows one task at a time.*
+
+The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
+
+1. Select a task to read its status and result.
+2. Expand **Full task prompt** to read the original instructions.
+3. Select **Open child session** to open the child transcript, when available.
+
+Use Command-click, Ctrl-click, or middle-click on **Open child session** to open the child in a new tab or window. Selecting a task row only changes the inspector's selected task.
+
+**Copy result** copies the selected task's text result. **Copy tool output** in the inspector header copies the parent tool output. Press Escape, select the close button, or select the backdrop to close the inspector. Closing it does not stop the child run.
+
+The task list stays in its original order. Live updates and saved results preserve the selected task and reading position.
+
+**Stopped** means cancellation. **Failed** means a task error. **Not started** means the task did not run. Missing final outcomes show **Unknown**. Completed results remain available when another task stops or fails. If task results are unavailable, **Call output** preserves the original tool response or error.
+
+Resolve pending extension confirmations before opening the inspector. A new confirmation closes it so the **Confirm** and **Cancel** controls remain accessible.
 
 ## Inspect delegated runs
 

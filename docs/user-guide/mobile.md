@@ -81,6 +81,16 @@ Message and tool actions remain in their row headers. Use them to copy, edit, re
 
 Tool targets can shorten to fit the row. User messages and tool cards use the full transcript width.
 
+## Inspect subagent tasks
+
+![Mobile subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-mobile.png)
+
+Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
+
+Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and result area scroll separately. The session link and **Copy result** stay in the footer.
+
+Select the close button or backdrop to return to the transcript. See [Subagents](./subagents#read-a-subagent-card) for outcome labels and confirmation behavior.
+
 ## Use the mobile composer
 
 The composer stays above the bottom edge. Model, thinking, optional `ultrafast`, dictation, and send controls share the primary row. With `ultrafast` available, narrow screens move the model control to its own row.

@@ -20,7 +20,9 @@ Saved assistant text appears as rendered Markdown. Raw HTML is disabled.
 
 ## Expand a tool row
 
-Tool rows are collapsed by default. Select a row to show its output or preview.
+Tool calls appear in Activity cards. A collapsed card shows its outcome summary and newest call. Select the card header to show the call list, then select a tool row to show its output or preview.
+
+Subagent calls open a separate inspector, as described [below](#read-a-subagent-card).
 
 Each row shows a tool label, target when available, and status. Common labels include file paths for file tools and commands for shell tools.
 
@@ -82,15 +84,17 @@ Select the row again when it shows **hide**.
 
 ## Read a subagent card
 
-A subagent card shows outcome counts in its header and a status beside each task. **Stopped** means cancellation. **Failed** means a task error. Missing outcomes show **Unknown**.
+A subagent call stays compact inside Activity. If it is the card's only tool call, select either the header or row to open its inspector directly. This includes parallel calls with several child tasks. For cards with several tool calls, expand the card first.
 
-Select the card to expand its result. Select a task row to open that child session. See [Subagents](./subagents#read-a-subagent-card) for an example.
+Select a task inside the inspector to read its prompt, status, and Markdown result. **Open child session** opens its transcript. The inspector uses a side sheet on desktop and a bottom sheet on mobile; it does not expand the transcript.
+
+**Stopped** means cancellation. **Failed** means a task error. Missing outcomes show **Unknown**, and unavailable task results retain the original response under **Call output**. See [Subagents](./subagents#read-a-subagent-card) for details.
 
 ## Copy transcript content
 
 Select **Copy** in a message or tool header. Leyline copies the message text or available tool output.
 
-The action changes to **Copied** for a short time. The fullscreen tool view also has a **Copy** action.
+The action changes to **Copied** for a short time. The fullscreen tool view also has a **Copy** action. For subagents, use **Copy tool output** or **Copy result** inside the inspector.
 
 ## Add rollout feedback
 
