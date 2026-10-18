@@ -169,6 +169,8 @@ const navigatorQuery = ref('')
 const sessionQuery = ref('')
 const navigationProjectCwd = ref('')
 const projectOrder = ref([])
+const sessionOrder = ref([])
+const sessionOrdersByProject = new Map()
 const sessionScroll = ref(null)
 const sessionScrollTop = ref(0)
 const sessionViewportHeight = ref(520)
@@ -358,10 +360,56 @@ const currentProjectSessions = computed(() => {
   return projectSessions
 })
 
+watch(
+  [
+    () => props.visibleProjects,
+    currentProjectSessions,
+    () => props.sessionsHydrated,
+    () => props.activeBackendConnection,
+  ],
+  ([projects, currentSessions, hydrated, connection]) => {
+    const currentCwd = currentProject.value?.cwd
+    const today = calendarDay(new Date())
+    if (!projects.length) sessionOrder.value = []
+    for (const project of projects) {
+      const isCurrent = project.cwd === currentCwd
+      const key = JSON.stringify([connection?.id, connection?.url, project.cwd])
+      const previous = sessionOrdersByProject.get(key)
+      if (!isCurrent && !previous) continue
+      const sessions = isCurrent ? currentSessions : project.sessions
+      const knownDays = previous?.hydrated ? previous.days : new Map()
+      const days = new Map(sessions.map((session) => [
+        session.id,
+        Math.max(sessionActivityDay(session), knownDays.get(session.id) ?? -Infinity),
+      ]))
+      const promoted = sessions.filter((session) => {
+        return !knownDays.has(session.id)
+          || (!props.pinnedSessionIds.has(session.id)
+            && sessionActivityDay(session) >= today
+            && knownDays.get(session.id) < today)
+      }).sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a))
+      const promotedIds = new Set(promoted.map((session) => session.id))
+      const order = [
+        ...promotedIds,
+        ...(previous?.order || []).filter((id) => {
+          return days.has(id) && !promotedIds.has(id)
+        }),
+      ]
+      sessionOrdersByProject.set(key, { order, days, hydrated })
+      if (isCurrent) sessionOrder.value = order
+    }
+  },
+  { immediate: true },
+)
+
 const matchingProjectSessions = computed(() => {
+  const byId = new Map(
+    currentProjectSessions.value.map((session) => [session.id, session]),
+  )
+  const sessions = sessionOrder.value.map((id) => byId.get(id)).filter(Boolean)
   const query = sessionQuery.value.trim()
-  if (!query) return currentProjectSessions.value
-  return currentProjectSessions.value
+  if (!query) return sessions
+  return sessions
     .map((session) => ({
       session,
       score: navigationScore([
@@ -370,24 +418,20 @@ const matchingProjectSessions = computed(() => {
       ], query),
     }))
     .filter((item) => item.score > 0)
-    .sort((a, b) => {
-      return b.score - a.score || sessionTimestamp(b.session)
-        - sessionTimestamp(a.session)
-    })
+    .sort((a, b) => b.score - a.score)
     .map((item) => item.session)
 })
 
 const orderedProjectSessions = computed(() => {
   const sessions = matchingProjectSessions.value
-  if (sessionQuery.value.trim() || !props.pinnedSessionIds.size) return sessions
-  const pinned = []
-  const unpinned = []
-  for (const session of sessions) {
-    if (props.pinnedSessionIds.has(session.id)) pinned.push(session)
-    else unpinned.push(session)
-  }
-  if (!pinned.length) return sessions
-  return [...pinned, ...unpinned]
+  if (sessionQuery.value.trim()) return sessions
+  return [...sessions].sort((a, b) => {
+    const aPinned = props.pinnedSessionIds.has(a.id)
+    const bPinned = props.pinnedSessionIds.has(b.id)
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+    if (aPinned) return 0
+    return sessionActivityDay(b) - sessionActivityDay(a) || 0
+  })
 })
 
 const sessionListItems = computed(() => {
@@ -891,6 +935,11 @@ function calendarDay(date) {
 
 function daysBefore(date, now = new Date()) {
   return Math.floor(calendarDay(now) - calendarDay(date))
+}
+
+function sessionActivityDay(session) {
+  const date = sessionDate(session)
+  return date ? calendarDay(date) : -Infinity
 }
 
 function sessionTimeGroup(session, now) {
