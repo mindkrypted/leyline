@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { activitySummary } from '../../lib/tool-activity.js'
+import { activitySummary, singleSubagentEntry } from '../../lib/tool-activity.js'
 
 const props = defineProps({
   group: { type: Object, required: true },
@@ -9,6 +9,7 @@ const props = defineProps({
 const emit = defineEmits(['toggle'])
 
 const summary = computed(() => activitySummary(props.group.items))
+const inspectOnly = computed(() => Boolean(singleSubagentEntry(props.group)))
 const statusLabel = computed(() => [
   ...(summary.value.busy ? ['running'] : []),
   ...summary.value.outcomes.map(outcome => outcome.text),
@@ -21,8 +22,15 @@ const label = computed(() => {
 </script>
 
 <template>
-  <section class="mobile-activity-card" :class="{ 'is-expanded': expanded }">
-    <button class="mobile-activity-summary" type="button" :aria-expanded="expanded" @click="emit('toggle', group)">
+  <section class="mobile-activity-card" :class="{ 'is-expanded': expanded, 'has-subagents': summary.hasSubagents }">
+    <button
+      class="mobile-activity-summary"
+      type="button"
+      :aria-expanded="inspectOnly ? undefined : expanded"
+      :aria-haspopup="inspectOnly ? 'dialog' : undefined"
+      :title="inspectOnly ? 'Inspect subagent tasks' : undefined"
+      @click="emit('toggle', group, $event)"
+    >
       <span class="mobile-activity-heading">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" /></svg>
         <strong>{{ label }}</strong>
@@ -34,7 +42,10 @@ const label = computed(() => {
           <span v-else-if="summary.busy" class="mobile-activity-live">running</span>
           <span v-else class="mobile-activity-check" aria-hidden="true">✓</span>
         </span>
-        <span class="mobile-activity-chevron" aria-hidden="true">›</span>
+        <svg v-if="inspectOnly" class="mobile-activity-chevron" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" />
+        </svg>
+        <span v-else class="mobile-activity-chevron" aria-hidden="true">›</span>
       </span>
       <span class="mobile-activity-breakdown"><span v-for="operation in group.operations" :key="operation">{{ operation }}</span></span>
     </button>

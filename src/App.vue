@@ -11,6 +11,7 @@ import {
 } from 'vue'
 const TranscriptEntry = defineAsyncComponent(() => import('./components/TranscriptEntry.vue'))
 const SystemPromptInspector = defineAsyncComponent(() => import('./components/SystemPromptInspector.vue'))
+const SubagentInspector = defineAsyncComponent(() => import('./components/SubagentInspector.vue'))
 const TracePanel = defineAsyncComponent(() => import('./components/TracePanel.vue'))
 const LiveAssistantMessage = defineAsyncComponent(() => import('./components/LiveAssistantMessage.vue'))
 const PierrePreview = defineAsyncComponent(() => import('./components/PierrePreview.vue'))
@@ -33,7 +34,7 @@ import ExtensionConfirmations from './components/ExtensionConfirmations.vue'
 import StartComposer from './components/StartComposer.vue'
 import SessionComposer from './components/SessionComposer.vue'
 import MobileToolActivity from './components/MobileToolActivity.vue'
-import { activityEntry, activityStatus, groupToolActivity } from '../lib/tool-activity.js'
+import { activityEntry, activityStatus, groupToolActivity, singleSubagentEntry } from '../lib/tool-activity.js'
 import SessionSidebar from './components/SessionSidebar.vue'
 import { useBackendConnections } from './composables/useBackendConnections'
 import { useComposerMotion } from './composables/useComposerMotion'
@@ -92,6 +93,9 @@ const imageDialog = ref(null)
 const toolDialog = ref(null)
 const imageOpener = shallowRef(null)
 const toolOpener = shallowRef(null)
+const subagentInspector = ref(null)
+const subagentOpener = shallowRef(null)
+const subagentSelection = ref('')
 const reviewPane = ref(null)
 const reviewOpener = shallowRef(null)
 const headerMoreOpen = ref(false)
@@ -363,7 +367,7 @@ const requiredInitialBackendConnectionId = ref('')
 let composerScannerSettlingTimer = null
 let composerCommitTimer = null
 const workbenchScroll = useWorkbenchScroll({
-  workbench, composerRef, isActive: () => !traceWorkbenchCovered.value,
+  workbench, composerRef, isActive: () => !traceWorkbenchCovered.value && !subagentSelection.value,
   prepareEntry: expandEntryActivity,
 })
 const {
@@ -411,8 +415,21 @@ const persistedTranscriptItems = computed(() => groupToolActivity(
   entries.value.map(entry => ({ ...entry, persistedEntry: entry })),
 ))
 const liveTranscriptItems = computed(() => groupToolActivity(liveFlowItems.value))
+const inspectedSubagent = computed(() => {
+  if (!subagentSelection.value) return null
+  for (const group of [...persistedTranscriptItems.value, ...liveTranscriptItems.value]) {
+    if (group.type !== 'tool-activity') continue
+    const call = group.items.find(item => {
+      const entry = activityEntry(item)
+      return entry.toolName === 'subagent' && (entry.toolCallId || entry.id) === subagentSelection.value
+    })
+    if (call) return call
+  }
+  return null
+})
 const expandedActivity = ref(new Map())
 function isActivityExpanded(group) {
+  if (singleSubagentEntry(group)) return false
   return expandedActivity.value.get(group.id)
     ?? group.items.some(item => isToolExpanded(activityEntry(item)))
 }
@@ -424,10 +441,33 @@ function expandEntryActivity(entryId) {
     expandedActivity.value = new Map(expandedActivity.value).set(group.id, true)
   }
 }
-function toggleActivity(group) {
+function toggleActivity(group, event) {
+  const subagent = singleSubagentEntry(group)
+  if (subagent) {
+    openSubagentInspector(subagent, event)
+    return
+  }
   const next = new Map(expandedActivity.value)
   next.set(group.id, !isActivityExpanded(group))
   expandedActivity.value = next
+}
+function toggleActivityTool(group, entry) {
+  if (isActivityExpanded(group)) toggleTool(entry)
+  else toggleActivity(group)
+}
+function inspectActivitySubagent(group, entry, event) {
+  if (isActivityExpanded(group)) openSubagentInspector(entry, event)
+  else toggleActivity(group, event)
+}
+function openSubagentInspector(entry, event) {
+  if (extensionConfirmations.value.length) return
+  subagentOpener.value = event?.currentTarget || document.activeElement
+  subagentSelection.value = entry.toolCallId || entry.id
+  closePickerMenus()
+  pauseScroll()
+}
+function closeSubagentInspector() {
+  subagentSelection.value = ''
 }
 const sessionWorkspace = useSessionWorkspace({
   liveTurn,
@@ -1214,6 +1254,7 @@ watch(selectedSessionId, (sessionId, previousSessionId) => {
   expandedTools.value = new Set()
   expandedSkills.value = new Set()
   expandedActivity.value = new Map()
+  closeSubagentInspector()
   startComposerRef.value?.dismissMobileSheet()
   composerRef.value?.dismissMobileSheet()
   closeSystemPrompt(false)
@@ -1229,7 +1270,14 @@ watch(selectedSessionId, (sessionId, previousSessionId) => {
 watch([activeBackendConnectionId, () => activeBackendConnection.value?.url], () => {
   resetTracing()
   closeSystemPrompt(false)
+  closeSubagentInspector()
 }, { flush: 'sync' })
+watch(inspectedSubagent, call => {
+  if (!call) closeSubagentInspector()
+})
+watch(() => extensionConfirmations.value.length, count => {
+  if (count) closeSubagentInspector()
+})
 watch(activeBackendConnectionId, (connectionId) => {
   if (connectionId) void loadPinnedSessions(connectionId)
 })
@@ -1299,13 +1347,14 @@ const activeFocusScope = computed(() => {
   if (settingsOpen.value || filePreview.value || fileMenu.value || projectBrowserOpen.value || deleteConfirmProject.value || deleteConfirmSession.value) return 'external'
   if (fullscreenImage.value) return 'image'
   if (fullscreenTool.value) return 'tool'
+  if (inspectedSubagent.value) return 'subagent'
   if (['quick', 'activity'].includes(sidebarNavigator.value) || sidebarRef.value?.sessionActionsOpen) return 'sidebar'
   if (!reviewDesktopAvailable.value && reviewOpen.value) return 'review'
   if (headerMoreOpen.value) return 'header'
   return ''
 })
 const mobileComposerSheetOpen = computed(() => Boolean(startComposerRef.value?.mobileSheetOpen || composerRef.value?.mobileSheetOpen))
-const workbenchDialogOpen = computed(() => mobileComposerSheetOpen.value || ['image', 'tool', 'sidebar', 'review'].includes(activeFocusScope.value))
+const workbenchDialogOpen = computed(() => mobileComposerSheetOpen.value || ['image', 'tool', 'subagent', 'sidebar', 'review'].includes(activeFocusScope.value))
 watch(mobileComposerSheetOpen, open => {
   if (open) closePickerMenus()
 })
@@ -1316,6 +1365,7 @@ watch([activeFocusScope, () => extensionConfirmations.value.length, sessionLoadi
 })
 useModalFocus({ dialog: imageDialog, active: () => activeFocusScope.value === 'image', opener: imageOpener, initialFocus: imageDialog, fallbackSelector: '.header-more-button, .brand-home' })
 useModalFocus({ dialog: toolDialog, active: () => activeFocusScope.value === 'tool', opener: toolOpener, initialFocus: toolDialog, fallbackSelector: '.header-more-button, .brand-home' })
+useModalFocus({ dialog: () => subagentInspector.value?.element, active: () => activeFocusScope.value === 'subagent', opener: subagentOpener, initialFocus: () => subagentInspector.value?.element, fallbackSelector: '.header-more-button, .brand-home' })
 useModalFocus({ dialog: () => !reviewDesktopAvailable.value && reviewOpen.value ? reviewPane.value?.element : null, active: () => activeFocusScope.value === 'review', opener: reviewOpener, fallbackSelector: '.header-more-button, .review-toggle-button' })
 useModalFocus({ dialog: () => headerMoreOpen.value ? headerActions.value : null, active: () => activeFocusScope.value === 'header', opener: headerMoreButton, fallbackSelector: '.header-more-button' })
 
@@ -1777,6 +1827,7 @@ function prepareRouteChange() {
   sidebarRef.value?.closeSessionActions()
   headerMoreOpen.value = false
   terminalKeysOpen.value = false
+  closeSubagentInspector()
   closeImageFullscreen()
   closeToolFullscreen()
   closeReview(true)
@@ -2275,6 +2326,7 @@ function openGlobalSettings(category) {
   }
   settingsOpener.value = document.activeElement
   if (typeof category === 'string') settingsCategory.value = category
+  closeSubagentInspector()
   closeImageFullscreen()
   closeToolFullscreen()
   closeResearchCitationPreview()
@@ -3743,6 +3795,7 @@ function anyEscapeTargetOpen(ignoreQueue = false) {
     || (!ignoreQueue && composerRef.value?.queueUiOpen)
     || fullscreenImage.value
     || fullscreenTool.value
+    || inspectedSubagent.value
     || filePreview.value
     || fileMenu.value
     || projectBrowserOpen.value
@@ -3788,13 +3841,14 @@ function handleEscape(event) {
     else closeFilePreview()
     return
   }
-  if (sidebarNavigator.value || projectBrowserOpen.value || deleteConfirmActive.value || fullscreenImage.value || fullscreenTool.value) {
+  if (sidebarNavigator.value || projectBrowserOpen.value || deleteConfirmActive.value || fullscreenImage.value || fullscreenTool.value || inspectedSubagent.value) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
     if (deleteConfirmActive.value) cancelConfirmDelete()
     else if (projectBrowserOpen.value) closeProjectBrowser()
     else if (fullscreenImage.value) closeImageFullscreen()
     else if (fullscreenTool.value) closeToolFullscreen()
+    else if (inspectedSubagent.value) closeSubagentInspector()
     else sidebarNavigator.value = ''
     return
   }
@@ -4551,14 +4605,15 @@ function closePickerMenus() {
                   :research-cwd="selectedSession?.cwd || ''"
                   :tool-expanded="isActivityExpanded(item) && isToolExpanded(activityEntry(call))"
                   :tool-status="activityStatus(call)"
+                  :subagent-inspector-selected="subagentSelection === (activityEntry(call).toolCallId || activityEntry(call).id)"
                   @copy="copyEntry"
                   @fork="forkSession"
-                  @navigate-child-session="navigateChildSession"
+                  @inspect-subagent="(entry, event) => inspectActivitySubagent(item, entry, event)"
                   @open-image="openImageFullscreen"
                   @open-research-source="openResearchSource"
                   @reset="resetSessionToEntry"
                   @open-tool-fullscreen="openToolFullscreen"
-                  @toggle-tool="toggleTool"
+                  @toggle-tool="toggleActivityTool(item, activityEntry(call))"
                 />
               </template>
             </MobileToolActivity>
@@ -4579,7 +4634,7 @@ function closePickerMenus() {
               @edit="startEditingEntry"
               @fork="forkSession"
               @mark-feedback="markEntryFeedback"
-              @navigate-child-session="navigateChildSession"
+              @inspect-subagent="openSubagentInspector"
               @open-image="openImageFullscreen"
               @open-research-source="openResearchSource"
               @open-system-prompt="openSystemPrompt"
@@ -4622,14 +4677,15 @@ function closePickerMenus() {
                   :research-cwd="selectedSession?.cwd || ''"
                   :tool-expanded="isActivityExpanded(item) && isToolExpanded(activityEntry(call))"
                   :tool-status="activityStatus(call)"
+                  :subagent-inspector-selected="subagentSelection === (activityEntry(call).toolCallId || activityEntry(call).id)"
                   @copy="copyEntry"
                   @fork="forkSession"
-                  @navigate-child-session="navigateChildSession"
+                  @inspect-subagent="(entry, event) => inspectActivitySubagent(item, entry, event)"
                   @open-image="openImageFullscreen"
                   @open-research-source="openResearchSource"
                   @reset="resetSessionToEntry"
                   @open-tool-fullscreen="openToolFullscreen"
-                  @toggle-tool="toggleTool"
+                  @toggle-tool="toggleActivityTool(item, activityEntry(call))"
                 />
               </template>
             </MobileToolActivity>
@@ -5407,6 +5463,28 @@ function closePickerMenus() {
             </div>
           </details>
         </aside>
+      </div>
+    </Transition>
+
+    <Transition name="subagent-inspector">
+      <div
+        v-if="inspectedSubagent"
+        class="subagent-inspector-backdrop"
+        :inert="activeFocusScope !== 'subagent'"
+        @click.self="closeSubagentInspector"
+      >
+        <SubagentInspector
+          :key="subagentSelection"
+          ref="subagentInspector"
+          :entry="activityEntry(inspectedSubagent)"
+          :tool-status="activityStatus(inspectedSubagent)"
+          :copied-entry-id="copiedEntryId"
+          @close="closeSubagentInspector"
+          @copy="copyTranscriptItem"
+          @copy-entry="copyEntry"
+          @navigate-child-session="navigateChildSession"
+          @open-image="openImageFullscreen"
+        />
       </div>
     </Transition>
 

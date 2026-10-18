@@ -28,7 +28,7 @@ export function useFileLinks({ sessionId, available, copyText, openEditorTermina
       anchor,
       href: anchor.getAttribute('data-local-file'),
       basePath: anchor.closest('[data-file-base]')?.getAttribute('data-file-base') || '',
-      sessionId: sessionId.value,
+      sessionId: anchor.closest('[data-file-session-id]')?.getAttribute('data-file-session-id') || sessionId.value,
     }
   }
 

@@ -10,7 +10,7 @@ import CopyIcon from './CopyIcon.vue'
 import { mobileToolStatus } from '../../lib/tool-activity.js'
 import { researchSourcesMatch } from '../../lib/research-state.js'
 import { systemPromptInfo } from '../../lib/system-prompt.js'
-import { subagentStatus as resultStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
+import { subagentCallTitle } from '../../lib/subagent-view.js'
 import {
   entryClass,
   imageBlocksFor,
@@ -40,6 +40,7 @@ const props = defineProps({
   },
   skillExpanded: Boolean,
   systemPromptSelected: Boolean,
+  subagentInspectorSelected: Boolean,
   thinkingInitiallyExpanded: Boolean,
   toolExpanded: Boolean,
   toolStatus: {
@@ -53,7 +54,7 @@ const emit = defineEmits([
   'edit',
   'fork',
   'mark-feedback',
-  'navigate-child-session',
+  'inspect-subagent',
   'open-image',
   'open-research-source',
   'open-system-prompt',
@@ -69,7 +70,6 @@ const noteOpen = ref(false)
 const thinkingExpanded = ref(props.thinkingInitiallyExpanded)
 const toolContentMounted = ref(props.toolExpanded)
 const systemInfo = computed(() => systemPromptInfo(props.entry))
-const subagentOutcome = computed(() => subagentSummary(props.entry, props.toolStatus))
 
 watch(() => props.toolExpanded, (expanded) => {
   if (expanded) toolContentMounted.value = true
@@ -167,65 +167,6 @@ function toolStatusTone(status) {
 
 function entryToolStatus(entry) {
   return mobileToolStatus(entry, props.toolStatus)
-}
-
-function subagentStatus(result) {
-  return resultStatus(result, subagentOutcome.value.active)
-}
-
-function subagentFallbackClass(entry) {
-  const status = entryToolStatus(entry)
-  if (['preparing', 'running', 'reading result'].includes(status)) return 'status-running'
-  if (status === 'stopped') return 'status-stopped'
-  if (['error', 'failed'].includes(status)) return 'status-error'
-  return 'status-unknown'
-}
-
-function subagentFallbackText(entry) {
-  const status = entryToolStatus(entry)
-  if (['preparing', 'running', 'reading result'].includes(status)) return 'Running'
-  if (status === 'stopped') return 'Stopped'
-  if (['error', 'failed'].includes(status)) return 'Failed'
-  return 'Results unavailable'
-}
-
-function subagentFinalOutput(result) {
-  if (result.error) return result.error
-  if (result.research?.summary) return result.research.summary
-  const messages = result.messages || []
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const message = messages[i]
-    if (message.role === 'assistant' || message.role === 'error') return message.content.trim()
-  }
-  return ''
-}
-
-function subagentTarget(entry) {
-  if (entry.researchThreads) return entry.code || ''
-  const agent = entry.label.replace(/^Subagent · /, '')
-  if (agent && agent !== 'subagent' && agent !== entry.code) return agent
-  return entry.code || ''
-}
-
-function researchThreadId(result, index) {
-  return result.research?.threadId
-    || result.task?.match(/^\s*\[([^\]]+)\]/)?.[1]
-    || `T${index + 1}`
-}
-
-function researchThreadTitle(result) {
-  return result.research?.title
-    || result.task?.replace(/^\s*\[[^\]]+\]\s*/, '')
-    || result.agent
-}
-
-function researchSourceCount(result) {
-  return result.research?.sources?.length || 0
-}
-
-function navigateChildSession(childSession, event) {
-  if (!childSession) return
-  emit('navigate-child-session', childSession, event)
 }
 
 function citationTarget(value) {
@@ -335,139 +276,29 @@ function openMarkdownContent(event) {
   <article
     v-else-if="isSubagentEntry(entry)"
     class="tool-card subagent-card transcript-tool"
-    :class="{
-      'is-expanded': toolExpanded,
-      'research-thread-card': entry.researchThreads,
-    }"
+    :class="{ 'is-inspected': subagentInspectorSelected }"
   >
     <div class="subagent-header">
       <button
-        class="tool-expand-button"
+        class="tool-inspect-button"
         type="button"
-        :aria-expanded="toolExpanded"
-        @click="emit('toggle-tool', entry)"
+        aria-haspopup="dialog"
+        :aria-expanded="subagentInspectorSelected"
+        :aria-controls="subagentInspectorSelected ? 'subagent-inspector' : undefined"
+        @click="emit('inspect-subagent', entry, $event)"
       >
-        <span class="chevron">›</span>
         <span class="subagent-icon" aria-hidden="true">
           <svg viewBox="0 0 16 16" fill="none">
             <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
             <path d="m10 7 3 3-3 3" />
           </svg>
         </span>
-        <span class="subagent-label">
-          {{ entry.researchThreads ? 'Research threads' : 'Subagent' }}
-        </span>
-        <code v-if="subagentTarget(entry)">{{ subagentTarget(entry) }}</code>
-        <span v-if="subagentOutcome.counts.length" class="subagent-summary" aria-label="Task outcomes">
-          <span
-            v-for="outcome in subagentOutcome.counts"
-            :key="outcome.status"
-            :class="`status-${outcome.status}`"
-          >{{ outcome.text }}</span>
-        </span>
-        <em v-else :class="subagentFallbackClass(entry)">
-          {{ subagentFallbackText(entry) }}
-        </em>
+        <span class="subagent-label">{{ entry.researchThreads ? 'Research threads' : 'Subagent' }}</span>
+        <span class="subagent-call-title" :title="subagentCallTitle(entry)">{{ subagentCallTitle(entry) }}</span>
+        <svg class="subagent-inspect-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" />
+        </svg>
       </button>
-      <button
-        class="copy-button"
-        type="button"
-        :title="copyTitle(entry.id)"
-        @click.stop="emit('copy', entry)"
-      >
-        <CopyIcon :copied="copiedEntryId === entry.id" />
-      </button>
-    </div>
-
-    <p v-if="subagentOutcome.unavailable" class="subagent-result-note">
-      {{ entry.subagentDetails?.resultsUnavailable
-        ? 'Task outcomes are unavailable.'
-        : 'Some task outcomes are unavailable.' }}
-    </p>
-    <div
-      v-if="entry.subagentDetails?.results?.length"
-      class="subagent-results"
-    >
-      <component
-        :is="result.childSession ? 'button' : 'div'"
-        v-for="(result, index) in entry.subagentDetails.results"
-        :key="index"
-        :type="result.childSession ? 'button' : undefined"
-        class="subagent-result-item"
-        :class="{ 'has-session': result.childSession }"
-        @click.stop="navigateChildSession(result.childSession, $event)"
-        @auxclick.middle.stop.prevent="navigateChildSession(
-          result.childSession,
-          $event,
-        )"
-      >
-        <span class="subagent-result-agent">
-          {{ entry.researchThreads ? researchThreadId(result, index) : result.agent }}
-        </span>
-        <span class="subagent-result-task">
-          {{ entry.researchThreads ? researchThreadTitle(result) : result.task }}
-        </span>
-        <span
-          v-if="entry.researchThreads"
-          class="research-thread-meta"
-        >
-          {{ researchSourceCount(result) }} sources · {{ subagentStatus(result) }}
-        </span>
-        <template v-else>
-          <span class="subagent-task-status" :class="`status-${subagentStatus(result)}`">
-            <svg viewBox="0 0 16 16" aria-hidden="true">
-              <circle cx="8" cy="8" r="6" />
-              <path :d="subagentStatuses[subagentStatus(result)].path" />
-            </svg>
-            {{ subagentStatuses[subagentStatus(result)].label }}
-          </span>
-          <span
-            v-if="result.childSession"
-            class="subagent-child-link"
-            :title="subagentStatus(result) === 'running' ? 'View live session' : 'View session'"
-          >↗</span>
-        </template>
-      </component>
-    </div>
-
-    <div class="tool-expand-wrapper" :class="{ 'is-expanded': toolExpanded }">
-      <div class="tool-expand-inner">
-        <div
-          v-if="toolContentMounted"
-          class="tool-expanded-body subagent-expanded"
-          @click.stop
-        >
-          <template v-if="entry.subagentDetails?.results?.length && !entry.subagentDetails.resultsUnavailable">
-            <div
-              v-for="(result, index) in entry.subagentDetails.results"
-              :key="index"
-              class="subagent-detail-block"
-            >
-              <div class="subagent-detail-header">
-                <strong>{{ result.agent }}</strong>
-                <span class="subagent-detail-task">{{ result.task }}</span>
-                <span class="subagent-task-status" :class="`status-${subagentStatus(result)}`">
-                  {{ subagentStatuses[subagentStatus(result)].label }}
-                </span>
-              </div>
-              <pre v-if="subagentFinalOutput(result)" class="subagent-detail-output">{{ subagentFinalOutput(result) }}</pre>
-              <div v-if="result.childSession" class="subagent-child-meta">
-                <span>Session: {{ result.childSession.id }}</span>
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="tool-preview-clip tool-plain-preview">
-              <pre
-                v-if="renderedToolJson(entry)"
-                class="tool-output json-output"
-                v-html="renderedToolJson(entry)"
-              ></pre>
-              <pre v-else class="tool-output">{{ entry.text }}</pre>
-            </div>
-          </template>
-        </div>
-      </div>
     </div>
   </article>
 
