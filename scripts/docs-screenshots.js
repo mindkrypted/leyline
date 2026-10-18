@@ -673,6 +673,48 @@ const markdownPreviewEntries = [
   }),
 ]
 
+const skillPreviewContent = `---
+name: release-review
+description: Review release checks before publication.
+---
+
+# Release review
+
+- Check that validation runs before publication.
+- Confirm that a failed check stops the release.
+`
+const toolActivityEntries = [
+  messageEntry({
+    id: 'tools-user',
+    role: 'user',
+    label: 'You',
+    text: 'Use the release-review skill to check the release flow.',
+    timestamp: '2026-08-06T15:43:00.000Z',
+  }),
+  toolEntry({
+    id: 'tool-skill-read',
+    label: 'Skill · release-review',
+    code: '.pi/skills/release-review/SKILL.md',
+    toolName: 'read-skill',
+    text: skillPreviewContent,
+    preview: {
+      kind: 'file',
+      path: '.pi/skills/release-review/SKILL.md',
+      content: skillPreviewContent,
+      language: 'markdown',
+    },
+    timestamp: '2026-08-06T15:44:00.000Z',
+  }),
+  toolEntry({
+    id: 'tool-release-check',
+    label: 'Bash',
+    code: 'npm run verify',
+    toolName: 'bash',
+    text: 'Release checks passed.',
+    timestamp: '2026-08-06T15:45:00.000Z',
+  }),
+]
+
 const subagentOutcomeResults = [
   { agent: 'general', task: 'Check release verification\n\nInspect the release script. Confirm that validation finishes before publication and that failed checks stop the release.' },
   { agent: 'explore', task: 'Inspect packaging configuration' },
@@ -980,6 +1022,7 @@ const allowedNames = new Set([
   ...pinnedAssetNames,
   ...networkAssetNames,
   ...subagentAssetNames,
+  'tool-activity.png',
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1435,6 +1478,29 @@ try {
     clipSelectors: ['.transcript-message.user-message'],
     padding: 22,
     preserveHover: true,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'tool-activity.png'),
+    route: '/sessions/demo-session',
+    ready: '.transcript-tool',
+    scenario: 'tools',
+    interact: async (page) => {
+      const activity = page.locator('.mobile-activity-card')
+      await activity.locator('.mobile-activity-summary').click()
+      const tool = activity.locator('.transcript-tool').filter({ hasText: 'Skill · release-review' })
+      await tool.locator('.tool-expand-button').click()
+      await tool.locator('.pierre-diffs-container [data-line]').filter({ hasText: 'Confirm that a failed check stops the release.' }).waitFor()
+      await disableMotion(page)
+      const label = await tool.locator('.tool-label').boundingBox()
+      const preview = await tool.locator('.tool-preview-clip').boundingBox()
+      const action = await tool.locator('.tool-preview-cta').boundingBox()
+      const composer = await page.locator('.composer').boundingBox()
+      if (label.x !== preview.x || preview.x !== action.x || action.y + action.height > composer.y) {
+        throw new Error('Expanded tool preview or action is misaligned or obscured')
+      }
+      if (await tool.locator('.mobile-tool-target').isVisible()) throw new Error('Duplicate desktop tool path is visible')
+    },
   })
   await capture({
     browser,
@@ -2052,6 +2118,7 @@ function detailFor(scenario) {
     'subagent-outcomes': subagentOutcomeEntries,
     'subagent-mobile': subagentMobileEntries,
     markdown: markdownPreviewEntries,
+    tools: toolActivityEntries,
     shell: shellEntries,
     vision: visionEntries,
   }[scenario] || baseEntries

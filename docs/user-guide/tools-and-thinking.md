@@ -20,6 +20,8 @@ Saved assistant text appears as rendered Markdown. Raw HTML is disabled.
 
 ## Expand a tool row
 
+![Activity card with an expanded skill-file preview, Open full screen, and a collapsed shell call](../assets/screenshots/tool-activity.png)
+
 Tool calls appear in Activity cards. A collapsed card shows its outcome summary and newest call. Select the card header to show the call list, then select a tool row to show its output or preview.
 
 Subagent calls open a separate inspector, as described [below](#read-a-subagent-card).
@@ -77,6 +79,8 @@ The fullscreen view shows the complete available output or preview. Markdown rea
 Select **×** or the backdrop to close the fullscreen view.
 
 ## Expand a skill row
+
+A call that reads a `SKILL.md` file appears as **Skill · name** in an Activity card. Expand it to read the file preview, or select **Open full screen** for the full content.
 
 A loaded skill prompt appears as a compact row with `[skill]`, the skill name, and **expand**. Select it to show the skill prompt payload.
 

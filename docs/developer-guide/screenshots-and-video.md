@@ -64,6 +64,14 @@ Refresh selected assets with `DOCS_SCREENSHOT_FILTER`, a comma-separated list of
 DOCS_SCREENSHOT_FILTER=composer-queue.png,composer-queue-held.png,activity.png,activity-mobile.png npm run docs:screenshots
 ```
 
+For expanded tool previews:
+
+```bash
+DOCS_SCREENSHOT_FILTER=tool-activity.png,vision-tool-call.png,preview-fullscreen.png npm run docs:screenshots
+```
+
+`tool-activity.png` shows a short skill-file preview and **Open full screen** above a collapsed shell call. The helper checks their alignment with the tool label, keeps the action above the composer, and rejects a duplicate desktop path line.
+
 For the settings overview and connection-test captures:
 
 ```bash
