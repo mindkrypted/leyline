@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { goalStateFromSession, isGoalStateEvent } from './goal-state.js'
+import { compactionCutEntryId } from './compaction-boundary.js'
 import { isResearchEntry } from '../../lib/research-state.js'
 
 export function emptyExtensionUiState() {
@@ -57,7 +58,9 @@ export async function bindRuntimeHandle(handle, events) {
     }
     events.broadcastEvent('runtime_event', {
       activeSessionId: handle.sessionId,
-      event,
+      event: event.type === 'compaction_start'
+        ? { ...event, compactionCutEntryId: compactionCutEntryId(session) }
+        : event,
       handoffId,
     })
     if (event.type === 'message_end'

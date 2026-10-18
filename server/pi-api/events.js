@@ -249,6 +249,7 @@ function compactActiveSession(session) {
     state: {
       isStreaming: state.isStreaming === true,
       isCompacting: state.isCompacting === true,
+      compactionCutEntryId: state.compactionCutEntryId || '',
       pendingToolCalls,
       pendingTools,
       pendingToolCount: Math.max(
@@ -327,6 +328,10 @@ function compactRuntimeEvent(event) {
 
   if (event.type === 'agent_end') {
     compact.willRetry = event.willRetry === true
+  }
+
+  if (event.type === 'compaction_start') {
+    copyTextFields(compact, event, ['reason', 'compactionCutEntryId'])
   }
 
   if (event.type === 'compaction_end') {

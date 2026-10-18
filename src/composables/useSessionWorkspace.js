@@ -680,6 +680,7 @@ export function useSessionWorkspace({
         : [],
       isStreaming: state.isStreaming === true,
       isCompacting: state.isCompacting === true,
+      compactionCutEntryId: state.compactionCutEntryId || '',
       snapshotRevision: runtimeSession.snapshotRevision,
       queuedCount: queuedCount(state.queuedMessages)
         + (state.promptQueue?.items?.length || state.promptQueue?.count || 0),
@@ -899,6 +900,7 @@ export function useSessionWorkspace({
       return {
         isStreaming: previous.isStreaming === true,
         isCompacting: false,
+        compactionCutEntryId: '',
         error: '',
         pendingTools: [],
         pendingToolCount: 0,
@@ -907,6 +909,7 @@ export function useSessionWorkspace({
     if (event.type === 'compaction_start') {
       return {
         isCompacting: true,
+        compactionCutEntryId: event.compactionCutEntryId || '',
         error: '',
         pendingTools: [],
         pendingToolCount: 0,
@@ -915,6 +918,7 @@ export function useSessionWorkspace({
     if (event.type === 'compaction_end') {
       return {
         isCompacting: false,
+        compactionCutEntryId: '',
         error: event.willRetry ? '' : runtimeErrorMessage(event, ''),
       }
     }

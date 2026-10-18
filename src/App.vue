@@ -30,6 +30,7 @@ const GlobalSettingsModal = defineAsyncComponent(() => import('./components/Glob
 const ProviderSettings = defineAsyncComponent(() => import('./components/ProviderSettings.vue'))
 const McpSettings = defineAsyncComponent(() => import('./components/McpSettings.vue'))
 import CopyIcon from './components/CopyIcon.vue'
+import CompactionBoundary from './components/CompactionBoundary.vue'
 import ExtensionConfirmations from './components/ExtensionConfirmations.vue'
 import StartComposer from './components/StartComposer.vue'
 import SessionComposer from './components/SessionComposer.vue'
@@ -55,6 +56,7 @@ import { backendDisplayAddress, backendHttpUrl } from './lib/backend'
 import { fuzzyScore } from './lib/fuzzy'
 import { createTraceClient } from './lib/trace-client'
 import {
+  compactNumber,
   eventTime,
   formatMode,
   modelChip,
@@ -395,6 +397,7 @@ const {
   agentRunning,
   beginUserTurn,
   clearLiveOutput,
+  compaction,
   compactingContext,
   dispose: disposeLiveTurn,
   entries,
@@ -415,6 +418,15 @@ const persistedTranscriptItems = computed(() => groupToolActivity(
   entries.value.map(entry => ({ ...entry, persistedEntry: entry })),
 ))
 const liveTranscriptItems = computed(() => groupToolActivity(liveFlowItems.value))
+const compactionCutIndex = computed(() => {
+  const cutEntryId = compaction.value?.cutEntryId
+  if (!cutEntryId) return persistedTranscriptItems.value.length
+  const index = persistedTranscriptItems.value.findIndex((item) => {
+    if (item.type !== 'tool-activity') return activityEntry(item).id === cutEntryId
+    return item.items.some((call) => activityEntry(call).id === cutEntryId)
+  })
+  return index === -1 ? persistedTranscriptItems.value.length : index
+})
 const inspectedSubagent = computed(() => {
   if (!subagentSelection.value) return null
   for (const group of [...persistedTranscriptItems.value, ...liveTranscriptItems.value]) {
@@ -2754,17 +2766,6 @@ function surfaceExtensionNotification(state) {
   }
 }
 
-function compactNumber(value) {
-  const number = Number(value || 0)
-  if (number >= 1_000_000) return `${trimNumber(number / 1_000_000)}M`
-  if (number >= 1_000) return `${trimNumber(number / 1_000)}K`
-  return String(number)
-}
-
-function trimNumber(value) {
-  return value.toFixed(1).replace(/\.0$/, '')
-}
-
 function retryComposerFocus(attempt = 0) {
   const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
   if (composer) {
@@ -4586,11 +4587,19 @@ function closePickerMenus() {
             && persistedTranscriptItems.length > 0"
         >
           <template
-            v-for="item in persistedTranscriptItems"
+            v-for="(item, itemIndex) in persistedTranscriptItems"
             :key="`${selectedSession.id}:${item.id}`"
           >
+            <CompactionBoundary
+              v-if="compactingContext && itemIndex === compactionCutIndex"
+              :reason="compaction?.reason || ''"
+              :started-at="compaction?.startedAt || 0"
+              :tokens="contextUsage?.tokens ?? null"
+            />
+
             <MobileToolActivity
               v-if="item.type === 'tool-activity'"
+              :class="{ 'is-frozen': compactingContext && itemIndex < compactionCutIndex }"
               :group="item"
               :expanded="isActivityExpanded(item)"
               @toggle="toggleActivity"
@@ -4621,7 +4630,10 @@ function closePickerMenus() {
             <TranscriptEntry
               v-else
               :data-entry-id="item.id"
-              :class="{ 'message-enter': isEnteringEntry(item) }"
+              :class="{
+                'message-enter': isEnteringEntry(item),
+                'is-frozen': compactingContext && itemIndex < compactionCutIndex,
+              }"
               :copied-entry-id="copiedEntryId"
               :entry="activityEntry(item)"
               :research-cwd="selectedSession?.cwd || ''"
@@ -4645,6 +4657,13 @@ function closePickerMenus() {
               @toggle-tool="toggleTool"
             />
           </template>
+
+          <CompactionBoundary
+            v-if="compactingContext && compactionCutIndex >= persistedTranscriptItems.length"
+            :reason="compaction?.reason || ''"
+            :started-at="compaction?.startedAt || 0"
+            :tokens="contextUsage?.tokens ?? null"
+          />
         </template>
 
         <TransitionGroup

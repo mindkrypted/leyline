@@ -15,6 +15,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
   const optimisticEntries = ref([])
   const agentRunning = ref(false)
   const compactingContext = ref(false)
+  const compaction = ref(null)
   const liveActivity = ref('')
   const liveAssistantMessages = ref([])
   const liveUserMessages = ref([])
@@ -224,6 +225,17 @@ export function useLiveTurnProjection({ onIntent } = {}) {
       || snapshotRevision !== runtimeSnapshotRevision
     runtimeSnapshotRevision = snapshotRevision
     compactingContext.value = state.isCompacting === true
+    if (state.isCompacting === true) {
+      const cutEntryId = state.compactionCutEntryId || ''
+      const previous = compaction.value
+      compaction.value = {
+        reason: previous?.reason || '',
+        startedAt: previous?.startedAt || 0,
+        cutEntryId,
+      }
+    } else {
+      compaction.value = null
+    }
     agentRunning.value = state.isStreaming === true
     if (newSnapshot && !agentRunning.value && !compactingContext.value) {
       clearLiveAssistant()
@@ -381,6 +393,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
   function reset() {
     liveTurnAnchorId.value = null
     compactingContext.value = false
+    compaction.value = null
     liveActivity.value = ''
     liveAssistantMessages.value = []
     liveUserMessages.value = []
@@ -423,8 +436,19 @@ export function useLiveTurnProjection({ onIntent } = {}) {
   }
 
   function updateCompactionState(event) {
-    if (event?.type === 'compaction_start') compactingContext.value = true
-    if (event?.type === 'compaction_end') compactingContext.value = false
+    if (event?.type === 'compaction_start') {
+      compactingContext.value = true
+      compaction.value = {
+        reason: event.reason || '',
+        startedAt: Date.now(),
+        cutEntryId: event.compactionCutEntryId || '',
+      }
+      return
+    }
+    if (event?.type === 'compaction_end') {
+      compactingContext.value = false
+      compaction.value = null
+    }
   }
 
   function isRunningEvent(event) {
@@ -1169,6 +1193,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     beginUserTurn,
     clearLiveOutput,
     clearSession,
+    compaction,
     compactingContext,
     dispose,
     entries,

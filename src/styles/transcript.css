@@ -653,6 +653,67 @@
   color: #aeb2bd;
 }
 
+.compaction-boundary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(var(--content-max), 100%);
+  margin: 26px auto 0;
+  animation: compaction-boundary-in 420ms var(--ease-emphasized) both;
+}
+
+.compaction-boundary-rule {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgb(191 181 255 / 0%),
+    rgb(191 181 255 / 32%),
+    rgb(191 181 255 / 0%)
+  );
+}
+
+.compaction-boundary-marker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: rgb(169 156 255 / 13%);
+  padding: 5px 12px;
+  color: #bfb5ff;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.compaction-boundary-note {
+  width: min(var(--content-max), 100%);
+  margin: 8px auto 0;
+  color: #85858c;
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.workbench .is-frozen {
+  opacity: 0.34;
+  filter: saturate(0.72);
+  transition:
+    opacity var(--motion-base) var(--ease-standard),
+    filter var(--motion-base) var(--ease-standard);
+}
+
+@keyframes compaction-boundary-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .entry-text {
   margin-bottom: 0 !important;
 }
@@ -1476,3 +1537,9 @@
   }
 }
 
+
+@media (prefers-reduced-motion: reduce) {
+  .compaction-boundary {
+    animation: none;
+  }
+}

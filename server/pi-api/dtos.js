@@ -4,6 +4,7 @@ import {
   skillPromptDisplayText,
 } from '../../lib/transcript-projection.js'
 import { SessionManager } from '@earendil-works/pi-coding-agent'
+import { compactionCutEntryId } from './compaction-boundary.js'
 import { emptyExtensionUiState } from './extension-ui.js'
 import { supportsUltrafastWithAuth, ULTRAFAST_COMMAND } from '../../lib/ultrafast.js'
 import { goalStateFromEntries, goalStateFromSession } from './goal-state.js'
@@ -121,6 +122,9 @@ export function sessionStateDto(
     availableThinkingLevels: session.getAvailableThinkingLevels(),
     isStreaming: session.isStreaming,
     isCompacting: session.isCompacting,
+    compactionCutEntryId: session.isCompacting
+      ? compactionCutEntryId(session)
+      : '',
     pendingToolCalls,
     pendingTools: pendingToolsDto(
       session,
