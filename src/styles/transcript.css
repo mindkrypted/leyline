@@ -317,6 +317,7 @@
 
 .session-switching > .message,
 .session-switching > .tool-card,
+.session-switching > .mobile-activity-card,
 .session-switching > .model-change-row,
 .session-switching > .system-prompt-row,
 .session-switching > .live-stack,
@@ -334,6 +335,7 @@
 
 .new-session-transition:not(.start-state) .workbench > .message,
 .new-session-transition:not(.start-state) .workbench > .tool-card,
+.new-session-transition:not(.start-state) .workbench > .mobile-activity-card,
 .new-session-transition:not(.start-state) .workbench > .model-change-row,
 .new-session-transition:not(.start-state) .workbench > .system-prompt-row,
 .new-session-transition:not(.start-state) .workbench > .live-stack,
@@ -352,6 +354,7 @@
 
 .session-handoff-workbench > .message,
 .session-handoff-workbench > .tool-card,
+.session-handoff-workbench > .mobile-activity-card,
 .session-handoff-workbench > .model-change-row,
 .session-handoff-workbench > .system-prompt-row,
 .session-handoff-workbench > .live-stack {

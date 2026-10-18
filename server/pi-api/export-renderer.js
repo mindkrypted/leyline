@@ -60,7 +60,7 @@ export async function renderSessionExportHtml(detail, shareMeta = {}) {
     if (item.type !== 'tool-activity') return renderExportEntry(item, entryIndices.get(item))
     return `<section class="export-tool-activity mobile-activity-card">
 <button type="button" class="mobile-activity-summary" aria-expanded="false">
-<span class="mobile-activity-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" /></svg><strong>${item.items.length} tool calls</strong><span class="mobile-activity-check" aria-label="Completed">✓</span><span class="mobile-activity-chevron" aria-hidden="true">›</span></span>
+<span class="mobile-activity-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" /></svg><strong>${item.items.length} tool ${item.items.length === 1 ? 'call' : 'calls'}</strong><span class="mobile-activity-check" aria-label="Completed">✓</span><span class="mobile-activity-chevron" aria-hidden="true">›</span></span>
 <span class="mobile-activity-breakdown">${item.operations.map(operation => `<span>${escapeHtml(operation)}</span>`).join('')}</span>
 </button>
 <div class="mobile-activity-list">${item.items.map(call => renderExportEntry(activityEntry(call), entryIndices.get(call))).join('\n')}</div>
@@ -77,6 +77,7 @@ export async function renderSessionExportHtml(detail, shareMeta = {}) {
 <title>${escapeHtml(title)}</title>
 ${exportMetaTags(session, title, shareMeta)}
 <style>${exportCss()}</style>
+<noscript><style>.export-tool-activity > .mobile-activity-list { display: block; height: auto; padding: 3px 13px; overflow: visible; pointer-events: auto; }</style></noscript>
 </head>
 <body>
 <main class="export-shell">
@@ -2016,39 +2017,70 @@ button, input, textarea { color: inherit; font: inherit; }
   line-height: 1.45;
   white-space: pre-wrap;
 }
-.export-tool-activity,
-.export-tool-activity > .mobile-activity-list { display: contents; }
-.export-tool-activity > .mobile-activity-summary,
-.mobile-tool-status,
-.mobile-tool-target { display: none; }
+.export-tool-activity {
+  overflow: hidden;
+  width: min(var(--content-max), 100%);
+  margin: 16px auto 20px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2.4%);
+}
+.export-tool-activity > .mobile-activity-summary {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mobile-activity-heading { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 13px; background: rgb(255 255 255 / 4%); }
+.mobile-activity-heading svg { flex: none; width: 16px; height: 16px; fill: none; stroke: #b7b0ce; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.mobile-activity-heading strong { color: #a5a5a5; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.mobile-activity-check { margin-left: auto; color: #8fbc9b; font-size: 13px; }
+.mobile-activity-chevron { color: #aaa; transition: transform 280ms var(--ease-emphasized); }
+.mobile-activity-card.is-expanded .mobile-activity-chevron { transform: rotate(90deg); }
+.mobile-activity-breakdown { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 30px; border-top: 1px solid rgb(255 255 255 / 6%); padding: 7px 13px; background: rgb(255 255 255 / 3%); color: #b8b8b8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; }
+.export-tool-activity > .mobile-activity-list { display: flex; flex-direction: column; justify-content: flex-end; height: 39px; padding: 0 13px; overflow: hidden; pointer-events: none; }
+.export-tool-activity.is-expanded > .mobile-activity-list { display: block; height: auto; padding: 3px 13px; overflow: visible; pointer-events: auto; }
+.mobile-activity-list .tool-card { margin: 0; border-top: 1px solid rgb(255 255 255 / 5%); border-radius: 0; padding: 0; background: transparent; }
+.mobile-activity-list > .tool-card:first-child { border-top: 0; }
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list > .tool-card:last-child { border-top-color: transparent; }
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list .tool-expanded-body,
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list .mobile-tool-target { display: none; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header { flex-wrap: nowrap; gap: 7px; min-height: 38px; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; font-size: 12px; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header em { flex: none; white-space: nowrap; font-size: 9px; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header .copy-button { display: none; }
+.mobile-activity-list .tool-card:not(.subagent-card)[open] .tool-card-header .copy-button { display: grid; place-items: center; min-width: 30px; min-height: 30px; }
+.tool-card[open] .tool-chevron { transform: none; }
+.desktop-tool-status { display: none; }
+.mobile-tool-status { display: inline; }
+.mobile-tool-status.status-stopped { color: #c6ad83; }
+.mobile-tool-status.status-unknown { color: #93939b; }
+.tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
+.mobile-activity-list .subagent-card:not([open]) .subagent-results,
+.mobile-activity-list .subagent-card:not([open]) .subagent-summary { display: none; }
+.mobile-activity-list .subagent-header { flex-wrap: nowrap; min-height: 38px; }
+.mobile-activity-list .subagent-header code { flex: 1; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-activity-summary:focus-visible { outline: 2px solid #aaa; outline-offset: -2px; }
 @media (max-width: 760px) {
-  .export-tool-activity.mobile-activity-card { display: block; overflow: hidden; margin: 20px 0 24px; border: 1px solid #494949; border-radius: 11px; background: #1c1c1c; }
-  .export-tool-activity > .mobile-activity-summary { display: block; width: 100%; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-  .mobile-activity-heading { display: flex; align-items: center; gap: 7px; min-height: 46px; padding: 0 11px; }
-  .mobile-activity-heading svg { flex: none; width: 16px; height: 16px; fill: none; stroke: #b7b0ce; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-  .mobile-activity-heading strong { color: #e0e0e0; font-size: 12px; font-weight: 600; white-space: nowrap; }
-  .mobile-activity-check { margin-left: auto; color: #8fbc9b; font-size: 13px; }
-  .mobile-activity-chevron { color: #aaa; transition: transform 280ms var(--ease-emphasized); }
-  .mobile-activity-card.is-expanded .mobile-activity-chevron { transform: rotate(90deg); }
-  .mobile-activity-breakdown { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 31px; border-top: 1px solid #383838; padding: 8px 12px; background: #242424; color: #b8b8b8; font-size: 10px; }
-  .export-tool-activity > .mobile-activity-list { display: none; padding: 4px 10px; }
-  .export-tool-activity.is-expanded > .mobile-activity-list { display: block; }
-  .mobile-activity-list .tool-card { margin: 0; border-top: 1px solid #353535; border-radius: 0; padding: 0; background: transparent; }
+  .mobile-activity-heading { min-height: 46px; padding: 0 11px; }
+  .mobile-activity-breakdown { min-height: 31px; padding: 8px 12px; }
+  .export-tool-activity > .mobile-activity-list { padding: 0 10px; }
+  .export-tool-activity.is-expanded > .mobile-activity-list { padding: 4px 10px; }
+  .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header { min-height: 44px; }
+  .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { max-width: 40%; font-size: 11px; }
+  .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header code { font-size: 11px; }
+  .mobile-activity-list .subagent-header { min-height: 44px; }
   .tool-card:not(.subagent-card) .tool-card-header { flex-wrap: nowrap; gap: 7px; min-height: 44px; }
   .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; max-width: 40%; font-size: 11px; }
   .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
   .tool-card:not(.subagent-card) .tool-card-header em { flex: none; white-space: nowrap; font-size: 9px; }
-  .tool-card[open] .tool-chevron { transform: none; }
-  .desktop-tool-status { display: none; }
-  .mobile-tool-status { display: inline; }
-  .mobile-tool-status.status-stopped { color: #c6ad83; }
-  .mobile-tool-status.status-unknown { color: #93939b; }
   .tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
-  .mobile-activity-list .subagent-card:not([open]) .subagent-results,
-  .mobile-activity-list .subagent-card:not([open]) .subagent-summary { display: none; }
-  .mobile-activity-list .subagent-header { flex-wrap: nowrap; min-height: 44px; }
-  .mobile-activity-list .subagent-header code { flex: 1; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-activity-summary:focus-visible { outline: 2px solid #aaa; outline-offset: -2px; }
 }
 @media (max-width: 600px) {
   .subagent-header { flex-wrap: wrap; row-gap: 6px; }

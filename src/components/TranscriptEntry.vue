@@ -38,7 +38,6 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  mobile: Boolean,
   skillExpanded: Boolean,
   systemPromptSelected: Boolean,
   thinkingInitiallyExpanded: Boolean,
@@ -155,25 +154,15 @@ function isSubagentEntry(entry) {
   return entry.type === 'tool' && entry.toolName === 'subagent'
 }
 
-function liveEntryToolStatus() {
-  if (props.toolStatus === 'preparing') return 'preparing'
-  if (props.toolStatus === 'running') return 'running'
-  if (props.toolStatus === 'reading') return 'reading result'
-  if (props.toolStatus === 'error') return 'error'
-  if (props.toolStatus === 'aborted') return 'aborted'
-  return ''
-}
-
 function toolStatusTone(status) {
   if (['preparing', 'running', 'reading result'].includes(status)) return 'running'
-  if (props.mobile && ['stopped', 'unknown'].includes(status)) return status
+  if (['stopped', 'unknown'].includes(status)) return status
   if (['error', 'aborted'].includes(status)) return 'error'
   return 'completed'
 }
 
 function entryToolStatus(entry) {
-  if (props.mobile) return mobileToolStatus(entry, props.toolStatus)
-  return liveEntryToolStatus() || (entry.isError ? 'error' : 'completed')
+  return mobileToolStatus(entry, props.toolStatus)
 }
 
 function subagentStatus(result) {
@@ -465,7 +454,7 @@ function openMarkdownContent(event) {
   <article
     v-else-if="entry.type === 'tool'"
     class="tool-card transcript-tool"
-    :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError && (!mobile || entryToolStatus(entry) !== 'stopped') }"
+    :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError && entryToolStatus(entry) !== 'stopped' }"
   >
     <div class="tool-card-header">
       <button
@@ -536,7 +525,7 @@ function openMarkdownContent(event) {
           class="tool-expanded-body"
           @click.stop
         >
-          <div v-if="mobile && entry.code && !toolCommandCode(entry)" class="mobile-tool-target"><code>{{ entry.preview?.path || entry.code }}</code></div>
+          <div v-if="entry.code && !toolCommandCode(entry)" class="mobile-tool-target"><code>{{ entry.preview?.path || entry.code }}</code></div>
           <div v-if="toolCommandCode(entry)" class="tool-command-block">
             <strong>Command</strong>
             <pre>{{ entry.code }}</pre>

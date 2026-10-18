@@ -407,19 +407,19 @@ const {
 const liveFlowItems = computed(() => {
   return liveItems.value.filter((item) => item.type !== 'activity')
 })
-const mobileTranscriptItems = computed(() => groupToolActivity([
-  ...entries.value.map(entry => ({ ...entry, persistedEntry: entry })),
-  ...liveFlowItems.value,
-]))
+const persistedTranscriptItems = computed(() => groupToolActivity(
+  entries.value.map(entry => ({ ...entry, persistedEntry: entry })),
+))
+const liveTranscriptItems = computed(() => groupToolActivity(liveFlowItems.value))
 const expandedActivity = ref(new Map())
 function isActivityExpanded(group) {
   return expandedActivity.value.get(group.id)
     ?? group.items.some(item => isToolExpanded(activityEntry(item)))
 }
 function expandEntryActivity(entryId) {
-  if (!systemPromptMobile.value) return
-  const group = mobileTranscriptItems.value.find(item => item.type === 'tool-activity'
-    && item.items.some(call => activityEntry(call).id === entryId))
+  const group = [...persistedTranscriptItems.value, ...liveTranscriptItems.value]
+    .find(item => item.type === 'tool-activity'
+      && item.items.some(call => activityEntry(call).id === entryId))
   if (group && !isActivityExpanded(group)) {
     expandedActivity.value = new Map(expandedActivity.value).set(group.id, true)
   }
@@ -2234,8 +2234,8 @@ function eventSummary(item) {
 }
 
 function liveToolStatus(tool) {
-  if (systemPromptMobile.value && tool.status === 'aborted') return 'stopped'
-  if (systemPromptMobile.value && tool.status === 'completed'
+  if (tool.status === 'aborted') return 'stopped'
+  if (tool.status === 'completed'
     && !tool.persistedEntry && !tool.resultEntry) return 'unknown'
   if (tool.status === 'preparing') return 'preparing'
   if (tool.status === 'running') return 'running'
@@ -4549,37 +4549,69 @@ function closePickerMenus() {
 
         <template
           v-if="selectedSession
-            && !systemPromptMobile
             && !startupRun
             && !inProjectNewSessionRun
-            && entries.length > 0"
+            && persistedTranscriptItems.length > 0"
         >
-          <TranscriptEntry
-            v-for="entry in entries"
-            :key="`${selectedSession.id}:${entry.id}`"
-            :data-entry-id="entry.id"
-            :class="{ 'message-enter': isEnteringEntry(entry) }"
-            :copied-entry-id="copiedEntryId"
-            :entry="entry"
-            :research-cwd="selectedSession?.cwd || ''"
-            :skill-expanded="isSkillExpanded(entry)"
-            :system-prompt-selected="systemPromptEntry?.id === entry.id"
-            :thinking-initially-expanded="thinkingInitiallyExpanded"
-            :tool-expanded="isToolExpanded(entry)"
-            @copy="copyEntry"
-            @edit="startEditingEntry"
-            @fork="forkSession"
-            @mark-feedback="markEntryFeedback"
-            @navigate-child-session="navigateChildSession"
-            @open-image="openImageFullscreen"
-            @open-research-source="openResearchSource"
-            @open-system-prompt="openSystemPrompt"
-            @reset="resetSessionToEntry"
-            @retry="retryEntry"
-            @open-tool-fullscreen="openToolFullscreen"
-            @toggle-skill="toggleSkill"
-            @toggle-tool="toggleTool"
-          />
+          <template
+            v-for="item in persistedTranscriptItems"
+            :key="`${selectedSession.id}:${item.id}`"
+          >
+            <MobileToolActivity
+              v-if="item.type === 'tool-activity'"
+              :group="item"
+              :expanded="isActivityExpanded(item)"
+              @toggle="toggleActivity"
+            >
+              <template #default="{ items }">
+                <TranscriptEntry
+                  v-for="call in items"
+                  :key="activityEntry(call).toolCallId || activityEntry(call).id"
+                  :data-entry-id="activityEntry(call).id"
+                  :copied-entry-id="copiedEntryId"
+                  :entry="activityEntry(call)"
+                  :research-cwd="selectedSession?.cwd || ''"
+                  :tool-expanded="isActivityExpanded(item) && isToolExpanded(activityEntry(call))"
+                  :tool-status="activityStatus(call)"
+                  @copy="copyEntry"
+                  @fork="forkSession"
+                  @navigate-child-session="navigateChildSession"
+                  @open-image="openImageFullscreen"
+                  @open-research-source="openResearchSource"
+                  @reset="resetSessionToEntry"
+                  @open-tool-fullscreen="openToolFullscreen"
+                  @toggle-tool="toggleTool"
+                />
+              </template>
+            </MobileToolActivity>
+
+            <TranscriptEntry
+              v-else
+              :data-entry-id="item.id"
+              :class="{ 'message-enter': isEnteringEntry(item) }"
+              :copied-entry-id="copiedEntryId"
+              :entry="activityEntry(item)"
+              :research-cwd="selectedSession?.cwd || ''"
+              :skill-expanded="isSkillExpanded(activityEntry(item))"
+              :system-prompt-selected="systemPromptEntry?.id === item.id"
+              :thinking-initially-expanded="thinkingInitiallyExpanded"
+              :tool-expanded="isToolExpanded(activityEntry(item))"
+              :tool-status="activityStatus(item)"
+              @copy="copyEntry"
+              @edit="startEditingEntry"
+              @fork="forkSession"
+              @mark-feedback="markEntryFeedback"
+              @navigate-child-session="navigateChildSession"
+              @open-image="openImageFullscreen"
+              @open-research-source="openResearchSource"
+              @open-system-prompt="openSystemPrompt"
+              @reset="resetSessionToEntry"
+              @retry="retryEntry"
+              @open-tool-fullscreen="openToolFullscreen"
+              @toggle-skill="toggleSkill"
+              @toggle-tool="toggleTool"
+            />
+          </template>
         </template>
 
         <TransitionGroup
@@ -4590,7 +4622,7 @@ function closePickerMenus() {
           :class="{ 'is-active': liveTurnActive, 'is-running': agentRunning }"
         >
           <div
-            v-for="item in systemPromptMobile ? mobileTranscriptItems : liveFlowItems"
+            v-for="item in liveTranscriptItems"
             :key="item.id"
             class="live-item"
             :data-entry-id="item.persistedEntry?.id || item.id"
@@ -4602,25 +4634,26 @@ function closePickerMenus() {
               :expanded="isActivityExpanded(item)"
               @toggle="toggleActivity"
             >
-              <TranscriptEntry
-                v-for="call in item.items"
-                :key="activityEntry(call).toolCallId || activityEntry(call).id"
-                :data-entry-id="activityEntry(call).id"
-                :copied-entry-id="copiedEntryId"
-                :entry="activityEntry(call)"
-                :mobile="systemPromptMobile"
-                :research-cwd="selectedSession?.cwd || ''"
-                :tool-expanded="isToolExpanded(activityEntry(call))"
-                :tool-status="activityStatus(call)"
-                @copy="copyEntry"
-                @fork="forkSession"
-                @navigate-child-session="navigateChildSession"
-                @open-image="openImageFullscreen"
-                @open-research-source="openResearchSource"
-                @reset="resetSessionToEntry"
-                @open-tool-fullscreen="openToolFullscreen"
-                @toggle-tool="toggleTool"
-              />
+              <template #default="{ items }">
+                <TranscriptEntry
+                  v-for="call in items"
+                  :key="activityEntry(call).toolCallId || activityEntry(call).id"
+                  :data-entry-id="activityEntry(call).id"
+                  :copied-entry-id="copiedEntryId"
+                  :entry="activityEntry(call)"
+                  :research-cwd="selectedSession?.cwd || ''"
+                  :tool-expanded="isActivityExpanded(item) && isToolExpanded(activityEntry(call))"
+                  :tool-status="activityStatus(call)"
+                  @copy="copyEntry"
+                  @fork="forkSession"
+                  @navigate-child-session="navigateChildSession"
+                  @open-image="openImageFullscreen"
+                  @open-research-source="openResearchSource"
+                  @reset="resetSessionToEntry"
+                  @open-tool-fullscreen="openToolFullscreen"
+                  @toggle-tool="toggleTool"
+                />
+              </template>
             </MobileToolActivity>
 
             <TranscriptEntry
@@ -4657,8 +4690,7 @@ function closePickerMenus() {
               :entry="item.persistedEntry || item.resultEntry"
               :research-cwd="selectedSession?.cwd || ''"
               :tool-expanded="isToolExpanded(item.persistedEntry || item.resultEntry)"
-              :tool-status="systemPromptMobile ? activityStatus(item) : item.status"
-              :mobile="systemPromptMobile"
+              :tool-status="activityStatus(item)"
               @copy="copyEntry"
               @fork="forkSession"
               @mark-feedback="markEntryFeedback"

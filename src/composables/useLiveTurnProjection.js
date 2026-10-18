@@ -519,6 +519,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
       id,
       seq: existing?.seq || ++liveItemSeq,
       type: 'tool',
+      persisted: false,
       toolCallId: event.toolCallId || event.id || event.callId || '',
       toolName: event.toolName || 'tool',
       label: liveToolLabel(event, existing),
