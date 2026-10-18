@@ -1443,7 +1443,10 @@ try {
     ready: '.transcript-tool',
     scenario: 'markdown',
     interact: async (page) => {
-      const tool = page.locator('.transcript-tool').filter({ hasText: 'docs/release-checklist.md' })
+      const activity = page.locator('.mobile-activity-card')
+      const tool = activity.locator('.transcript-tool').filter({ hasText: 'docs/release-checklist.md' })
+      await activity.locator('.mobile-activity-summary').click()
+      await tool.locator('.tool-expand-button').click()
       await tool.getByTitle('Open full screen').click()
       await page.locator('.tool-fullscreen-markdown blockquote').waitFor()
       await page.locator('.tool-fullscreen-backdrop').evaluate((element) => {
