@@ -817,6 +817,11 @@
   transition-timing-function: var(--ease-accelerate);
 }
 
+.tool-card .tool-preview-cta:focus-visible,
+.tool-card .tool-image-preview-button:focus-visible {
+  outline-offset: -2px;
+}
+
 .tool-fullscreen-backdrop {
   position: fixed;
   inset: 0;
