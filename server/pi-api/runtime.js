@@ -1957,8 +1957,8 @@ async function bindRuntimeHandle(handle) {
   }
 }
 
-function openEventStream(req, res) {
-  return events.openEventStream(req, res)
+function openEventStream(req, ws) {
+  return events.openEventStream(req, ws)
 }
 
 function broadcastActiveSession(handle = activeHandle) {

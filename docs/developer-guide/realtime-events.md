@@ -1,10 +1,18 @@
 # Realtime events
 
-Leyline uses server-sent events (SSE) for pi runtime and extension updates. It uses a separate WebSocket for terminal traffic.
+Leyline uses WebSockets for runtime, extension, and Git review updates. The terminal uses a separate WebSocket. Commands and file transfers remain HTTP.
+
+Event WebSockets avoid the browser's per-origin six-connection limit for HTTP/1.1 requests across tabs. Frontend and backend must both use API v2. There is no SSE fallback.
 
 ## Server stream
 
-`GET /api/pi/events` opens the SSE stream. `server/pi-api/events.js` owns the connected response set.
+`WS /api/pi/events` opens the runtime stream. `server/pi-api/event-sockets.js` handles upgrades, origin checks, heartbeats, and shutdown. `server/pi-api/events.js` owns runtime subscriptions and event delivery.
+
+Each event is one JSON text message with `type` and `data` fields:
+
+```json
+{"type":"runtime_roster","data":{"sessionIds":[]}}
+```
 
 The browser supplies the selected `sessionId` in the query string. That runtime receives full snapshots; other runtimes receive compact snapshots.
 
@@ -12,7 +20,7 @@ A new connection receives one `active_session` event per runtime, followed by `r
 
 The server sends these event types:
 
-| SSE type | Payload |
+| `type` | `data` |
 | --- | --- |
 | `active_session` | A runtime session DTO for one handle |
 | `runtime_roster` | `{ sessionIds }` for the backend's open runtimes |
@@ -35,19 +43,29 @@ Research updates change the extension status after they append state. The result
 
 ## Frontend adapter
 
-`useRuntimeEvents.js` creates one `EventSource` for `/api/pi/events` on the
-active backend. It handles `active_session`, `runtime_roster`, `runtime_removed`,
-`runtime_event`, `extension_ui`, `extension_error`, `trace_updated`, and `trace_config`. Session changes close the old stream before opening its replacement.
+`useRuntimeEvents.js` uses `src/lib/event-socket.js` to open one runtime WebSocket on the selected backend. It handles `active_session`, `runtime_roster`, `runtime_removed`, `runtime_event`, `extension_ui`, `extension_error`, `trace_updated`, and `trace_config`. Session changes close the old stream before opening its replacement.
 
-Connection open and error callbacks update the visible stream status. EventSource performs its standard reconnect behavior after a disconnection.
+Connection callbacks update the visible stream status. The adapter passes event messages to `handleEvent(type, data)`.
 
 The adapter keeps the latest 100 local log items. The Runtime Events drawer displays the newest 20.
 
 The adapter logs extension errors. Composer error handling filters expected cancellations without removing their raw event records.
 
+## Connection recovery
+
+The runtime and Git review streams share `src/lib/event-socket.js`. It reconnects after errors, closes, or timeouts. Retry delay starts at one second and doubles to 15 seconds, with less than 500 ms of additional random delay. A successful connection resets this delay.
+
+Connection setup has a 10-second timeout. An open connection has a 65-second inactivity timeout. The server sends `{"type":"ping"}` every 30 seconds. The helper replies with `{"type":"pong"}`. The server terminates the connection if the previous ping has no reply at the next check.
+
+These heartbeats are application messages, not WebSocket control frames. Custom clients must send the exact pong text because the server matches it literally. See the [event connection contract](../reference/api#event-websockets).
+
+Reconnect receives fresh runtime snapshots and a roster. It also requests a selected-session refresh and notifies trace subscribers to refresh. The server does not replay missed events. Explicit close cancels reconnect and heartbeat timers, and the helper ignores callbacks from replaced sockets.
+
+The event hub combines `message_update` events within 50 ms and flushes pending updates before later runtime events for the same session. Slow clients have bounded queues that combine replaceable updates. Queue overflow disconnects that client so it can reconnect and refresh current state.
+
 ## Trace notices
 
-Trace notices reuse the runtime EventSource. They do not open another SSE connection or include full trace payloads. `trace_updated` follows a storage commit and carries the trace revision. `trace_config` reports backend capture status and optional controlled errors.
+Trace notices reuse the runtime WebSocket. They do not open another connection or include full trace payloads. `trace_updated` follows a storage commit and carries the trace revision. `trace_config` reports backend capture status and optional controlled errors.
 
 `useRuntimeEvents.js` routes these notices to dedicated subscribers, without adding them to the Runtime Events log or transcript projection. Notices for background sessions remain available to Explorer. Open views fetch only the required summary or detail page and ignore older revisions.
 
@@ -57,7 +75,7 @@ The event hub coalesces queued notices by trace ID and capture configuration. Re
 
 `App.vue` sends each `active_session` snapshot to `useSessionWorkspace.js`. The composable updates background status for that session ID.
 
-If the snapshot belongs to the selected session, `App.vue` also updates `activeRuntimeSession`. Revision guards reject older snapshots from either HTTP or SSE.
+If the snapshot belongs to the selected session, `App.vue` also updates `activeRuntimeSession`. Revision guards reject older snapshots from either HTTP or WebSocket messages.
 
 `runtime_event` payloads update background running, compacting, unread, and error state. Queue state and branch research progress come from `active_session` snapshots. Runtime events also enter `useLiveTurnProjection.js`.
 
@@ -91,7 +109,7 @@ The goal controls and research surfaces use projected state. The browser does no
 
 Ultrafast publishes its runtime-local mode through extension statuses. The browser receives changes through the existing extension UI and runtime snapshots.
 
-Pending browser confirmations also travel in `extensionUi.confirmations`. Compact snapshots include `pendingConfirmationCount` for background supervision. Replies use the session-scoped HTTP route, not SSE. See [Browser confirmations](./backend-api#browser-confirmations).
+Pending browser confirmations also travel in `extensionUi.confirmations`. Compact snapshots include `pendingConfirmationCount` for background supervision. Replies use the session-scoped HTTP route, not the event WebSocket. See [Browser confirmations](./backend-api#browser-confirmations).
 
 ## Concurrent sessions
 
@@ -99,9 +117,17 @@ Each runtime event includes `activeSessionId`. Keep this field when adding event
 
 Live transcript updates apply only to the selected session. Background events update sidebar status and unread state.
 
-All windows connected to one backend receive its broadcasts. SSE clients and
+All windows connected to one backend receive its broadcasts. Runtime subscriptions and
 runtime handles are process-wide within that backend. Windows on another
 backend receive a different stream.
+
+## Git review events
+
+`ReviewPane.vue` opens a separate WebSocket at `/api/pi/review/events?cwd=...` when Git review is available and automatic updates are enabled. The backend shares watchers for the same watch root and releases them when the last client disconnects.
+
+`review_ready` confirms watcher setup. The frontend waits for this event before its initial or reconnect refresh, rather than using socket open as the refresh boundary. `review_change` queues another status refresh. These events contain no diff data.
+
+`review_unavailable` closes the subscription and causes the frontend to reload Git status. A watcher failure sends `review_watch_error` and closes with code `1011`. The helper reconnects. A cwd change, disabled automatic updates, or component unmount closes the subscription and cancels retries.
 
 ## Terminal events
 
@@ -109,12 +135,12 @@ The terminal endpoint is `/api/pi/terminal` on the active backend. The renderer 
 
 The endpoint sends JSON WebSocket messages with `ready`, `data`, `error`, or `exit` types. The browser waits for `ready` before it sends `input` and `resize` messages. Closing the socket kills its PTY process.
 
-Do not send terminal bytes through SSE. Terminal ordering and backpressure are independent from runtime events.
+Keep terminal bytes on the terminal WebSocket. Terminal ordering and backpressure are independent from runtime and Git review events.
 
 ## Adding an event consumer
 
 1. Preserve `activeSessionId` at the server boundary.
-2. Add the named SSE listener in `useRuntimeEvents.js`.
+2. Handle the event type in `handleEvent()` in `useRuntimeEvents.js`.
 3. Route cross-feature state through `App.vue`.
 4. Keep selected-session filtering in the feature owner.
 5. Decide whether the event needs live projection, persisted refresh, or both.

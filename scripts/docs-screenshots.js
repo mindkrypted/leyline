@@ -84,7 +84,7 @@ const backendRegistry = {
 const backendInfo = {
   name: 'Leyline',
   version: '0.0.0',
-  apiVersion: 1,
+  apiVersion: 2,
   capabilities: {
     events: true,
     exports: true,
@@ -2729,22 +2729,42 @@ function initBrowser({
   window.SpeechRecognition = MockSpeechRecognition
   window.webkitSpeechRecognition = MockSpeechRecognition
 
-  class MockEventSource extends EventTarget {
-    constructor(url) {
+  const NativeWebSocket = window.WebSocket
+  class MockWebSocket extends EventTarget {
+    static CONNECTING = 0
+    static OPEN = 1
+    static CLOSING = 2
+    static CLOSED = 3
+    constructor(url, protocols) {
       super()
-      this.url = url
-      this.readyState = 0
+      if ([protocols].flat().includes('vite-hmr')) return new NativeWebSocket(url, protocols)
+      this.url = String(url)
+      this.readyState = MockWebSocket.CONNECTING
+      const pathname = new URL(url, window.location.href).pathname
       setTimeout(() => {
-        if (this.readyState === 2) return
-        this.readyState = 1
-        this.onopen?.(new Event('open'))
-        this.dispatchEvent(new Event('open'))
-        if (new URL(url, window.location.href).pathname === '/api/pi/review/events') return
-        for (const activeRuntime of runtimeSessions) {
-          this.dispatchEvent(new MessageEvent('active_session', {
-            data: JSON.stringify(activeRuntime),
-          }))
+        if (this.readyState !== MockWebSocket.CONNECTING) return
+        if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal'].includes(pathname)
+          || (pathname === '/api/pi/terminal' && !terminal)) {
+          this.close()
+          return
         }
+        this.readyState = MockWebSocket.OPEN
+        const event = new Event('open')
+        this.onopen?.(event)
+        this.dispatchEvent(event)
+        if (pathname === '/api/pi/terminal') {
+          this.emit({ type: 'ready', cwd: '/workspace/harbor', shell: '/bin/zsh', pty: true })
+          this.emit({ type: 'data', data: '$ npm run docs:build\r\n✓ documentation build complete\r\n' })
+          return
+        }
+        if (pathname === '/api/pi/review/events') {
+          this.emit({ type: 'review_ready', data: {} })
+          return
+        }
+        for (const activeRuntime of runtimeSessions) {
+          this.emit({ type: 'active_session', data: activeRuntime })
+        }
+        this.emit({ type: 'runtime_roster', data: { sessionIds: runtimeSessions.map((session) => session.id) } })
         const events = [
           { activeSessionId: runtime.id, event: { type: 'session_start' } },
           { activeSessionId: runtime.id, event: { type: 'tool_execution_start', toolName: 'read' } },
@@ -2758,17 +2778,14 @@ function initBrowser({
         ]
         if (emitRuntimeEvents) {
           for (const data of [...events, ...runtimeEvents]) {
-            this.dispatchEvent(new MessageEvent('runtime_event', {
-              data: JSON.stringify(data),
-            }))
+            this.emit({ type: 'runtime_event', data })
           }
         }
-        this.dispatchEvent(new MessageEvent('active_session', {
-          data: JSON.stringify({ ...runtime, snapshotRevision: now + 1 }),
-        }))
+        this.emit({ type: 'active_session', data: { ...runtime, snapshotRevision: now + 1 } })
         if (activeGoal) {
-          this.dispatchEvent(new MessageEvent('extension_ui', {
-            data: JSON.stringify({
+          this.emit({
+            type: 'extension_ui',
+            data: {
               activeSessionId: runtime.id,
               state: {
                 statuses: { goal: 'goal: active' },
@@ -2776,52 +2793,25 @@ function initBrowser({
                 notifications: [],
               },
               goal: activeGoal,
-            }),
-          }))
+            },
+          })
         }
-      }, 0)
+      }, pathname === '/api/pi/terminal' ? 20 : 0)
     }
+    emit(frame) {
+      if (this.readyState !== MockWebSocket.OPEN) return
+      const event = new MessageEvent('message', { data: JSON.stringify(frame) })
+      this.onmessage?.(event)
+      this.dispatchEvent(event)
+    }
+    send() {}
     close() {
-      this.readyState = 2
+      if (this.readyState === MockWebSocket.CLOSED) return
+      this.readyState = MockWebSocket.CLOSED
+      const event = new CloseEvent('close', { code: 1000, wasClean: true })
+      this.onclose?.(event)
+      this.dispatchEvent(event)
     }
   }
-  window.EventSource = MockEventSource
-
-  if (terminal) {
-    class MockWebSocket extends EventTarget {
-      static CONNECTING = 0
-      static OPEN = 1
-      static CLOSING = 2
-      static CLOSED = 3
-      constructor(url) {
-        super()
-        this.url = url
-        this.readyState = MockWebSocket.CONNECTING
-        setTimeout(() => {
-          this.readyState = MockWebSocket.OPEN
-          this.dispatchEvent(new Event('open'))
-          this.dispatchEvent(new MessageEvent('message', {
-            data: JSON.stringify({
-              type: 'ready',
-              cwd: '/workspace/harbor',
-              shell: '/bin/zsh',
-              pty: true,
-            }),
-          }))
-          this.dispatchEvent(new MessageEvent('message', {
-            data: JSON.stringify({
-              type: 'data',
-              data: '$ npm run docs:build\r\n✓ documentation build complete\r\n',
-            }),
-          }))
-        }, 20)
-      }
-      send() {}
-      close() {
-        this.readyState = MockWebSocket.CLOSED
-        this.dispatchEvent(new Event('close'))
-      }
-    }
-    window.WebSocket = MockWebSocket
-  }
+  window.WebSocket = MockWebSocket
 }

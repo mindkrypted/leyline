@@ -24,7 +24,9 @@ also start the Leyline backend.
 5. Remove `/api/pi` from the saved URL. Leyline adds this path.
 
 Open `<backend-url>/api/pi/info` to check the server directly. A compatible
-server returns `name: "Leyline"` and `apiVersion: 1`.
+server returns `name: "Leyline"` and `apiVersion: 2`.
+
+API v2 uses WebSockets for runtime and Git review events. Update the frontend and backend together. After the update, restart the backend and reload existing browser tabs. An installed Electron app needs a rebuilt package and a restart.
 
 When the UI and backend use different non-loopback origins, set
 `LEYLINE_SERVER_ALLOWED_ORIGINS` on the backend. Restart the backend after you
@@ -33,6 +35,19 @@ when the browser blocks mixed content.
 
 Select **Retry** in the sidebar after the backend becomes available. Retry
 checks the backend again and reconnects the runtime event stream.
+
+## Live updates stop or disconnect
+
+1. Check that the selected backend returns API v2 from `/api/pi/info`.
+2. Reload the browser tab to replace an older client.
+3. In the browser's Network panel, check the WebSocket connection to `/api/pi/events`.
+4. If a reverse proxy is present, confirm that it forwards WebSocket upgrades for both event paths.
+
+The event paths are `/api/pi/events` and `/api/pi/review/events`. The review connection opens only when automatic Git review updates are available. Successful upgrades return HTTP `101`. Opening either path as an ordinary HTTP page is not a WebSocket check. An HTTP `426` means that the route requires an upgrade.
+
+Use a secure WebSocket (`wss://`) with an HTTPS backend. Keep proxy idle timeouts longer than the 30-second heartbeat interval. If the browser requests local-network permission, grant it only for a backend that you trust.
+
+The client reconnects automatically after a dropped connection. It then refreshes runtime snapshots and the selected session. Git review refresh waits for `review_ready`. Missed events are not replayed. Custom clients must implement reconnect and heartbeat replies. See [Event WebSockets](./api#event-websockets).
 
 ## Another device cannot reach a sharing URL
 

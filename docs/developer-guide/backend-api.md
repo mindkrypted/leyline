@@ -18,7 +18,11 @@ Successful JSON responses use explicit envelopes such as `{ sessions }`,
 
 The router returns JSON for HTTP errors. It uses explicit 400, 404, 405, and 409 responses in some branches. Its outer handler maps other errors to 500. Trace routes use their own controlled validation and availability errors. See [Trace routes](../reference/api#trace-routes).
 
-The terminal does not use the HTTP router. It uses a WebSocket upgrade at `/api/pi/terminal`.
+Runtime and Git review events use WebSocket upgrades at `/api/pi/events?sessionId=...` and `/api/pi/review/events?cwd=...`. `event-sockets.js` installs these handlers for Vite and standalone/Electron servers.
+
+API v2 requires WebSockets for these events, with no HTTP SSE fallback. Direct HTTP GET requests to these endpoints return `426`. A review request without `cwd` returns `400`. Event frames use `{ type, data }`. See [Realtime events](./realtime-events) for heartbeat, reconnect, and queue behavior.
+
+The terminal uses a separate WebSocket upgrade at `/api/pi/terminal`. Its protocol does not change.
 
 Network sharing adds a TCP relay before the origin, without another HTTP router. `server/network-access.js` forwards all connection bytes unchanged. The `/api/leyline/network-access` routes control only that relay. They leave the origin and active runtimes intact. See [Live network access](./architecture#live-network-access) and the [route contract](../reference/api#network-access).
 
@@ -48,14 +52,15 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | `server/pi-api/prompt-queue.js` | Editable unsent tasks, queue revisions, hold/resume, and submission when pi is idle |
 | `server/pi-api/sessions.js` | Session discovery, configured session directories, list metadata, and subagent markers |
 | `server/pi-api/dtos.js` | Runtime, session state, session detail, model, command, and transcript DTOs |
-| `server/pi-api/events.js` | SSE clients and event serialization |
+| `server/pi-api/events.js` | Runtime event projection, coalescing, bounded queues, and WebSocket serialization |
+| `server/pi-api/event-sockets.js` | Runtime and Git review WebSocket upgrades, origin checks, heartbeats, and shutdown |
 | `server/pi-api/tracing.js` | Lazy embedded Elune store, capture bindings, usage reconciliation, and backend capture configuration |
 | `server/pi-api/tracing-routes.js` | Trace summary, paged detail, bookmark, and capture configuration routes |
 | `server/pi-api/extension-ui.js` | Browser-compatible extension UI context and runtime event binding |
 | `server/pi-api/goal-state.js` | Goal custom-entry projection |
 | `server/pi-api/fs-browser.js` | Local directory browsing and path normalization |
 | `server/pi-api/git-review.js` | Read-only Git status, bounded per-file diffs, and watcher Git queries |
-| `server/pi-api/git-review-watch.js` | Shared recursive review watchers and review-change SSE clients |
+| `server/pi-api/git-review-watch.js` | Shared recursive review watchers and review-change WebSocket clients |
 | `server/pi-api/memories.js` | Memory Inspector queries and mutations |
 | `server/pi-api/rollout-feedback.js` | Assistant-entry feedback storage and DTO application |
 | `server/pi-api/subagents.js` | Agent discovery, scoped model overrides, and effective configuration |
@@ -72,14 +77,14 @@ The router has these main route groups:
 - runtime state and active-session selection
 - prompt, queue mutation, shell, compaction, edit, fork, Reset to here, reload, model, thinking, mode, and interrupt
 - filesystem browsing
-- read-only Git review and review-change SSE
+- read-only Git review
 - Memory Inspector operations
 - rollout feedback
 - selected-backend trace summaries, paged detail, bookmarks, and capture configuration
 - subagent configuration and subagent execution
 - vision configuration, resolution, and child execution
 - global pi provider/model/MCP configuration and private authentication operations
-- SSE events
+- HTTP rejection of event requests without a WebSocket upgrade
 
 See the [API reference](../reference/api) for route contracts. Compare that page with `server/pi-api/router.js` when route behavior changes.
 
@@ -103,7 +108,7 @@ Git commands disable external diff drivers and text conversion. The browser keep
 
 `git-review-watch.js` shares one reference-counted recursive watcher per resolved repository root. It batches filesystem events, filters ignored paths, and watches the index, HEAD, current ref, and relevant Git configuration paths separately. This metadata coverage also supports linked worktrees.
 
-`GET /api/pi/review/events` sends `review_change` events to subscribed clients. Watchers close after their last client disconnects. Runtime-settled events, completed composer shell commands, and manual refresh remain fallback triggers.
+The WebSocket at `/api/pi/review/events?cwd=...` sends `review_ready` only after watcher setup, then `review_change` events. `ReviewPane.vue` refreshes on `review_ready`, not socket open. Watchers close after their last client disconnects. Runtime-settled events, completed composer shell commands, and manual refresh remain fallback triggers.
 
 ## Runtime construction
 
@@ -206,7 +211,7 @@ Virtual models resolve to a physical model before its support checks and probe. 
 
 `settings-operations.js` owns bounded, process-local operations. Clients poll snapshots and answer the current prompt ID, or request cancellation. The SDK supplies provider text, secret, select, manual-code, authorization-URL, and device-code interactions.
 
-Settings prompts do not use `extension-ui.js`, shared SSE, or transcript entries. The initiating component retains its backend URL throughout polling and cancellation. A credential write can finish before cancellation, so cancellation cannot promise rollback.
+Settings prompts do not use `extension-ui.js`, the shared runtime WebSocket, or transcript entries. The initiating component retains its backend URL throughout polling and cancellation. A credential write can finish before cancellation, so cancellation cannot promise rollback.
 
 ### Native MCP management
 
@@ -224,7 +229,7 @@ New MCP entries default to `deferred`. The editor offers `deferred`, `direct`, a
 
 `extension-ui.js` adapts `ctx.ui.confirm()` to pending requests in `extensionUi.confirmations`. Each request has an ID, title, message, and optional expiry.
 
-`ExtensionConfirmations.vue` shows **Confirm** and **Cancel**. Replies use the session-scoped `/sessions/:id/extension-confirmations/:requestId` route. HTTP and SSE snapshots carry the current pending requests.
+`ExtensionConfirmations.vue` shows **Confirm** and **Cancel**. Replies use the session-scoped `/sessions/:id/extension-confirmations/:requestId` route. HTTP and WebSocket snapshots carry the current pending requests.
 
 Confirmation replies apply only to the current session binding. Abort, expiry, reload, or disposal resolves pending requests as false. Stale replies cannot approve replacement runtimes.
 
@@ -269,7 +274,7 @@ Steer hands an item to pi's native delivery path. Leyline does not clear or repl
 
 Stop holds unsent tasks. Editing also holds the queue and cancels any unaccepted queue submission; saving does not resume it. An empty queue clears its hold and error. Runtime reload retains pending tasks held, but backend restart discards them.
 
-Queue mutations use `promptQueue.revision` and reject stale requests with `409`. Runtime snapshots have a separate `snapshotRevision` for HTTP/SSE ordering. Snapshot DTOs expose pending text and image counts, not image bytes.
+Queue mutations use `promptQueue.revision` and reject stale requests with `409`. Runtime snapshots have a separate `snapshotRevision` for HTTP/WebSocket ordering. Snapshot DTOs expose pending text and image counts, not image bytes.
 
 ## Session writes
 
@@ -324,16 +329,16 @@ The browser does not reconstruct goal state from transcript text. It uses the pr
 ## Frontend client
 
 `src/lib/backend.js` supplies the active backend base URL for runtime HTTP,
-SSE, terminal WebSocket, and export requests. `src/lib/pi-api.js` owns runtime fetch
+runtime and Git review WebSockets, terminal WebSocket, and export requests. `src/lib/pi-api.js` owns runtime fetch
 calls and request field names. `src/lib/pi-settings-api.js` owns selected-backend Settings requests and private operation transport.
 
 `src/lib/leyline-api.js` manages the native connection registry and app settings. It also checks `GET /api/pi/info` before a switch.
 
-`src/lib/trace-client.js` binds trace requests to the selected backend and subscribes to notices through the existing runtime SSE adapter. It aborts owned requests and removes subscriptions when the view closes. Trace capture settings use `/api/pi/traces/config`, not the native app settings routes.
+`src/lib/trace-client.js` binds trace requests to the selected backend and subscribes to notices through the existing runtime WebSocket adapter. It aborts owned requests and removes subscriptions when the view closes. Trace capture settings use `/api/pi/traces/config`, not the native app settings routes.
 
 The backend information response gates trace views with `tracing`. It gates the research control with `research`. It gates Git review with `review` and automatic watching with `reviewWatch`. Models & providers and MCP servers require `piSettings`.
 
-`ReviewPane.vue` loads review data through `src/lib/pi-api.js` and opens the review stream through `backendHttpUrl()`.
+`ReviewPane.vue` loads review data through `src/lib/pi-api.js` and opens the review WebSocket through `openEventSocket()` in `src/lib/event-socket.js`.
 
 Vision configuration and parent prompt requests use `src/lib/pi-api.js`. For a parent model without image input, the backend saves attachments and the parent calls `vision_agent` during its turn.
 

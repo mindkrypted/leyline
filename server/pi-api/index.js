@@ -2,17 +2,19 @@ import { backendConnectionsHandler, readNetworkAccessSettings } from '../backend
 import { configureNetworkAccess, localServerUrl } from '../network-access.js'
 import { createPiRuntimeApi } from './runtime.js'
 import { createPiApiHandler } from './router.js'
+import { configureEventWebSocketServer } from './event-sockets.js'
 import {
   configurePiWebSocketServer as configureTerminalWebSocketServer,
 } from './terminal.js'
 
 const runtime = createPiRuntimeApi()
+const eventServers = new Set()
 
 export function piApi() {
   let closeNetworkAccess
   return {
     name: 'pi-api',
-    closeBundle: () => Promise.all([closeNetworkAccess?.(), runtime.shutdownRuntime()]),
+    closeBundle: () => Promise.all([closeNetworkAccess?.(), shutdownPiRuntime()]),
     configureServer(server) {
       configurePiWebSocketServer(server.httpServer)
       const protocol = server.config.server.https ? 'https' : 'http'
@@ -32,6 +34,9 @@ export function piApi() {
 }
 
 export function configurePiWebSocketServer(httpServer) {
+  const closeEvents = configureEventWebSocketServer(httpServer, runtime)
+  eventServers.add(closeEvents)
+  httpServer.once('close', () => eventServers.delete(closeEvents))
   configureTerminalWebSocketServer(
     httpServer,
     runtime.activeRuntimeCwd,
@@ -43,4 +48,8 @@ export function configurePiWebSocketServer(httpServer) {
 }
 
 export const piApiHandler = createPiApiHandler(runtime)
-export const shutdownPiRuntime = () => runtime.shutdownRuntime()
+export function shutdownPiRuntime() {
+  for (const close of eventServers) close()
+  eventServers.clear()
+  return runtime.shutdownRuntime()
+}

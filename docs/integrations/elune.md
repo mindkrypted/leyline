@@ -89,7 +89,7 @@ The observation-count notice depends on the producer's `observationsTruncated` f
 
 Storage commits publish small `trace_updated` notices containing `traceId`, `sessionId`, and `revision`. The host adds `activeSessionId`. Configuration changes and capture failures publish `trace_config` with `enabled` and optional `error`.
 
-These notices reuse `GET /api/pi/events`. They contain no full trace payload and open no new SSE connection. Backpressure coalesces notices by trace ID and configuration key. The client fetches the required summary or detail page after a notice. Reconnect marks open views for refresh because SSE has no replay history.
+These notices reuse the runtime WebSocket at `/api/pi/events?sessionId=...`. They contain no full trace payload and open no additional connection. Backpressure coalesces notices by trace ID and configuration key. The client fetches the required summary or detail page after a notice. Reconnect marks open views for refresh because the event transport has no replay history.
 
 `useRuntimeEvents.js` sends trace notices to dedicated subscribers. It excludes them from the Runtime Events log and transcript projection. See [Realtime events](../developer-guide/realtime-events#trace-notices).
 

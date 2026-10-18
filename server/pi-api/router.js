@@ -29,8 +29,6 @@ export function createPiApiHandler(api) {
     listSubagentConfigs,
     listVisibleMemories,
     listVisionConfig,
-    openEventStream,
-    openGitReviewEventStream,
     promptSession,
     readDirectory,
     readGitReview,
@@ -86,7 +84,7 @@ async function piApiHandler(req, res) {
         return json(res, {
           name: 'Leyline',
           version: process.env.npm_package_version || '0.0.0',
-          apiVersion: 1,
+          apiVersion: 2,
           capabilities: {
             events: true,
             exports: true,
@@ -212,7 +210,7 @@ async function piApiHandler(req, res) {
         }
         const cwd = url.searchParams.get('cwd')
         if (!cwd) return json(res, { error: 'Project path is required' }, 400)
-        return openGitReviewEventStream(cwd, req, res)
+        return json(res, { error: 'WebSocket connection required' }, 426)
       }
 
       if (url.pathname === '/review/diff') {
@@ -381,7 +379,7 @@ async function piApiHandler(req, res) {
           return json(res, { error: 'Method not allowed' }, 405)
         }
   
-        return openEventStream(req, res)
+        return json(res, { error: 'WebSocket connection required' }, 426)
       }
 
       if (url.pathname === '/memories') {

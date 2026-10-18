@@ -1,4 +1,6 @@
 import { createServer } from 'node:http'
+import { WebSocket } from 'ws'
+import { configureEventWebSocketServer } from '../server/pi-api/event-sockets.js'
 
 const port = Number.parseInt(
   process.env.MOCK_BACKEND_PORT || process.argv[2] || '8787',
@@ -93,13 +95,12 @@ function sendJson(res, value, status = 200) {
   res.end(body)
 }
 
-function sendSse(res, type, value) {
-  res.write(`event: ${type}\n`)
-  res.write(`data: ${JSON.stringify(value)}\n\n`)
+function sendEvent(ws, type, data) {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type, data }))
 }
 
 function broadcast(type, value) {
-  for (const client of clients) sendSse(client, type, value)
+  for (const client of clients) sendEvent(client, type, value)
 }
 
 function broadcastRuntime(event) {
@@ -188,26 +189,13 @@ async function handle(req, res) {
     return sendJson(res, {
       name: 'Leyline',
       version: 'mock',
-      apiVersion: 1,
+      apiVersion: 2,
       capabilities: { events: true, exports: false, terminal: false },
     })
   }
 
-  if (url.pathname === '/api/pi/events' && req.method === 'GET') {
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-    res.flushHeaders?.()
-    res.write(': connected\n\n')
-    clients.add(res)
-    sendSse(res, 'active_session', activeSession())
-    const ping = setInterval(() => res.write(': ping\n\n'), 15000)
-    req.on('close', () => {
-      clearInterval(ping)
-      clients.delete(res)
-    })
-    return
+  if (['/api/pi/events', '/api/pi/review/events'].includes(url.pathname) && req.method === 'GET') {
+    return sendJson(res, { error: 'WebSocket connection required' }, 426)
   }
 
   if (url.pathname === '/api/pi/sessions' && req.method === 'GET') {
@@ -303,13 +291,28 @@ const server = createServer((req, res) => {
   })
 })
 
+const disposeEventSockets = configureEventWebSocketServer(server, {
+  openEventStream(req, ws) {
+    clients.add(ws)
+    ws.once('close', () => clients.delete(ws))
+    sendEvent(ws, 'active_session', activeSession())
+    sendEvent(ws, 'runtime_roster', { sessionIds: [sessionId] })
+  },
+  openGitReviewEventStream(cwd, ws) {
+    sendEvent(ws, 'review_unavailable', {})
+    ws.close()
+  },
+})
+
 server.listen(port, '127.0.0.1', () => {
   console.log(`Mock Leyline backend listening at http://127.0.0.1:${port}`)
   console.log(`Mock error delay: ${errorDelay}ms`)
 })
 
-function shutdown() {
-  for (const client of clients) client.end()
+async function shutdown() {
+  for (const timer of pendingFailures.values()) clearTimeout(timer)
+  pendingFailures.clear()
+  await disposeEventSockets()
   server.close(() => process.exit(0))
 }
 

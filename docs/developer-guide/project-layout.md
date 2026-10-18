@@ -27,7 +27,7 @@
 - `src/composables/useTranscriptPreferences.js`: Owns app-wide transcript display settings.
 - `src/composables/useSettingsOperation.js`: Owns backend-bound operation polling, answers, and cancellation.
 - `src/composables/useLiveTurnProjection.js`: Owns optimistic and live transcript state.
-- `src/composables/useRuntimeEvents.js`: Adapts SSE to frontend callbacks and the event log.
+- `src/composables/useRuntimeEvents.js`: Adapts runtime WebSocket events to frontend callbacks, trace subscribers, and the event log.
 - `src/composables/useMemoryInspector.js`: Owns Memory Inspector requests and optimistic state.
 - `src/composables/useProjectBrowser.js`: Owns project picker and folder-browser visibility.
 - `src/composables/useToolExpansion.js`: Owns transcript expansion, copy, and fullscreen state.
@@ -37,9 +37,10 @@
 - `src/composables/useDictation.js`: Wraps browser speech recognition.
 - `src/composables/useSmoothStreamingText.js`: Controls incremental live text display.
 - `src/lib/backend.js`: Builds runtime HTTP and WebSocket URLs for the active backend.
+- `src/lib/event-socket.js`: Supplies the shared runtime/review WebSocket client with reconnect backoff, timeouts, heartbeat replies, stale-socket guards, and cleanup.
 - `src/lib/leyline-api.js`: Manages the native connection registry, app settings, pinned sessions, and backend identity checks.
 - `src/lib/pi-api.js`: Contains frontend runtime API functions.
-- `src/lib/trace-client.js`: Supplies selected-backend trace requests, cancellation, and subscriptions through runtime SSE.
+- `src/lib/trace-client.js`: Supplies selected-backend trace requests, cancellation, and subscriptions through the runtime WebSocket.
 - `src/lib/pi-settings-api.js`: Contains selected-backend provider/model/MCP requests and private operation transport.
 - `src/lib/transcript.js`: Configures Markdown and syntax highlighting, then re-exports shared projection helpers.
 - `src/lib/format.js`: Contains UI labels and value formatting.
@@ -99,14 +100,15 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/runtime.js`: Owns runtime handles and pi operations.
 - `server/pi-api/sessions.js`: Discovers session JSONL files and session metadata.
 - `server/pi-api/dtos.js`: Builds runtime and session DTOs.
-- `server/pi-api/events.js`: Broadcasts SSE events, including small trace commit and configuration notices.
+- `server/pi-api/events.js`: Projects runtime events and sends WebSocket frames through bounded queues, including small trace commit and configuration notices.
+- `server/pi-api/event-sockets.js`: Installs runtime and Git review WebSocket upgrades, origin checks, heartbeats, and shutdown cleanup.
 - `server/pi-api/tracing.js`: Owns the lazy Elune store, inline capture bindings, backend configuration, and child usage reconciliation.
 - `server/pi-api/tracing-routes.js`: Routes trace summaries, paged detail, bookmarks, and capture configuration.
 - `server/pi-api/extension-ui.js`: Adapts extension UI state for the browser.
 - `server/pi-api/goal-state.js`: Projects goal extension state.
 - `server/pi-api/fs-browser.js`: Browses local directories.
 - `server/pi-api/git-review.js`: Reads Git status, bounded per-file diffs, and watcher Git state.
-- `server/pi-api/git-review-watch.js`: Shares recursive review watchers and sends review-change SSE events.
+- `server/pi-api/git-review-watch.js`: Shares recursive review watchers and sends review-change WebSocket events.
 - `server/pi-api/memories.js`: Implements Memory Inspector storage.
 - `server/pi-api/rollout-feedback.js`: Implements rollout feedback storage.
 - `server/pi-api/subagents.js`: Implements subagent discovery and overrides.

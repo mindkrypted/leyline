@@ -1,4 +1,7 @@
+import { WebSocket } from 'ws'
+
 const MESSAGE_UPDATE_INTERVAL_MS = 50
+const MAX_BUFFERED_BYTES = 64 * 1024
 const MAX_PENDING_EVENTS = 128
 const MAX_PENDING_CHARS = 4 * 1024 * 1024
 const COMPACT_TEXT_LIMIT = 240
@@ -7,28 +10,19 @@ export function createEventHub(options) {
   const clients = new Set()
   const pendingMessageUpdates = new Map()
 
-  function openEventStream(req, res) {
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache, no-transform')
-    res.setHeader('Connection', 'keep-alive')
-
+  function openEventStream(req, ws) {
     const client = {
-      res,
+      ws,
       selectedSessionId: requestedSessionId(req),
       blocked: false,
       closed: false,
       queue: [],
       queuedChars: 0,
-      onDrain: undefined,
     }
-    client.onDrain = () => flushClient(client)
     clients.add(client)
 
-    req.on('close', () => closeClient(client))
-    res.on('error', () => closeClient(client))
-
-    writeClientChunk(client, ': connected\n\n')
+    ws.on('close', () => closeClient(client))
+    ws.on('error', () => closeClient(client, true))
     const handles = [...options.getRuntimeHandles()]
     for (const handle of handles) {
       sendClientEvent(
@@ -111,7 +105,7 @@ export function createEventHub(options) {
     const prepared = dataForClient(client, type, data)
     if (prepared === null) return
 
-    const chunk = `event: ${type}\ndata: ${stringifyEvent(prepared)}\n\n`
+    const chunk = stringifyEvent(type, prepared)
     if (client.blocked) {
       enqueueClientChunk(client, {
         chunk,
@@ -124,16 +118,21 @@ export function createEventHub(options) {
 
   function writeClientChunk(client, chunk) {
     if (client.closed) return false
-    try {
-      if (client.res.write(chunk)) return true
-    } catch {
-      closeClient(client)
+    if (client.ws.readyState !== WebSocket.OPEN) {
+      closeClient(client, true)
       return false
     }
-
-    client.blocked = true
-    client.res.once('drain', client.onDrain)
-    return false
+    try {
+      client.ws.send(chunk, (error) => {
+        if (error) closeClient(client, true)
+        else if (client.blocked) flushClient(client)
+      })
+      client.blocked = client.ws.bufferedAmount >= MAX_BUFFERED_BYTES
+      return !client.blocked
+    } catch {
+      closeClient(client, true)
+      return false
+    }
   }
 
   function enqueueClientChunk(client, item) {
@@ -159,7 +158,8 @@ export function createEventHub(options) {
 
   function flushClient(client) {
     if (client.closed) return
-    client.blocked = false
+    client.blocked = client.ws.bufferedAmount >= MAX_BUFFERED_BYTES
+    if (client.blocked) return
 
     while (client.queue.length) {
       const item = client.queue.shift()
@@ -168,29 +168,27 @@ export function createEventHub(options) {
     }
   }
 
-  function closeClient(client, end = false) {
+  function closeClient(client, terminate = false) {
     if (client.closed) return
     client.closed = true
     clients.delete(client)
-    client.res.removeListener('drain', client.onDrain)
     client.queue = []
     client.queuedChars = 0
-    if (end && !client.res.writableEnded) {
-      try {
-        client.res.end()
-      } catch {}
-    }
+    if (terminate) client.ws.terminate()
   }
 
-  function stringifyEvent(data) {
+  function stringifyEvent(type, data) {
     try {
-      return JSON.stringify(data)
+      return JSON.stringify({ type, data })
     } catch (error) {
       return JSON.stringify({
-        activeSessionId: options.getActiveSessionId(),
-        event: {
-          type: 'unserializable',
-          error: error.message,
+        type,
+        data: {
+          activeSessionId: options.getActiveSessionId(),
+          event: {
+            type: 'unserializable',
+            error: error.message,
+          },
         },
       })
     }

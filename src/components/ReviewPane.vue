@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PierrePreview from './PierrePreview.vue'
-import { backendHttpUrl } from '../lib/backend'
+import { openEventSocket } from '../lib/event-socket'
 import { fetchGitReview, fetchGitReviewDiff } from '../lib/pi-api'
 
 const props = defineProps({
@@ -58,7 +58,7 @@ let diffRenderGeneration = 0
 let diffDirty = false
 let pendingPreviewKeys = new Set()
 let resizeCleanup
-let reviewEventSource
+let reviewEventSocket
 let watchedRefreshQueued = false
 let watchedRefreshTimer
 
@@ -186,32 +186,21 @@ function openReviewEventStream() {
     || !review.value.available) return false
   closeReviewEventStream()
   const params = new URLSearchParams({ cwd: props.cwd })
-  const source = new EventSource(
-    backendHttpUrl(`/api/pi/review/events?${params}`),
-  )
-  reviewEventSource = source
-  source.addEventListener('open', () => {
-    if (reviewEventSource === source) requestWatchedRefresh()
-  })
-  source.addEventListener('review_change', () => {
-    if (reviewEventSource === source) requestWatchedRefresh()
-  })
-  source.addEventListener('review_unavailable', () => {
-    if (reviewEventSource !== source) return
-    closeReviewEventStream()
-    void loadReview()
-  })
-  source.addEventListener('error', () => {
-    if (reviewEventSource === source && source.readyState === EventSource.CLOSED) {
-      closeReviewEventStream()
-    }
+  reviewEventSocket = openEventSocket(`/api/pi/review/events?${params}`, {
+    onEvent(type) {
+      if (type === 'review_ready' || type === 'review_change') requestWatchedRefresh()
+      if (type === 'review_unavailable') {
+        closeReviewEventStream()
+        void loadReview()
+      }
+    },
   })
   return true
 }
 
 function closeReviewEventStream() {
-  reviewEventSource?.close()
-  reviewEventSource = undefined
+  reviewEventSocket?.close()
+  reviewEventSocket = undefined
   clearTimeout(watchedRefreshTimer)
   watchedRefreshTimer = undefined
   watchedRefreshQueued = false
@@ -253,7 +242,7 @@ async function loadReview({ preserveSelection = false } = {}) {
     selectedPath.value = nextPath
     hasLoaded.value = true
     if (!data.available) closeReviewEventStream()
-    else if (!reviewEventSource) openReviewEventStream()
+    else if (!reviewEventSocket) openReviewEventStream()
     if (nextPath) {
       diffDirty = true
       if (diffRequested.value) void loadDiff(nextPath)

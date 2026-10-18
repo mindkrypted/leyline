@@ -18,7 +18,8 @@
 | `useSettingsOperation.js` | Private operation polling, answers, cancellation, and backend-bound cleanup |
 | `useLiveTurnProjection.js` | Optimistic user entries, live assistant blocks, System rows, tools, compaction activity, and live-to-persisted reconciliation |
 | `PromptQueue.vue` | Queue expansion, active edit, action menus, queue mutations, and tray width measurement |
-| `useRuntimeEvents.js` | EventSource lifecycle, connection state, the local event log, and dedicated trace notice subscribers |
+| `useRuntimeEvents.js` | Runtime WebSocket subscription, connection state, the local event log, and dedicated trace notice subscribers |
+| `src/lib/event-socket.js` | Shared runtime/review WebSocket client, selected-backend URLs, reconnect backoff, timeouts, heartbeat replies, and stale-socket guards |
 | `App.vue` / `TracePanel.vue` | Trace surface mode, small selection and return state, selected-backend client, capture controls, and view cleanup |
 | `useMemoryInspector.js` | Visible Memory data, loading, optimistic mutations, dirty-state guards, and drawer state |
 | `useProjectBrowser.js` | Project picker state, folder expansion, and project-browser visibility |
@@ -52,7 +53,7 @@
 It stores the active ID in window `sessionStorage` and configures
 `src/lib/backend.js` before workspace requests begin.
 
-A backend switch verifies `GET /api/pi/info` and reloads the window. `App.vue` then opens SSE and loads sessions from the selected backend.
+A backend switch verifies `GET /api/pi/info` and reloads the window. `App.vue` then opens the runtime WebSocket and loads sessions from the selected backend.
 
 Retry uses the same connection flow. Transcript preferences always use the native backend, not the selected runtime backend.
 
@@ -64,7 +65,7 @@ Pinned sessions also use the native backend. `App.vue` captures the active conne
 
 Inspector scopes its list to the selected session. Workspace retains that session and the selected trace. Explorer searches across projects on the selected backend. It does not merge saved connections.
 
-`src/lib/trace-client.js` receives the selected connection and the existing SSE subscription adapter. Views receive the client through props. Display and connection settings still use the native backend, while capture settings use this trace client's selected backend.
+`src/lib/trace-client.js` receives the selected connection and the existing runtime WebSocket subscription adapter. Views receive the client through props. Display and connection settings still use the native backend, while capture settings use this trace client's selected backend.
 
 The host retains selection, tab, observation offset and limit, list filters, page, and return origin. It preserves selection between Inspector or Explorer and Workspace without retaining complete trace trees. Backend and ordinary session navigation reset trace state.
 
@@ -95,7 +96,7 @@ The selected session route is `/sessions/:id`. Browser history changes call the 
 
 `activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, goal state, and research state.
 
-SSE can send snapshots for all server handles. `App.vue` updates the selected runtime only when the IDs match. Both selected and background state reject older `snapshotRevision` values. This prevents a late HTTP response from restoring stale queue state.
+The runtime WebSocket can send snapshots for all server handles. `App.vue` updates the selected runtime only when the IDs match. Both selected and background state reject older `snapshotRevision` values. This prevents a late HTTP response from restoring stale queue state.
 
 Background event summaries remain in `runtimeSessionsById`. They supply current-project row status and the **Activity** navigator for all nonselected live sessions.
 
@@ -144,6 +145,8 @@ An anchor stores the last saved entry ID at turn start. Projection merges the sa
 At the next turn start, the composable clears the previous turn's matched live rows. They then render from the persisted list in branch order. See [Live reconciliation and settlement](./transcript-projection#live-reconciliation-and-settlement).
 
 `message_update` events update live assistant output. They do not trigger a detail refresh.
+
+Each runtime WebSocket connection receives snapshots and the runtime roster. On reconnect, `useRuntimeEvents.js` also invokes the existing refresh callbacks. See [Realtime events](./realtime-events).
 
 Settlement, reconnect, and manual compaction schedule immediate detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming tool and message events use live projection instead of per-event detail fetches.
 
@@ -203,7 +206,7 @@ These overrides use the existing subagent and vision APIs and Leyline SQLite. Th
 
 `src/lib/pi-settings-api.js` sends Settings requests to the selected backend with caching disabled. `useSettingsOperation.js` retains the starting backend URL, polls every 500 ms, and retries most polling errors after two seconds. It sequences answers and poll responses, and cancels owned work during cleanup. A late action response after navigation also receives cancellation.
 
-`PiSettingsOperation.vue` displays private prompts and controlled progress messages. It clears submitted values and uses password inputs for secret and manual-code prompts. Operations never use shared session SSE or extension-confirmation cards. See [Settings operations](../reference/api#settings-operations) for exact shapes.
+`PiSettingsOperation.vue` displays private prompts and controlled progress messages. It clears submitted values and uses password inputs for secret and manual-code prompts. Operations never use the shared runtime WebSocket or extension-confirmation cards. See [Settings operations](../reference/api#settings-operations) for exact shapes.
 
 `ProviderSettings.vue` offers **Test connection** per saved model and beside **Save** in provider and model editors. Editor tests send unsaved form values and the inventory revision without saving configuration or changing live runtimes or transcripts. The provider editor has a separate test-only model ID that is never saved. API keys stay optional, and removing a key reference does not sign out a stored credential.
 
@@ -247,7 +250,7 @@ A valid citation event resolves the source, closes an open third rail, and opens
 
 The selected desktop session mounts `ReviewPane.vue` while the pane is closed. It loads Git status for the header, but waits for `open` or `prepare` before fetching and preparing the selected diff. Status readiness alone does not emit a successful `prepared` state.
 
-When the backend reports `reviewWatch`, `ReviewPane.vue` subscribes to `/api/pi/review/events?cwd=...` only after Git status reports `available`. Non-Git directories receive no watcher. Stream open and `review_change` events queue status refreshes that preserve selection. While closed, changes mark the diff for refresh without rebuilding its preview. The stream closes when the repository becomes unavailable, its cwd changes, or the component unmounts.
+When the backend reports `reviewWatch`, `ReviewPane.vue` opens `/api/pi/review/events?cwd=...` through `openEventSocket()` only after Git status reports `available`. Non-Git directories receive no watcher. `review_ready` and `review_change` events queue status refreshes that preserve selection. The server sends `review_ready` after watcher setup, so socket open does not trigger a refresh. While the pane is closed, changes mark the diff for refresh without rebuilding its preview. The socket closes when the repository becomes unavailable, its cwd changes, or the component unmounts.
 
 A settled runtime event for the selected project and a completed composer shell command still increment the review refresh token. These triggers and the manual refresh control remain available when filesystem watching is unavailable.
 
@@ -289,6 +292,6 @@ The terminal is independent and can remain open below the workbench. Session cha
 
 ## Cleanup
 
-`App.vue` closes SSE, WebSocket, timers, observers, and composable resources during unmount.
+`App.vue` and its components close runtime, review, and terminal WebSockets, timers, observers, and composable resources during unmount.
 
 Keep external listeners and timers in their owning composable where possible. Let `App.vue` own only cross-feature coordination.

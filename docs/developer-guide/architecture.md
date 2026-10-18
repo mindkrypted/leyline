@@ -8,11 +8,11 @@ Leyline has one Vue frontend and two server startup paths. Both paths use the sa
 
 The `piApi()` plugin mounts runtime routes at `/api/pi`. It mounts native app routes at `/api/leyline`.
 
-The plugin also attaches the terminal WebSocket server to the Vite HTTP server.
+The plugin also attaches the runtime, Git review, and terminal WebSocket servers to the Vite HTTP server.
 
 The browser loads the Vue app from Vite. The native backend uses the same
 origin. A window can select another saved backend for runtime HTTP commands,
-server-sent events (SSE), terminal WebSocket traffic, and exports. Connection management and app settings stay on the native backend.
+runtime and Git review events over WebSockets, terminal WebSocket traffic, and exports. Connection management and app settings stay on the native backend.
 
 ## Electron development flow
 
@@ -31,8 +31,8 @@ A packaged app does not start Vite. `electron/main.js` starts one utility proces
 
 By default, the server listens on an ephemeral loopback port. The server host
 and port environment variables can change this address. It serves `dist/`,
-routes `/api/pi/*` and `/api/leyline/*`, and attaches the terminal WebSocket
-server.
+routes `/api/pi/*` and `/api/leyline/*`, and attaches the runtime, Git review,
+and terminal WebSocket servers.
 
 All Electron windows load the same native server. A window can select another
 saved backend without changing the active backend in other windows.
@@ -53,7 +53,17 @@ the terminal.
 `server/pi-api/tracing.js` owns the embedded Elune store, capture bindings, and backend capture configuration. `tracing-routes.js` exposes summary, detail, bookmark, and configuration operations. See [Elune integration](../integrations/elune).
 
 `src/lib/pi-api.js` is the frontend HTTP client. `useRuntimeEvents.js` owns the
-SSE connection, and `useTerminal.js` owns the terminal WebSocket.
+runtime WebSocket through `src/lib/event-socket.js`. Git review uses the same
+socket client on a separate connection. `useTerminal.js` owns the separate
+terminal WebSocket.
+
+Runtime and Git review WebSockets replace server-sent events (SSE) in API v2. These connections avoid
+the browser's HTTP/1.1 limit of six connections per origin across tabs. Other
+browser connection limits still apply. HTTP commands, file transfers, and the
+terminal protocol do not change. Both frontend and backend must use API v2.
+There is no HTTP SSE fallback.
+
+See [Realtime events](./realtime-events).
 
 ## Backend connections, app settings, and transport routing
 
@@ -67,8 +77,8 @@ Saved definitions and the default are app-wide. The active connection is window-
 
 `src/composables/usePinnedSessions.js` loads pinned session IDs for the active backend connection. Individual pin, unpin, and prune operations are atomic at the record level. Windows refresh their pin state when they regain focus.
 
-`src/lib/backend.js` supplies the base URL for runtime HTTP, Git review, SSE,
-terminal WebSocket, and export requests. The native backend uses the current
+`src/lib/backend.js` supplies URLs for runtime HTTP, Git review, runtime and review
+WebSockets, terminal WebSocket, and export requests. The native backend uses the current
 app origin. Saved connections can use hostnames, IPv4 or IPv6 addresses, ports,
 and base paths.
 
@@ -78,7 +88,7 @@ the configured default. `GET /api/pi/info` verifies the
 backend name and API version before Leyline switches to it. The response also
 reports transport capabilities.
 
-`server/pi-api/cors.js` applies one origin policy to pi HTTP routes, native app routes, and terminal WebSocket upgrades.
+`server/pi-api/cors.js` applies one origin policy to pi HTTP routes, native app routes, and runtime, Git review, and terminal WebSocket upgrades.
 
 `server/pi-api/git-review.js` reads status and per-file diffs from the selected
 backend's filesystem. The review API does not change Git state.
@@ -87,7 +97,7 @@ Same-origin and loopback clients work by default. Other frontend origins must be
 
 ### Live network access
 
-`server/network-access.js` owns a separate TCP listener for native-backend sharing. Both Vite and `startLeylineServer()` configure it against the existing origin. The listener binds `0.0.0.0` on the configured port, or port `0` for automatic selection. HTTP, SSE, terminal WebSockets, and Vite HMR pass through unchanged.
+`server/network-access.js` owns a separate TCP listener for native-backend sharing. Both Vite and `startLeylineServer()` configure it against the existing origin. The listener binds `0.0.0.0` on the configured port, or port `0` for automatic selection. HTTP, runtime and Git review WebSockets, terminal WebSockets, and Vite HMR pass through unchanged.
 
 Switch and port changes never restart or rebind the origin, change the local app URL, or replace runtime handles. Disabling sharing or changing the active port closes only the old relay and its connections. Remote terminal processes end when their WebSockets close. Agent runs and local clients continue.
 
@@ -231,7 +241,7 @@ The goal extension stores `goal-state` custom entries. Backend projection finds 
 
 The research extension stores objective, plan, phase, thread, source, report, and error entries. Citation checks require numbered report links to match non-excluded ledger sources.
 
-SSE updates carry goal, research, and extension UI changes to `App.vue`. The workbench uses this state for controls, progress, source navigation, and session titles.
+Runtime WebSocket updates carry goal, research, and extension UI changes to `App.vue`. The workbench uses this state for controls, progress, source navigation, and session titles.
 
 ## Terminal boundary
 

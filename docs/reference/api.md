@@ -24,6 +24,7 @@ Status behavior is:
 - `404` is used for an unknown runtime, native app route, setting key, session, or trace.
 - `405` is used when a known route receives an unsupported method.
 - `409` rejects stale queue or configuration revisions, expired confirmation replies, and conflicting Settings operations.
+- `426` rejects an ordinary HTTP `GET` to an event endpoint that requires a WebSocket upgrade.
 - Pi Settings also uses `429` for its operation limit and `503` for unavailable or busy runtime resources. See [Pi Settings routes](#pi-settings-routes).
 - Trace routes use `400` for invalid requests and `503` for unavailable storage, configuration failures, or shutdown. See [Trace routes](#trace-routes).
 - `500` is used for thrown runtime errors. This includes malformed JSON on most runtime routes, SDK errors, missing memories, and some missing sessions.
@@ -31,7 +32,7 @@ Status behavior is:
 The current status codes do not distinguish all client errors from server
 errors. Clients must read the `error` value.
 
-HTTP routes and terminal WebSocket upgrades use the same origin policy.
+HTTP routes and all WebSocket upgrades use the same origin policy.
 Same-origin and loopback browser clients work by default. Use
 `LEYLINE_SERVER_ALLOWED_ORIGINS` for other frontend origins. Requests without
 an `Origin` header remain allowed.
@@ -274,7 +275,7 @@ Retry and prompt edits preserve Ultrafast when the runtime and model stay unchan
 
 If an extension changes the model during a run, reset waits for a safe turn or provider boundary.
 
-Open-runtime snapshots carry `snapshotRevision`. Clients reject older snapshots for the same session, whether they arrive through HTTP or SSE. Start-screen previews can omit this field and `promptQueue`.
+Open-runtime snapshots carry `snapshotRevision`. Clients reject older snapshots for the same session, whether they arrive through HTTP or WebSocket messages. Start-screen previews can omit this field and `promptQueue`.
 
 `promptQueue` contains editable, unsent tasks. Full images stay on the backend; each item exposes only `imageCount`. Use `promptQueue.revision` for queue mutations, not `snapshotRevision`.
 
@@ -292,7 +293,7 @@ Response:
 {
   name: "Leyline",
   version: string,
-  apiVersion: 1,
+  apiVersion: 2,
   capabilities: {
     events: true,
     exports: true,
@@ -307,7 +308,9 @@ Response:
 }
 ```
 
-The frontend rejects a backend when `name` or `apiVersion` is incompatible. It shows the research control only when `capabilities.research` is `true`.
+The frontend rejects a backend when `name` or `apiVersion` is incompatible. API v2 replaces the runtime and Git review SSE streams with WebSockets. Update both frontend and backend together. HTTP commands and the terminal protocol remain unchanged.
+
+The frontend shows the research control only when `capabilities.research` is `true`.
 
 It shows the desktop review control only when `capabilities.review` is `true`. It opens the automatic review stream only when `capabilities.reviewWatch` is `true`.
 
@@ -469,7 +472,7 @@ The switch sends only `{ enabled }`. Port **Apply** sends only `{ port }`. Omitt
 
 JSON bodies cannot exceed 1 KiB. Invalid fields or an empty update return `400`. Oversized bodies return `413`. Unsupported methods return `405`. Listener and persistence failures return `400` with the standard error envelope.
 
-Enabling starts a separate TCP listener on `0.0.0.0` at the configured port. The listener forwards bytes unchanged to the existing origin. It handles HTTP, SSE, WebSockets, and Vite HMR without path routing or header rewriting.
+Enabling starts a separate TCP listener on `0.0.0.0` at the configured port. The listener forwards bytes unchanged to the existing origin. It handles HTTP, event and terminal WebSockets, and Vite HMR without path routing or header rewriting.
 
 The operation never restarts or rebinds the origin, changes its URL, or stops local clients and agents. A port update while sharing is off only saves the port. Repeated enable requests without a port change reuse the current listener. Selecting the active automatic port as a fixed port also keeps that listener.
 
@@ -1063,7 +1066,7 @@ HTTP actions share an operation lock by normalized server URL, so aliases cannot
 
 ### Settings operations
 
-Provider and MCP actions return a private, polled operation. These operations do not appear in session SSE, extension confirmations, or transcript entries. Private describes this transport separation, not access control. The API still has no authentication.
+Provider and MCP actions return a private, polled operation. These operations do not appear in session WebSocket messages, extension confirmations, or transcript entries. Private describes this transport separation, not access control. The API still has no authentication.
 
 ```text
 SettingsOperation = {
@@ -1467,9 +1470,9 @@ If line counting fails, `lineStatsAvailable` is also `false`. In either case, `a
 
 A missing `cwd` returns `400`. An invalid directory or Git failure returns `500`.
 
-### `GET /api/pi/review/events`
+### `WS /api/pi/review/events`
 
-**Designation:** Browser review stream.
+**Designation:** Browser and Electron review stream.
 
 Query:
 
@@ -1477,33 +1480,33 @@ Query:
 cwd: string
 ```
 
-Response headers include `Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, and `Connection: keep-alive`.
+The server accepts a WebSocket upgrade. Messages use the `{ type, data }` envelope and heartbeat protocol described under [Event WebSockets](#event-websockets).
 
-The stream starts with:
-
-```text
-: connected
-```
-
-Event frames use these names and data:
+Event types and their `data` values are:
 
 ```text
+review_ready: {}
+
 review_change: {
   root: string
 }
+
+review_unavailable: {}
 
 review_watch_error: {
   message: string
 }
 ```
 
-The backend shares one recursive watcher for clients that resolve to the same repository root. It closes the watcher after the last client disconnects. Ordinary `.git` activity and ignored working-tree paths do not emit `review_change`; relevant Git metadata does.
+The backend shares one recursive watcher for clients that resolve to the same watch root. It closes the watcher after the last client disconnects. Ordinary `.git` activity and ignored working-tree paths do not emit `review_change`. Relevant Git metadata does.
 
-A new connection starts after watcher setup, so the frontend can use it as a catch-up boundary. A watcher setup or runtime error sends `review_watch_error` and closes the response. `EventSource` clients can reconnect automatically.
+`review_ready` follows watcher setup. Fetch current status after this event, both on initial connection and reconnect, to catch changes since the previous HTTP response. Socket open alone does not confirm watcher readiness.
 
 Changes can share one `review_change` event. The event contains no status list or diff. Clients fetch current data from the review routes.
 
-A missing `cwd` returns `400` before the stream starts. Other setup failures use `review_watch_error` in the `200` SSE response.
+A non-Git directory or a repository that disappears produces `review_unavailable`, then closes the socket. A watcher setup or runtime error sends `review_watch_error` and closes with code `1011`. The frontend stops its subscription on `review_unavailable` and reconnects after watcher errors.
+
+A missing `cwd` returns HTTP `400` before upgrade. An ordinary HTTP `GET` with `cwd` returns `426`. There is no SSE response.
 
 ### `GET /api/pi/review/diff`
 
@@ -1793,7 +1796,7 @@ The level must occur in `active.state.availableThinkingLevels`.
 
 ## Extension confirmations
 
-Pending extension UI confirmations appear in `active.state.extensionUi.confirmations`. The runtime publishes changes through `extension_ui` and `active_session` SSE events. Compact snapshots for other sessions retain `pendingConfirmationCount`, without confirmation records.
+Pending extension UI confirmations appear in `active.state.extensionUi.confirmations`. The runtime publishes changes through `extension_ui` and `active_session` WebSocket events. Compact snapshots for other sessions retain `pendingConfirmationCount`, without confirmation records.
 
 ### `POST /api/pi/sessions/:id/extension-confirmations/:requestId`
 
@@ -2563,32 +2566,51 @@ Response: An HTML document with `Content-Type: text/html; charset=utf-8`.
 
 `disposition=inline` sets `Content-Disposition: inline`. All other values use `attachment`. Both forms include a sanitized export filename. An unknown session currently returns `500`.
 
-## Server-sent events
+## Event WebSockets
 
-### `GET /api/pi/events`
+Runtime and Git review events use separate WebSockets on the selected backend. Use `ws://` with an HTTP backend and `wss://` with an HTTPS backend. A successful upgrade returns HTTP `101`. An ordinary HTTP `GET` returns `426` instead of an SSE stream.
 
-**Designation:** Browser runtime stream.
+Each event is one JSON text message:
 
-Response headers include `Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, and `Connection: keep-alive`.
-
-The stream starts with:
-
-```text
-: connected
+```json
+{"type":"runtime_roster","data":{"sessionIds":[]}}
 ```
 
-It then sends one `active_session` event for each open runtime, followed by `runtime_roster`.
+These sockets accept heartbeat replies, not API commands. Continue to send prompts, session actions, and file requests through HTTP.
 
-The browser supplies `?sessionId=<id>`. That session receives full snapshots; other sessions receive compact snapshots. Compact `promptQueue` state contains `count`, `held`, and `error`, without item content.
+Every 30 seconds, the server sends this application heartbeat:
 
-Event frames use this format:
-
-```text
-event: <event name>
-data: <JSON value>
+```json
+{"type":"ping"}
 ```
 
-Implemented event names and data are:
+Reply with this exact text before the next heartbeat check:
+
+```json
+{"type":"pong"}
+```
+
+The current server matches the pong text literally, so whitespace or additional fields will not match. These are application messages, not WebSocket ping/pong control frames. Client messages have a 1 KiB payload limit. A missing heartbeat reply terminates the socket.
+
+Clients must implement reconnect and state refresh. The server supplies no replay IDs or event history. Leyline's helper owns retries, timeouts, and cleanup. See [Connection recovery](../developer-guide/realtime-events#connection-recovery).
+
+### `WS /api/pi/events`
+
+**Designation:** Browser and Electron runtime stream.
+
+Query:
+
+```text
+sessionId?: string
+```
+
+Each connection sends one `active_session` event for every open runtime, followed by `runtime_roster`. This includes reconnects.
+
+The browser supplies `?sessionId=<id>` to select full snapshots and live updates for one session. Other sessions receive compact snapshots and filtered runtime events. Compact `promptQueue` state contains `count`, `held`, and `error`, without item content.
+
+An empty `sessionId` selects no full runtime. Omitting the parameter selects full events for all runtimes, for protocol compatibility.
+
+Implemented event types and their `data` values are:
 
 ```text
 active_session: Active

@@ -1,5 +1,6 @@
 import { watch } from 'node:fs'
 import { basename, dirname, relative } from 'node:path'
+import { WebSocket } from 'ws'
 import {
   hasGitReviewCollapsedWatchChange,
   hasGitReviewWatchChange,
@@ -10,39 +11,34 @@ const MAX_PENDING_PATHS = 2048
 const WATCH_DELAY = 200
 const watchEntries = new Map()
 
-export function openGitReviewEventStream(cwd, req, res) {
-  res.statusCode = 200
-  res.setHeader('Content-Type', 'text/event-stream')
-  res.setHeader('Cache-Control', 'no-cache, no-transform')
-  res.setHeader('Connection', 'keep-alive')
-
+export function openGitReviewEventStream(cwd, ws) {
   let closed = false
   let release
-  req.on('close', () => {
+  ws.on('close', () => {
     closed = true
     release?.()
   })
 
-  void subscribe(cwd, res).then((unsubscribe) => {
+  void subscribe(cwd, ws).then((unsubscribe) => {
     if (closed) {
       unsubscribe?.()
       return
     }
     if (!unsubscribe) {
-      res.statusCode = 204
-      res.end()
+      sendEvent(ws, 'review_unavailable', {})
+      ws.close()
       return
     }
     release = unsubscribe
-    res.write(': connected\n\n')
+    sendEvent(ws, 'review_ready', {})
   }).catch((error) => {
     if (closed) return
-    sendEvent(res, 'review_watch_error', { message: error.message })
-    res.end()
+    sendEvent(ws, 'review_watch_error', { message: error.message })
+    ws.close(1011, 'Review watch failed')
   })
 }
 
-async function subscribe(cwd, res) {
+async function subscribe(cwd, ws) {
   const target = await resolveGitReviewWatchTarget(cwd)
   if (!target.repositoryRoot) return null
   let entry = watchEntries.get(target.watchRoot)
@@ -50,8 +46,8 @@ async function subscribe(cwd, res) {
     entry = createWatchEntry(cwd, target)
     watchEntries.set(target.watchRoot, entry)
   }
-  entry.clients.add(res)
-  return () => releaseClient(entry, res)
+  entry.clients.add(ws)
+  return () => releaseClient(entry, ws)
 }
 
 function createWatchEntry(cwd, target) {
@@ -223,7 +219,7 @@ async function reprobeEntry(entry) {
       closeEntry(entry)
       for (const client of entry.clients) {
         sendEvent(client, 'review_unavailable', {})
-        client.end()
+        client.close()
       }
       entry.clients.clear()
       return
@@ -252,13 +248,13 @@ function failEntry(entry, error) {
   closeEntry(entry)
   for (const client of entry.clients) {
     sendEvent(client, 'review_watch_error', { message: error.message })
-    client.end()
+    client.close(1011, 'Review watch failed')
   }
   entry.clients.clear()
 }
 
-function releaseClient(entry, res) {
-  entry.clients.delete(res)
+function releaseClient(entry, ws) {
+  entry.clients.delete(ws)
   if (entry.clients.size || entry.closed) return
   closeEntry(entry)
 }
@@ -372,8 +368,13 @@ function isGitPath(path) {
   return path === '.git' || path.startsWith('.git/')
 }
 
-function sendEvent(res, type, data) {
-  if (res.destroyed || res.writableEnded) return
-  res.write(`event: ${type}\n`)
-  res.write(`data: ${JSON.stringify(data)}\n\n`)
+function sendEvent(ws, type, data) {
+  if (ws.readyState !== WebSocket.OPEN) return
+  if (ws.bufferedAmount > 64 * 1024) {
+    ws.terminate()
+    return
+  }
+  ws.send(JSON.stringify({ type, data }), (error) => {
+    if (error) ws.terminate()
+  })
 }

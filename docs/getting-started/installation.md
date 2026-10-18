@@ -19,7 +19,7 @@ includes trace storage and views, so no standalone Elune Go server or
 `PI_TRACE_URL` is needed.
 
 No separate backend process is necessary for browser development. Vite mounts
-`server/pi-api/index.js` for `/api/pi/*` routes and the terminal WebSocket.
+`server/pi-api/index.js` for `/api/pi/*` routes and the runtime, Git review, and terminal WebSockets.
 
 Restart the backend after dependency updates. For a packaged app, rebuild,
 install, and restart Electron. See [Packaging](../electron/packaging).

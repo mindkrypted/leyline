@@ -121,13 +121,18 @@ Electron window keeps its active connection independently. A new window uses
 the default. A new Electron window inherits the source window's active
 connection.
 
-Leyline sends runtime HTTP commands, runtime events, terminal WebSocket traffic,
-trace requests, and exports to the active backend. Leyline does not combine
+Runtime HTTP commands, runtime and Git review events, terminal traffic, trace
+requests, and exports use the active backend. Events and terminal traffic use
+separate WebSockets. Leyline does not combine
 traces or capture settings across connections. Traces and capture settings stay
 on the active backend. Connection management stays on the native backend. See
 [Settings](docs/user-guide/settings.md) for
 connection setup and [Environment variables](docs/reference/environment.md) for
 packaged server and origin settings.
+
+The frontend and backend must both use API v2. Runtime and Git review events
+require WebSockets, with no SSE fallback. See
+[Realtime events](docs/developer-guide/realtime-events.md).
 
 ## Optional Electron app
 

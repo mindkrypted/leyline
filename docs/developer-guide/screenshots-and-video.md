@@ -41,7 +41,7 @@ This command intercepts Leyline API calls and supplies sanitized fixtures. Mock 
 - Git status and selected-file diffs
 - Memory records, subagent configuration, and vision configuration
 - Queue, goal, research, shell, and image-delegation transcript states
-- SSE runtime snapshots and events, terminal WebSocket traffic, and exported HTML
+- Runtime snapshots and events, Git review notices, and terminal traffic through mock WebSockets, plus exported HTML
 - Trace summaries, paged detail, bookmarks, capture configuration, and trace capability data
 
 Unrecognized API requests fail the capture instead of reaching live data.
@@ -156,7 +156,9 @@ Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-ses
 
 These models and settings exist only in the capture fixtures. The command does not change local model configuration.
 
-Each state uses a new browser context. The script uses a fixed date with increasing millisecond ticks, replaces SSE and terminal transports, and waits for a state selector. The tick prevents Vue's event timestamp guard from dropping interactions. The capture disables remaining motion.
+Each state uses a new browser context. The script uses a fixed date with increasing millisecond ticks and waits for a state selector. `MockWebSocket` replaces the runtime, Git review, and terminal transports. Only the `vite-hmr` protocol uses the native WebSocket. No session, model, or terminal traffic reaches a live backend. The tick prevents Vue's event timestamp guard from dropping interactions.
+
+The capture disables remaining motion.
 
 The script blocks unrecognized `/api/` requests instead of sending them to a live backend. Before capture, it checks visible text and form values for home paths, usernames, repository paths, email addresses, and common credential prefixes.
 

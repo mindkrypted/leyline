@@ -28,7 +28,7 @@
 - Inline capture applies to conversation, research, subagent, and isolated
   vision runtimes, independently of trace view lifetime. Home previews and
   Settings probes do not install it. Keep trace views lazy and mount only
-  one Inspector, Workspace, or Explorer. Reuse runtime SSE for small commit
+  one Inspector, Workspace, or Explorer. Reuse the runtime WebSocket for small commit
   and configuration notices without adding trace payloads to the event log.
 - Current pi SDK usage includes:
   - `SessionManager.listAll()` for standard session discovery.
