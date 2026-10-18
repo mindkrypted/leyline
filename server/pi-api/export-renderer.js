@@ -2649,6 +2649,9 @@ dialog.subagent-inspector[open] {
 .export-tool-activity.is-expanded > .mobile-activity-list { display: block; height: auto; padding: 3px 13px; overflow: visible; pointer-events: auto; }
 .mobile-activity-list .tool-card { margin: 0; border-top: 1px solid rgb(255 255 255 / 5%); border-radius: 0; padding: 0; background: transparent; }
 .mobile-activity-list > .tool-card:first-child { border-top: 0; }
+.mobile-activity-list .tool-card:is(.is-expanded, :hover) { background: transparent; }
+.mobile-activity-list .tool-expanded-body { margin-top: 0; padding: 9px 0 12px 13px; }
+.mobile-activity-list .tool-card-header .chevron { flex-shrink: 0; width: 6px; text-align: center; }
 .export-tool-activity:not(.is-expanded) > .mobile-activity-list > .tool-card:last-child { border-top-color: transparent; }
 .export-tool-activity:not(.is-expanded) > .mobile-activity-list > .tool-card:not(:last-child) { display: none; }
 .export-tool-activity:not(.is-expanded) > .mobile-activity-list .tool-expanded-body,
@@ -2659,7 +2662,7 @@ dialog.subagent-inspector[open] {
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header .copy-button { display: none; }
 .mobile-activity-list .tool-card:not(.subagent-card)[open] .tool-card-header .copy-button { display: grid; place-items: center; min-width: 30px; min-height: 30px; }
 .tool-card[open] .tool-chevron { transform: none; }
-.tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
+.mobile-tool-target { display: none; }
 .mobile-activity-list .subagent-header .tool-inspect-button { height: var(--activity-row-height); min-height: var(--activity-row-height); }
 .mobile-activity-card.has-subagents .mobile-activity-state { flex: 1; justify-content: flex-end; }
 .mobile-activity-summary:focus-visible { outline: 2px solid #aaa; outline-offset: -2px; }
@@ -2680,6 +2683,7 @@ dialog.subagent-inspector[open] {
   .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; max-width: 40%; font-size: 11px; }
   .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
   .tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
+  .mobile-activity-list .tool-card[open] > .mobile-tool-target { margin-left: 13px; }
 }
 `
 }

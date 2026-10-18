@@ -683,6 +683,10 @@
   border-top-color: var(--border-soft);
 }
 
+.mobile-tool-target {
+  display: none;
+}
+
 .tool-output {
   overflow: auto;
   max-height: 280px;
@@ -2172,6 +2176,21 @@ dialog.subagent-inspector:not([open]) {
   border-top: 0;
 }
 
+.mobile-activity-list .tool-card:is(.is-expanded, :hover) {
+  background: transparent;
+}
+
+.mobile-activity-list .tool-expanded-body {
+  margin-top: 0;
+  padding: 9px 0 12px 13px;
+}
+
+.mobile-activity-list .tool-card-header .chevron {
+  flex-shrink: 0;
+  width: 6px;
+  text-align: center;
+}
+
 .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header {
   flex-wrap: nowrap;
 }
@@ -2350,6 +2369,7 @@ dialog.subagent-inspector:not([open]) {
   }
 
   .mobile-tool-target {
+    display: block;
     padding: 8px 0;
     color: #ccc;
     font-size: 11px;
