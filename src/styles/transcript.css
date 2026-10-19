@@ -653,49 +653,21 @@
   color: #aeb2bd;
 }
 
-.workbench.compacting-workbench {
-  padding-bottom: calc(var(--composer-reserved-height, 240px) + 24px);
-}
-
-.terminal-open .workbench.compacting-workbench {
-  padding-bottom: calc(var(--terminal-drawer-height) + var(--composer-reserved-height, 240px) + 24px);
-}
-
-.compaction-boundary-anchor {
-  width: min(var(--content-max), 100%);
-  height: 48px;
-  margin: 26px auto 14px;
-}
-
-.live-item:has(.compaction-boundary-anchor) {
-  content-visibility: visible;
-}
-
 .compaction-boundary {
-  width: 100%;
+  width: min(var(--content-max), 100%);
+  min-height: 48px;
+  margin: 26px auto 14px;
   animation: compaction-boundary-in 420ms var(--ease-emphasized) both;
+}
+
+.live-item:has(.compaction-boundary) {
+  content-visibility: visible;
 }
 
 .compaction-boundary-row {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.compaction-boundary-dock {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 12px);
-  left: 0;
-  height: 54px;
-  pointer-events: none;
-}
-
-.compaction-boundary.is-docked {
-  position: absolute;
-  bottom: 0;
-  background: var(--bg);
-  padding: 4px 0;
 }
 
 .compaction-boundary-rule {

@@ -215,7 +215,6 @@ const composerFrameRef = ref(null)
 const startComposerAnchor = ref(null)
 const mobileProjectTrigger = ref(null)
 const composerDockAnchor = ref(null)
-const compactionDock = ref(null)
 const startupDraftSnapshot = ref(null)
 const modelPickerOpen = ref(false)
 const thinkingPickerOpen = ref(false)
@@ -4314,7 +4313,6 @@ function closePickerMenus() {
           'session-loading-workbench': sessionLoading,
           'session-handoff-workbench': sessionHandoff,
           'session-switching': sessionSwitching,
-          'compacting-workbench': compactingContext,
           'start-workbench-shell': !initializing && startFlowVisible,
           'startup-workbench': startupShellVisible,
           'in-project-startup-workbench': inProjectNewSessionRun,
@@ -4517,8 +4515,6 @@ function closePickerMenus() {
               :reason="compaction?.reason || ''"
               :started-at="compaction?.startedAt || 0"
               :tokens="contextUsage?.tokens ?? null"
-              :viewport="workbench"
-              :dock="compactionDock"
             />
 
             <MobileToolActivity
@@ -4605,8 +4601,6 @@ function closePickerMenus() {
               :reason="compaction?.reason || ''"
               :started-at="compaction?.startedAt || 0"
               :tokens="contextUsage?.tokens ?? null"
-              :viewport="workbench"
-              :dock="compactionDock"
             />
 
             <MobileToolActivity
@@ -4687,8 +4681,6 @@ function closePickerMenus() {
           :reason="compaction?.reason || ''"
           :started-at="compaction?.startedAt || 0"
           :tokens="contextUsage?.tokens ?? null"
-          :viewport="workbench"
-          :dock="compactionDock"
         />
       </div>
 
@@ -4778,7 +4770,6 @@ function closePickerMenus() {
         }"
         :style="composerFrameStyle"
       >
-        <div ref="compactionDock" class="compaction-boundary-dock"></div>
         <div
           class="composer-layer start-composer-layer"
           :class="{ 'is-active': homeComposerVisible && !extensionConfirmations.length && !confirmationPanelHeight }"
