@@ -246,7 +246,7 @@ export function toActiveSessionDetailDto(handle) {
   )
 }
 
-function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime) {
+export function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime) {
   const header = manager.getHeader()
   const entries = manager.getBranch()
   let messageCount = 0

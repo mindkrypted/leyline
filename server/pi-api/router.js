@@ -75,6 +75,7 @@ async function piApiHandler(req, res) {
     }
 
     const url = new URL(req.url, 'http://localhost')
+    let retainedHandle
   
     try {
       if (url.pathname === '/info') {
@@ -675,6 +676,8 @@ async function piApiHandler(req, res) {
           decodeURIComponent(scopedActionMatch[1]),
         )
         if (!handle) return json(res, { error: 'Session not found' }, 404)
+        retainedHandle = handle
+        handle.pendingApiRequests = (handle.pendingApiRequests || 0) + 1
   
         const body = await readJson(req)
         const action = scopedActionMatch[2]
@@ -837,6 +840,8 @@ async function piApiHandler(req, res) {
       return json(res, { error: 'Not found' }, 404)
     } catch (error) {
       return json(res, { error: error.message }, 500)
+    } finally {
+      if (retainedHandle) retainedHandle.pendingApiRequests -= 1
     }
   }
 

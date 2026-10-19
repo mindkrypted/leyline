@@ -20,6 +20,7 @@ export function createEventHub(options) {
       queuedChars: 0,
     }
     clients.add(client)
+    options.onSessionAccess?.(client.selectedSessionId)
 
     ws.on('close', () => closeClient(client))
     ws.on('error', () => closeClient(client, true))
@@ -52,6 +53,7 @@ export function createEventHub(options) {
   }
 
   function broadcastEvent(type, data) {
+    if (type === 'runtime_event') options.onSessionAccess?.(data?.activeSessionId)
     if (isMessageUpdate(type, data)) {
       queueMessageUpdate(data)
       return
@@ -172,6 +174,7 @@ export function createEventHub(options) {
     if (client.closed) return
     client.closed = true
     clients.delete(client)
+    options.onSessionAccess?.(client.selectedSessionId)
     client.queue = []
     client.queuedChars = 0
     if (terminate) client.ws.terminate()
@@ -199,6 +202,9 @@ export function createEventHub(options) {
     broadcastEvent,
     broadcastRuntimeRemoved,
     openEventStream,
+    isSessionObserved: sessionId => [...clients].some(client => {
+      return client.selectedSessionId === sessionId && client.ws.readyState === WebSocket.OPEN
+    }),
   }
 }
 
