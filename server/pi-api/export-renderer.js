@@ -1994,7 +1994,6 @@ button, input, textarea { color: inherit; font: inherit; }
   cursor: pointer;
 }
 
-.tool-inspect-button:hover,
 .subagent-card.is-inspected .tool-inspect-button {
   background: rgb(255 255 255 / 3%);
 }
