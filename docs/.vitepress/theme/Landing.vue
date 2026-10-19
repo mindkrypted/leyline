@@ -60,9 +60,34 @@ const capabilities = [
 const installCommands = [
   'git clone https://github.com/spmurrayzzz/leyline.git',
   'cd leyline && npm install',
-  'npm run dev',
 ]
 const installText = installCommands.join('\n')
+const installMode = ref('electron')
+const installModes = [
+  {
+    id: 'browser',
+    label: 'Browser',
+    kind: 'Development',
+    title: 'Start the dev server.',
+    description: 'Try Leyline or work on the UI with live reload.',
+    command: 'npm run dev',
+    note: 'Open the Vite URL, usually localhost:5173.',
+    links: [{ text: 'Browser setup', href: '/getting-started/' }],
+  },
+  {
+    id: 'electron',
+    label: 'Electron',
+    kind: 'Production',
+    title: 'Build the desktop app.',
+    description: 'A packaged Electron app. No dev server needed.',
+    command: 'npm run electron:build',
+    note: 'The desktop package is written to release/.',
+    links: [
+      { text: 'macOS installation', href: '/electron/packaging#install-on-apple-silicon-macos' },
+      { text: 'Linux installation', href: '/getting-started/linux-installation' },
+    ],
+  },
+]
 
 const docLinks = [
   { text: 'Getting started', href: '/getting-started/' },
@@ -78,12 +103,31 @@ const docLinks = [
 const copied = ref(false)
 let copyTimer
 
-async function copyInstall() {
+function selectInstall(id) {
+  installMode.value = id
+  copied.value = false
+  clearTimeout(copyTimer)
+}
+
+function onInstallKeydown(event, index) {
+  let next
+  if (event.key === 'ArrowRight') next = (index + 1) % installModes.length
+  if (event.key === 'ArrowLeft') next = (index - 1 + installModes.length) % installModes.length
+  if (event.key === 'Home') next = 0
+  if (event.key === 'End') next = installModes.length - 1
+  if (next === undefined) return
+  event.preventDefault()
+  selectInstall(installModes[next].id)
+  event.currentTarget.parentElement.querySelectorAll('[role="tab"]')[next]?.focus()
+}
+
+async function copyInstall(mode) {
   try {
-    await navigator.clipboard.writeText(installText)
+    await navigator.clipboard.writeText(`${installText}\n${mode.command}`)
   } catch {
     return
   }
+  if (installMode.value !== mode.id) return
   copied.value = true
   clearTimeout(copyTimer)
   copyTimer = setTimeout(() => {
@@ -235,19 +279,63 @@ onUnmounted(() => {
     <section class="cta reveal">
       <h2>Run Leyline locally.</h2>
       <p>
-        Use the commands below to start the dev server.
+        Choose the dev server or the packaged desktop app.
         Leyline reads your existing pi configuration and sessions.
       </p>
-      <div class="install">
-        <pre><code>{{ installText }}</code></pre>
-        <button
-          class="copy"
-          type="button"
-          :data-copied="copied"
-          @click="copyInstall"
+      <div class="install-switcher">
+        <div class="install-tabs" role="tablist" aria-label="Run mode">
+          <button
+            v-for="(mode, index) in installModes"
+            :id="`install-tab-${mode.id}`"
+            :key="mode.id"
+            type="button"
+            role="tab"
+            :aria-controls="`install-panel-${mode.id}`"
+            :aria-selected="installMode === mode.id"
+            :tabindex="installMode === mode.id ? 0 : -1"
+            @click="selectInstall(mode.id)"
+            @keydown="onInstallKeydown($event, index)"
+          >
+            {{ mode.label }} <span>{{ mode.kind }}</span>
+          </button>
+        </div>
+        <div
+          v-for="mode in installModes"
+          :id="`install-panel-${mode.id}`"
+          :key="mode.id"
+          class="install"
+          role="tabpanel"
+          :aria-labelledby="`install-tab-${mode.id}`"
+          :hidden="installMode !== mode.id"
         >
-          {{ copied ? 'Copied' : 'Copy' }}
-        </button>
+          <div class="install-heading">
+            <div>
+              <h3>{{ mode.title }}</h3>
+              <p>{{ mode.description }}</p>
+            </div>
+            <button
+              class="copy"
+              type="button"
+              :aria-label="`Copy ${mode.label} setup commands`"
+              :data-copied="copied"
+              @click="copyInstall(mode)"
+            >
+              {{ copied ? 'Copied' : 'Copy' }}
+            </button>
+          </div>
+          <pre><code>{{ installText + '\n' }}<span class="install-command">{{ mode.command }}</span></code></pre>
+          <div class="install-footer">
+            <p>{{ mode.note }}</p>
+            <div class="install-links">
+              <a v-for="link in mode.links" :key="link.href" :href="withBase(link.href)">
+                {{ link.text }}
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
+                  <path d="M4 12 12 4M4 4h8v8" />
+                </svg>
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
       <ul class="cta-links">
         <li v-for="link in docLinks" :key="link.text">
@@ -434,6 +522,8 @@ onUnmounted(() => {
 
 .button:focus-visible,
 .copy:focus-visible,
+.install-tabs button:focus-visible,
+.install-links a:focus-visible,
 .cta-links a:focus-visible {
   outline: 2px solid #8a78ff;
   outline-offset: 2px;
@@ -585,28 +675,91 @@ onUnmounted(() => {
   text-wrap: pretty;
 }
 
-.install {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 20px;
+.install-switcher {
+  max-width: 760px;
+  margin: 32px auto 0;
+}
+
+.install-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  width: fit-content;
   max-width: 100%;
-  margin-top: 30px;
-  padding: 16px 16px 16px 22px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 13px;
+  margin: 0 auto 22px;
+  padding: 4px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 11px;
+  background: #111;
+}
+
+.install-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 39px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: #909090;
+  font-size: 13px;
+}
+
+.install-tabs button span {
+  color: #636363;
+  font-size: 10px;
+}
+
+.install-tabs button[aria-selected='true'] {
+  border-color: #363636;
+  background: #242424;
+  color: #f0f0f0;
+}
+
+.install-tabs button[aria-selected='true'] span {
+  color: #b1a5ef;
+}
+
+.install {
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 14px;
   background: #111;
   text-align: left;
 }
 
+.install-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 22px 25px;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.install-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.install-heading p {
+  margin: 7px 0 0;
+  color: #858585;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .install pre {
   margin: 0;
+  padding: 24px 25px;
   color: #b4b4b4;
   font-family: var(--vp-font-family-mono);
   font-size: 13px;
-  line-height: 1.8;
+  line-height: 2;
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .install code {
@@ -616,16 +769,64 @@ onUnmounted(() => {
   padding: 0;
 }
 
+.install-command {
+  color: #e6e6e6;
+}
+
+.install-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 55px;
+  padding: 15px 25px;
+  border-top: 1px solid rgb(255 255 255 / 6%);
+}
+
+.install-footer p {
+  margin: 0;
+  color: #777;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.install-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.install-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a6a6a6;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.install-links a:hover {
+  color: #e9e9e9;
+}
+
+.install-links svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
 .copy {
   flex: none;
-  align-self: center;
-  padding: 8px 13px;
+  min-width: 65px;
+  padding: 7px 11px;
   border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 9px;
+  border-radius: 7px;
   background: rgb(255 255 255 / 4%);
-  color: #c9c9c9;
-  font-size: 12.5px;
+  color: #bdbdbd;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1.4;
   transition:
     border-color 200ms var(--ease-out),
     background-color 200ms var(--ease-out),
@@ -751,14 +952,50 @@ onUnmounted(() => {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .install {
+  .install-switcher {
+    margin-top: 26px;
+  }
+
+  .install-tabs {
     width: 100%;
-    gap: 14px;
-    padding: 16px 16px 14px;
+    gap: 3px;
+    margin-bottom: 18px;
+  }
+
+  .install-tabs button {
+    gap: 8px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .install-tabs button span {
+    font-size: 9px;
+  }
+
+  .install-heading {
+    align-items: flex-start;
+    gap: 10px;
+    padding: 20px 17px;
+  }
+
+  .install-heading h3 {
+    font-size: 14px;
+  }
+
+  .install-heading p {
+    max-width: 210px;
+    font-size: 11px;
   }
 
   .install pre {
-    font-size: 12px;
+    padding: 21px 17px;
+    font-size: 11px;
+  }
+
+  .install-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 15px 17px;
   }
 }
 
