@@ -97,6 +97,24 @@ DOCS_SCREENSHOT_FILTER=subagent-outcomes.png,subagent-inspector-mobile.png,subag
 
 The inspector helper opens the single-call Activity card from its header, checks task selection and the full prompt, then reopens it from its row. Both entry points must keep the card collapsed and preserve its height and position. The export capture blocks the external preview renderer to verify that the inspector works offline.
 
+For sidebar child sessions:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagent-sidebar.png,mobile-sidebar.png,workbench.png,subagent-outcomes.png,deep-research.png npm run docs:screenshots
+```
+
+| Asset | Captured state |
+| --- | --- |
+| `docs/assets/screenshots/subagent-sidebar.png` | Expanded parent with one completed child and two running children, beside the live subagent Activity card. |
+| `docs/assets/screenshots/mobile-sidebar.png` | The same child branch in the mobile sidebar. |
+| `workbench.png` in both output directories | Two settled children under the selected parent. |
+| `docs/assets/screenshots/subagent-outcomes.png` | Five settled children beside the desktop task inspector. |
+| `deep-research.png` in both output directories | Three research workers under their parent, beside the completed report and sources. |
+
+The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper checks the inset nodes and chevron spacing, then waits for folding to finish. General captures retain `local/minimax-m2.7`; workbench captures keep the approved Ultrafast model.
+
+Use local visual checks for fold motion, rapid reversals, and reduced-motion behavior. PNG captures show only the settled layout.
+
 For network access:
 
 ```bash
@@ -149,6 +167,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
 - Subagent captures: compact Activity rows and separate task inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group
+- Sidebar child captures: an inset guide with hollow nodes, a parent-only chevron column, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
 
@@ -199,7 +218,8 @@ Open every changed image. Check these items:
 6. The vision selector shows `local/qwen3.6-27b` and excludes text-only models.
 7. System captures show the intended prompt and tool deltas without clipping.
 8. Subagent inspectors show the selected task, its outcome, and the result without inline task bodies in Activity.
-9. Each Markdown image reference resolves in both documentation base paths.
+9. Sidebar children sit inside the parent, use hollow nodes, and leave plain rows without an empty chevron column.
+10. Each Markdown image reference resolves in both documentation base paths.
 
 Run the PNG structure audit from the documentation screenshot skill when it is available. Check whitespace and both documentation base paths:
 

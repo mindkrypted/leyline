@@ -35,7 +35,11 @@
 
 `App.vue` creates the composables and passes narrow props and events to components. Components do not own session runtime objects.
 
-`SessionSidebar.vue` renders the current project and its virtualized session list. It owns session search, navigator search, stable project order, and cross-project activity groups. Outside search, it derives one pinned-first array for rows, arrow-key focus, and ARIA positions.
+`SessionSidebar.vue` renders the current project and its virtualized session list. It owns session search, navigator search, stable project order, and cross-project activity groups. It flattens ordered parents and visible children into positioned rows for virtualization and arrow-key focus. Outside search, parents remain pinned-first. Row buttons expose `aria-current`, and parent chevrons expose `aria-expanded`. Collapsing or partially revealed child rows are inert and use `aria-hidden`.
+
+`useSessionWorkspace.js` supplies `subagentChildrenByParentPath` for sessions with both `isSubagentSession` and `parentSessionPath`. A parent path alone does not classify a subagent. The map joins child IDs to task labels and agent names from the parent's `subagentChildren` metadata. `session-summary.js` reads this metadata from persisted subagent tool results. Session DTOs include child IDs, task labels, and agent names without child paths.
+
+Runtime summary merges preserve existing `subagentChildren` when a snapshot omits it. Children stay in creation order, independent of runtime activity. Sidebar search keeps parent context and shows only matching children. Children remain outside regular session counts, pin controls, and the **Activity** navigator.
 
 `SessionComposer.vue` and `StartComposer.vue` own local input mechanics and dictation adapters.
 

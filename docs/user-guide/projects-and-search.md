@@ -9,7 +9,9 @@ The sidebar keeps one current project in focus. It shows the project path, sessi
 1. Enter text in **Search sessions**.
 2. Select a matching session.
 
-Search matches session names and IDs in the current project. Each search term must match one of those values.
+Search matches regular session names and IDs in the current project. For subagent children, it matches task labels, agent names, and child IDs. Each search term must match one of these values for the same session.
+
+Matching children appear under their parent, even when the parent title does not match. Search expands matching children and hides the parent's chevron. Only matching children appear, even when the parent title matches.
 
 Search does not inspect transcript content. Clear the field to restore the full session list.
 
@@ -23,7 +25,7 @@ Search does not inspect transcript content. Clear the field to restore the full 
 2. Enter text in **Search sessions or projects** if necessary.
 3. Select a project or session.
 
-The default view shows recent projects and current or recent sessions. A query searches all project names, CWDs, session names, and session IDs.
+The default view shows recent projects and current or recent regular sessions. A query searches project names, CWDs, and regular session names and IDs. **Go to** does not search subagent children.
 
 When you select a project, Leyline opens the last session that you used in that project. Otherwise, it opens the most recent session.
 

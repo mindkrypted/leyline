@@ -37,7 +37,7 @@ Leyline capture requires no `PI_TRACE_URL` or external service. The inline captu
 
 ## Capture lifecycle
 
-`runtime.js` adds the named inline factory `leyline-elune` when it constructs conversation runtimes. The diagnostic path is `<inline:leyline-elune>`. Normal sessions, research leads, research workers, subagents, and hidden vision children use this factory.
+`runtime.js` adds the named inline factory `leyline-elune` when it constructs conversation runtimes. The diagnostic path is `<inline:leyline-elune>`. Normal sessions, research leads, research workers, subagents, and isolated vision children use this factory.
 
 Home preview runtimes use `captureTracing: false`. Provider Settings runtimes and private connection probes do not install this capture factory. Isolated custom-prompt children retain only output-budget and inline capture. They omit project context, skills, MCP, tool search, and the Leyline prompt.
 

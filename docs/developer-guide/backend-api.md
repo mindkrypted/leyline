@@ -313,6 +313,8 @@ Subagent model precedence is session, project, global, then the agent definition
 
 The subagent and vision execution routes create child pi sessions. They write an explicit marker before they start each child runtime. Normal subagents retain the normal runtime resources and their tool policy. Vision children use an isolated prompt, output-budget and inline capture, an empty tool allowlist, and a session-local image setting override.
 
+`session-summary.js` reads child task labels and agent names from parent subagent results. `toSessionDto()` includes this data as `subagentChildren` for sidebar grouping. Runtime snapshots omit unavailable metadata so client merges can retain known labels.
+
 ## Research state projection
 
 The research extension writes `leyline-research` custom entries. `research-state.js` folds matching entries, normalizes source identity, and derives progress counts.

@@ -18,12 +18,14 @@ A research session also shows its compact state and source control. The source c
 
 ## Open the mobile sidebar
 
-![Mobile session sidebar open above the workbench](../assets/screenshots/mobile-sidebar.png)
+![Mobile sidebar with subagent child sessions and running status](../assets/screenshots/mobile-sidebar.png)
 
 *The session navigator opens above the mobile workbench.*
 
 1. Select **Open sessions** in the header.
 2. Select a session in the current project.
+
+Subagent children appear as nested rows under their parent. Use the parent's left chevron to show or hide them. Select a child row to open its transcript. See [Sessions](./sessions#open-a-subagent-session) for expansion and search behavior.
 
 Select **Go to** to open a session from another project.
 

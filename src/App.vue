@@ -573,6 +573,7 @@ const {
   sessionsLoading,
   sessionSwitching,
   sessionTitle,
+  subagentChildrenByParentPath,
   sidebarActivitySessions,
   startSelectedModel,
   startSelectedThinkingLevel,
@@ -4231,6 +4232,7 @@ function closePickerMenus() {
       :sessions-hydrating="sessionsHydrating"
       :sessions-hydration-error="sessionsHydrationError"
       :sessions-loading="sessionsLoading"
+      :subagent-children-by-parent-path="subagentChildrenByParentPath"
       :visible-projects="visibleProjects"
       :tracing-available="tracingAvailable"
       :traces-open="traceMode === 'explorer' || traceMode === 'workspace' && traceOrigin === 'explorer'"
@@ -4249,6 +4251,7 @@ function closePickerMenus() {
       @retry-pins="retryPinnedSessions"
       @retry-sessions="retrySessions"
       @select-backend="selectBackendTarget"
+      @select-child-session="navigateChildSession"
       @select-project="selectSidebarProject"
       @select-session="selectSessionTarget"
       @toggle-pin-session="togglePinSessionTarget"

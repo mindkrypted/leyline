@@ -10,10 +10,10 @@ connections to other Leyline backends.
 <table>
   <tr>
     <td width="50%"><a href="assets/readme/home.png"><img alt="Leyline start screen with project, research, and runtime controls" src="assets/readme/home.png" /></a><br /><strong>Start screen</strong></td>
-    <td width="50%"><a href="assets/readme/workbench.png"><img alt="Leyline workbench with a sanitized agent session" src="assets/readme/workbench.png" /></a><br /><strong>Workbench</strong></td>
+    <td width="50%"><a href="assets/readme/workbench.png"><img alt="Leyline workbench with tool activity and nested subagent sessions" src="assets/readme/workbench.png" /></a><br /><strong>Workbench</strong></td>
   </tr>
   <tr>
-    <td><a href="assets/readme/deep-research.png"><img alt="Leyline deep research report with phase progress and cited sources" src="assets/readme/deep-research.png" /></a><br /><strong>Deep research</strong></td>
+    <td><a href="assets/readme/deep-research.png"><img alt="Leyline research report with cited sources and nested research workers" src="assets/readme/deep-research.png" /></a><br /><strong>Deep research</strong></td>
     <td><a href="assets/readme/tracing.png"><img alt="Leyline tracing workspace with a run timeline and selected observation details" src="assets/readme/tracing.png" /></a><br /><strong>Tracing workspace</strong></td>
   </tr>
 </table>
@@ -47,8 +47,9 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - Steer active work or queue **Up next** tasks. Examine tools, System
   changes, local files, and Git changes. Use configured MCP tools and
   respond to extension requests in the workspace.
-- Use memory, subagents, HTML export, an embedded terminal, and deep
-  research with validated citations. A configured vision model can
+- Open subagent child sessions under their parents in the sidebar.
+  Use memory, HTML export, an embedded terminal, and deep research
+  with validated citations. A configured vision model can
   describe images for models that cannot receive images.
 - Connect each window to the native backend or a saved backend
   connection. Configure provider sign-in, custom endpoints, model

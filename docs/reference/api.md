@@ -49,6 +49,7 @@ SessionSummary = {
   name?: string,
   parentSessionPath?: string,
   isSubagentSession: boolean,
+  subagentChildren?: { id: string, agent: string, task: string }[],
   research: ResearchSummary | null,
   firstMessage: string,
   messageCount: number,
@@ -61,7 +62,11 @@ SessionSummary = {
 
 For persisted sessions without message times, `modified` uses the session creation time or file modification time. `messageCount` counts all message records. `firstMessage` is limited to 140 characters.
 
-Session detail and open-runtime summaries use the research objective for `firstMessage` when the branch has no user message.
+Session detail and open-runtime summaries use the research objective for `firstMessage` when the branch has no user message. For marked children, `firstMessage` removes the agent prompt wrapper when it contains a `Task:` marker.
+
+`subagentChildren` contains up to 50 child IDs, agent names, and task labels from persisted subagent results. Labels are limited to 120 characters. Runtime snapshots omit the field when no task metadata is available. Clients should preserve existing metadata when the field is absent.
+
+Use `isSubagentSession` with `parentSessionPath` to identify sidebar children. A parent path alone can describe a normal fork.
 
 ```text
 ResearchSummary = {
@@ -2533,7 +2538,7 @@ Success response: The same object as `POST /api/pi/subagent`.
 
 `parentSessionId` and `_toolCallId` supply capture linkage, as on the subagent route. The isolated child retains output-budget and inline Elune capture.
 
-The route creates one hidden child with an empty tool allowlist. The selected model must exist, have provider authentication, and support image input. The image must be PNG, JPEG, GIF, or WebP.
+The route creates one isolated child with an empty tool allowlist. The selected model must exist, have provider authentication, and support image input. The image must be PNG, JPEG, GIF, or WebP.
 
 The route waits for completion and returns `500` with `{ error }` for setup or execution failure. If the HTTP connection closes first, the server aborts the child run.
 

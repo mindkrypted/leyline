@@ -97,6 +97,30 @@ export function useSessionWorkspace({
   const selectedSession = computed(() => {
     return sessionDetail.value?.session || sessions.value.find((s) => s.id === selectedSessionId.value)
   })
+  const subagentChildrenByParentPath = computed(() => {
+    const metadata = new Map()
+    for (const session of sessions.value) {
+      for (const child of session.subagentChildren || []) {
+        if (child.id) metadata.set(child.id, child)
+      }
+    }
+    const children = new Map()
+    for (const session of sessions.value) {
+      if (!session.isSubagentSession || !session.parentSessionPath) continue
+      const meta = metadata.get(session.id)
+      const list = children.get(session.parentSessionPath) || []
+      list.push({
+        ...session,
+        agent: meta?.agent || '',
+        label: meta?.task || '',
+      })
+      children.set(session.parentSessionPath, list)
+    }
+    for (const list of children.values()) {
+      list.sort((a, b) => sessionCreatedTimestamp(a) - sessionCreatedTimestamp(b))
+    }
+    return children
+  })
   const visibleProjects = computed(() => visibleProjectList())
   const sessionsById = computed(() => {
     return new Map(sessions.value.map((session) => [session.id, session]))
@@ -725,6 +749,7 @@ export function useSessionWorkspace({
       ...session,
       isSubagentSession: next[index].isSubagentSession === true
         || session.isSubagentSession === true,
+      subagentChildren: session.subagentChildren ?? next[index].subagentChildren,
     }
     sessions.value = next
   }
@@ -1775,6 +1800,13 @@ export function useSessionWorkspace({
     return Number.isNaN(time) ? 0 : time
   }
 
+  function sessionCreatedTimestamp(session) {
+    const time = new Date(
+      session?.timestamp || session?.created || 0,
+    ).getTime()
+    return Number.isNaN(time) ? 0 : time
+  }
+
   async function reconnectTerminalIfOpen() {
     if (!terminal?.isOpen?.()) return
     await terminal.reconnect?.(selectedSessionId.value)
@@ -1903,6 +1935,7 @@ export function useSessionWorkspace({
     sessionsLoading,
     sessionSwitching,
     sessionTitle,
+    subagentChildrenByParentPath,
     sidebarActivitySessions,
     sidebarRuntimeSummary,
     setActiveRuntimeSession: (value) => { activeRuntimeSession.value = value },

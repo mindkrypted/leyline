@@ -11,10 +11,11 @@ The server creates each child with `SessionManager.newSession()` and sets the
 parent session path. It also appends a `leyline-subagent-session` custom marker
 to the child session.
 
-Leyline uses the explicit marker to hide child sessions from the sidebar. For
-older compatible sessions, it also matches child paths stored in subagent tool
-results. A session without either form of metadata can appear as a normal
-session.
+Leyline uses the explicit marker to identify children for nested sidebar rows.
+For older compatible sessions, it also matches child paths stored in subagent
+tool results. A parent session path alone does not identify a subagent.
+Normal forks remain regular sessions. A session without either form of
+metadata can appear as a normal session.
 
 ## Modes
 
@@ -137,6 +138,7 @@ supply its own `cwd`, `model`, and `thinking` value.
 
 ## Leyline rendering
 
-Subagent tool calls appear as cards in the transcript. Select a child card to
-open that child session. A child workbench with a valid parent path shows the
-**parent session** control.
+Subagent tool calls appear in compact Activity rows. Select a subagent row to
+open the inspector. Select a task. Select **Open child session** to open its
+transcript. Children also open directly from nested sidebar rows. A child
+workbench with a valid parent path shows the **parent session** control.

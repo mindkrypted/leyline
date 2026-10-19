@@ -32,6 +32,8 @@ A research plan normally contains two to five threads. The **Research threads** 
 
 Select **Open child session** in the inspector to open the worker's transcript. Use Command-click, Ctrl-click, or middle-click on that control to open it in a new tab or window. The child transcript contains the worker's tool calls, source work, and final result.
 
+Research workers also appear as [nested child rows](./sessions#open-a-subagent-session) under the research parent in the sidebar.
+
 The sidebar marks each research session with a flask. During a run, the row can show its current phase or **gather N/N**. A selected completed session shows **ready**.
 
 ## Inspect research traces

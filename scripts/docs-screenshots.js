@@ -10,6 +10,7 @@ import {
   compactResearchState,
 } from '../lib/research-state.js'
 import { renderSessionExportHtml } from '../server/pi-api/export-renderer.js'
+import { subagentTaskTitle } from '../lib/subagent-view.js'
 
 const baseUrl = process.env.DOCS_SCREENSHOT_URL || 'http://localhost:5173/'
 const screenshotFilter = (process.env.DOCS_SCREENSHOT_FILTER || '')
@@ -780,6 +781,31 @@ const subagentMobileEntries = subagentOutcomeEntries.map((entry) => {
   })
 })
 
+const subagentSidebarResults = [subagentOutcomeResults[0], subagentOutcomeResults[1], subagentOutcomeResults[4]]
+  .map((result, index) => ({
+    ...result,
+    status: index ? 'running' : 'done',
+    stopReason: index ? undefined : 'stop',
+    exitCode: index ? -1 : 0,
+    messages: index ? [] : result.messages,
+  }))
+const subagentSidebarEntries = [
+  messageEntry({
+    id: 'subagent-sidebar-user',
+    role: 'user',
+    label: 'You',
+    text: 'Review release verification, packaging, and publication conditions in parallel.',
+    timestamp: '2026-08-06T15:43:00.000Z',
+  }),
+  messageEntry({
+    id: 'subagent-sidebar-assistant',
+    role: 'assistant',
+    label: 'Agent',
+    text: 'Verification is complete. The packaging and publication checks are still running in separate child sessions.',
+    timestamp: '2026-08-06T15:44:00.000Z',
+  }),
+]
+
 const researchEntries = [
   messageEntry({
     id: 'research-user',
@@ -1004,7 +1030,7 @@ const traceFinalGeneration = primaryTrace.observations.find(item => item.type ==
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
-const subagentAssetNames = ['subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png']
+const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
@@ -1116,6 +1142,8 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message .thinking-trigger',
     scenario: 'ultrafast',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 2),
   })
   await capture({
     browser,
@@ -1141,7 +1169,11 @@ try {
     route: '/sessions/research-session',
     ready: '.research-report-message',
     scenario: 'research',
-    interact: waitForResearchSources,
+    sidebarChildren: true,
+    interact: async (page) => {
+      await waitForResearchSources(page)
+      await openSidebarChildren(page, 3)
+    },
   })
   await capture({
     browser,
@@ -1551,7 +1583,20 @@ try {
     route: '/sessions/demo-session',
     ready: '.subagent-card .tool-inspect-button',
     scenario: 'subagent-outcomes',
-    interact: (page) => openSubagentInspector(page, 5),
+    sidebarChildren: true,
+    interact: async (page) => {
+      await openSidebarChildren(page, 5)
+      await openSubagentInspector(page, 5)
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-sidebar.png'),
+    route: '/sessions/demo-session',
+    ready: '.session-child-row .status-running',
+    scenario: 'subagent-sidebar',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 3),
   })
   await capture({
     browser,
@@ -1712,9 +1757,12 @@ try {
     route: '/sessions/demo-session',
     ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
+    scenario: 'subagent-sidebar',
+    sidebarChildren: true,
     interact: async (page) => {
       await page.getByRole('button', { name: 'Open sessions' }).click()
       await page.locator('.leyline-app.sidebar-open .sidebar').waitFor()
+      await openSidebarChildren(page, 3)
     },
   })
   await capture({
@@ -1745,6 +1793,8 @@ try {
     ready: '.assistant-message .thinking-trigger',
     viewport: { width: 1503, height: 818 },
     scenario: 'ultrafast',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 2),
     macWindow: true,
   })
   await capture({
@@ -1754,7 +1804,11 @@ try {
     ready: '.research-report-message',
     viewport: { width: 1503, height: 818 },
     scenario: 'research',
-    interact: waitForResearchSources,
+    sidebarChildren: true,
+    interact: async (page) => {
+      await waitForResearchSources(page)
+      await openSidebarChildren(page, 3)
+    },
     macWindow: true,
   })
 } finally {
@@ -1820,6 +1874,30 @@ async function assertTraceContentReachable(page) {
   if (!reachable) throw new Error('Trace payload last line or capture footer is inaccessible')
   await page.locator('.elune-selected').evaluate(element => { element.scrollTop = 0 })
   await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = 0 })
+}
+
+async function openSidebarChildren(page, count) {
+  const toggle = page.locator('.session-children-toggle').first()
+  await toggle.waitFor()
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+  await page.locator('.session-child-node').nth(count - 1).waitFor()
+  await page.waitForFunction(() => !document.querySelector('.session-child-row.is-folding'))
+  const geometry = await toggle.evaluate((button) => {
+    const parent = button.closest('.project-session-row')
+    const title = parent.querySelector('.session-title-with-kind').getBoundingClientRect()
+    const control = button.getBoundingClientRect()
+    const child = parent.nextElementSibling
+    const node = child.querySelector('.session-child-node').getBoundingClientRect()
+    return {
+      gap: title.left - control.right,
+      inset: node.left + node.width / 2 - title.left,
+      height: child.getBoundingClientRect().height,
+      glyphs: document.querySelectorAll('.session-child-icon').length,
+    }
+  })
+  if (geometry.gap < 6 || geometry.inset < 10 || geometry.height !== 30 || geometry.glyphs) {
+    throw new Error(`Unexpected sidebar child layout: ${JSON.stringify(geometry)}`)
+  }
 }
 
 async function openSubagentInspector(page, taskCount, exportPage = false) {
@@ -1985,7 +2063,8 @@ function runtimeFor(scenario) {
   const queued = ['queue', 'queue-held'].includes(scenario)
   const held = scenario === 'queue-held'
   const research = scenario === 'research'
-  const subagents = ['subagent-outcomes', 'subagent-mobile'].includes(scenario)
+  const sidebar = scenario === 'subagent-sidebar'
+  const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar'].includes(scenario)
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
@@ -1999,10 +2078,22 @@ function runtimeFor(scenario) {
       availableModels,
       thinkingLevel: 'high',
       availableThinkingLevels: selectedModel.availableThinkingLevels,
-      isStreaming: (queued && !held) || activity,
+      isStreaming: (queued && !held) || activity || sidebar,
       isCompacting: false,
-      pendingToolCalls: activity ? ['activity-selected-tool'] : [],
-      pendingTools: activity
+      pendingToolCalls: sidebar ? ['subagent-sidebar-tool']
+        : activity ? ['activity-selected-tool'] : [],
+      pendingTools: sidebar ? [{
+        toolCallId: 'subagent-sidebar-tool',
+        toolName: 'subagent',
+        args: {
+          mode: 'parallel',
+          tasks: subagentSidebarResults.map(({ agent, task }) => ({ agent, task })),
+        },
+        partialResult: {
+          content: [{ type: 'text', text: 'One check completed. Two checks are running.' }],
+          details: { mode: 'parallel', results: subagentSidebarResults, background: true },
+        },
+      }] : activity
         ? [{
             toolCallId: 'activity-selected-tool',
             toolName: 'read',
@@ -2108,6 +2199,7 @@ function detailFor(scenario) {
     research: researchEntries,
     'subagent-outcomes': subagentOutcomeEntries,
     'subagent-mobile': subagentMobileEntries,
+    'subagent-sidebar': subagentSidebarEntries,
     markdown: markdownPreviewEntries,
     tools: toolActivityEntries,
     shell: shellEntries,
@@ -2129,6 +2221,38 @@ function detailFor(scenario) {
       contextUsage: runtimeFor(scenario).state.contextUsage,
     },
     entries,
+  }
+}
+
+function sidebarFixtureFor(scenario, parent) {
+  const results = scenario === 'research'
+    ? researchEntries.find((entry) => entry.toolName === 'subagent').subagentDetails.results
+    : scenario === 'subagent-sidebar' ? subagentSidebarResults
+      : scenario === 'subagent-outcomes' ? subagentOutcomeResults
+        : subagentOutcomeResults.slice(0, 2)
+  const children = results.map((result, index) => ({
+    ...session(
+      result.childSession.id,
+      subagentTaskTitle(result, index),
+      new Date(Date.parse(parent.timestamp) + (index + 1) * 60000).toISOString(),
+      4,
+      parent.cwd,
+    ),
+    path: result.childSession.path,
+    parentSessionPath: parent.path,
+    isSubagentSession: true,
+  }))
+  return {
+    parent: {
+      ...parent,
+      subagentChildren: results.map((result, index) => ({
+        id: result.childSession.id,
+        agent: result.agent,
+        task: subagentTaskTitle(result, index),
+      })),
+    },
+    children,
+    liveChildren: children.filter((child, index) => results[index].status === 'running'),
   }
 }
 
@@ -2200,6 +2324,7 @@ async function capture({
   ready,
   viewport = { width: 1440, height: 900 },
   scenario = 'default',
+  sidebarChildren = false,
   terminal = false,
   exportPage = false,
   interact,
@@ -2213,7 +2338,27 @@ async function capture({
   const embeddedSelected = embeddedFile && (!screenshotFilter.length || screenshotFilter.includes(path.basename(embeddedFile)) || selected)
   if (!selected && !embeddedSelected) return
   const runtime = runtimeFor(scenario)
+  const detail = detailFor(scenario)
+  const sidebar = sidebarChildren ? sidebarFixtureFor(scenario, detail.session) : null
+  if (sidebar) {
+    detail.session = sidebar.parent
+    runtime.session = sidebar.parent
+  }
+  const captureSessions = (scenario === 'research' ? [researchSession, ...sessions] : sessions)
+    .map((summary) => sidebar && summary.id === runtime.id ? sidebar.parent : summary)
+    .concat(sidebar?.children || [])
   const runtimeFixtures = runtimeFixturesFor(scenario, runtime)
+  for (const child of sidebar?.liveChildren || []) {
+    const childRuntime = runtimeFor('default')
+    runtimeFixtures.runtimeSessions.push({
+      ...childRuntime,
+      id: child.id,
+      path: child.path,
+      cwd: child.cwd,
+      session: child,
+      state: { ...childRuntime.state, isStreaming: true },
+    })
+  }
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: 2,
@@ -2339,16 +2484,10 @@ async function capture({
     if (key === 'GET /api/pi/files/settings') return json(fileSettings)
     if (key === 'GET /api/pi/projects') return json({ projects })
     if (key === 'GET /api/pi/fs') return json(projectDirectory)
-    if (key === 'GET /api/pi/sessions') {
-      return json({
-        sessions: scenario === 'research'
-          ? [researchSession, ...sessions]
-          : sessions,
-      })
-    }
+    if (key === 'GET /api/pi/sessions') return json({ sessions: captureSessions })
     if (key === 'GET /api/pi/state') return json({ active: runtime })
     if (key === 'POST /api/pi/active-session') return json({ active: runtime })
-    if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detailFor(scenario))
+    if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detail)
     if (key === 'GET /api/pi/review') {
       return json(scenario === 'review' ? reviewPayload : cleanReviewPayload)
     }
@@ -2359,7 +2498,7 @@ async function capture({
       return json(visionConfigPayload(url.searchParams.has('sessionPath')))
     }
     if (key === `GET /api/pi/sessions/${runtime.id}/export`) {
-      const html = await renderSessionExportHtml(detailFor(scenario))
+      const html = await renderSessionExportHtml(detail)
       return request.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html })
     }
 

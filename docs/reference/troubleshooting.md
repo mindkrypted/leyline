@@ -327,12 +327,11 @@ name.
 
 ## Child sessions appear in the sidebar
 
-New child sessions contain a `leyline-subagent-session` marker and are hidden
-from the sidebar. Leyline also recognizes child paths from persisted subagent
-tool results for compatibility.
+Nested child rows under a parent are expected. See [Subagent sessions](../user-guide/sessions#open-a-subagent-session) for sidebar controls.
 
-If an old child session has neither form of metadata, Leyline cannot identify
-it as a child session.
+A child at the top level can indicate missing metadata. New children contain a `leyline-subagent-session` marker. Leyline also recognizes child paths from persisted subagent tool results for compatibility.
+
+Without either form of metadata, Leyline cannot identify a session as a subagent child. A parent session path alone does not identify a subagent. Normal forks remain regular sessions.
 
 ## Memory does not match the Memory Inspector
 

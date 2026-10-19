@@ -20,14 +20,14 @@ const views = [
     key: 'session',
     label: 'Session',
     image: workbench,
-    alt: 'A pi session transcript in Leyline with tool activity and a follow-up composer',
+    alt: 'A pi session transcript in Leyline with tool activity and nested child sessions',
     caption: 'Read the live transcript and send a follow-up from the same window.',
   },
   {
     key: 'research',
     label: 'Research',
     image: deepResearch,
-    alt: 'A Leyline research report with numbered citations and a sources panel',
+    alt: 'A Leyline research report with citations, sources, and worker sessions in the sidebar',
     caption: 'Run research threads in parallel and read their sources alongside the report.',
   },
   {
@@ -48,7 +48,7 @@ const views = [
 
 const capabilities = [
   { title: 'Memory', text: 'Inspect and edit global, project, and session memory.' },
-  { title: 'Subagents', text: 'Choose which models child agents use for delegated tasks.' },
+  { title: 'Subagents', text: 'Choose subagent models and open child sessions from the sidebar.' },
   { title: 'Tracing', text: 'Record runs, then inspect model calls, tools, and usage.' },
   { title: 'Images and vision', text: 'Attach images, or let a vision model describe them.' },
   { title: 'Models and MCP', text: 'Configure providers, custom models, and MCP servers.' },

@@ -82,8 +82,9 @@ description: Definitions of Leyline terms, including sessions, runtimes, steerin
   Compaction and branch summaries remain Standard.
 - **Up next**: The editable queue of tasks that Leyline sends one at a time
   when the agent becomes idle. Enter adds a task during an active run.
-- **Vision agent**: The `vision_agent` tool. It starts a hidden child session
+- **Vision agent**: The `vision_agent` tool. It starts an isolated child session
   to inspect an image for a parent model that cannot receive images.
+  The child appears under its parent in the sidebar.
 - **Vision model**: The image-capable model selected for vision delegation.
 - **Workbench**: The selected-session area with the header, transcript,
   composer, drawers, and terminal.

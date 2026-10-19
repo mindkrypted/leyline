@@ -38,7 +38,7 @@ Select the inherited option to remove a session or project override. Select **No
 
 ## Understand delegated image context
 
-For each image that requires delegation, Leyline saves a local attachment. When the parent turn starts, the model calls `vision_agent`. The tool starts a hidden child session with the configured vision model. The child returns a detailed text description.
+For each image that requires delegation, Leyline saves a local attachment. When the parent turn starts, the model calls `vision_agent`. The tool starts an isolated child session with the configured vision model. The child returns a detailed text description.
 
 ![Attached release warning followed by an expanded vision_agent tool result](../assets/screenshots/vision-tool-call.png)
 
@@ -48,7 +48,7 @@ The parent model receives the tool result instead of the image. The saved user m
 
 Leyline removes the session attachment directory when it moves a session or project to trash.
 
-The configured model provider receives the image and prompt. The hidden child session also keeps its prompt and image in local pi session history. Hidden child sessions do not appear in the sidebar, but Leyline does not delete their JSONL files.
+The configured model provider receives the image and prompt. The child session also keeps its prompt and image in local pi session history. Vision children appear as [nested sidebar rows](./sessions#open-a-subagent-session). Leyline does not delete their JSONL files after execution.
 
 When capture is on, Elune also records new vision child runs and the parent tool result. Traces can retain private prompts and results after session deletion. Leyline does not guarantee secret redaction. See [Tracing](./tracing#keep-trace-data-private).
 

@@ -5,6 +5,7 @@ import {
   RESEARCH_CUSTOM_TYPE,
   researchStateFromEntries,
 } from '../../lib/research-state.js'
+import { subagentTaskTitle } from '../../lib/subagent-view.js'
 
 export const SUBAGENT_SESSION_CUSTOM_TYPE = 'leyline-subagent-session'
 
@@ -19,6 +20,7 @@ export async function buildSessionInfo(filePath) {
     let lastActivityTime = 0
     let isSubagentSession = false
     const subagentChildPaths = []
+    const subagentChildren = []
     const researchTree = new Map()
     let researchLeafId = ''
 
@@ -73,10 +75,18 @@ export async function buildSessionInfo(filePath) {
       if (role === 'toolResult' && line.includes('"toolName":"subagent"')) {
         try {
           const entry = JSON.parse(line)
-          for (const result of entry.message?.details?.results || []) {
+          const results = entry.message?.details?.results || []
+          results.forEach((result, index) => {
             const path = result.childSession?.path
-            if (typeof path === 'string' && path) subagentChildPaths.push(path)
-          }
+            if (typeof path !== 'string' || !path) return
+            subagentChildPaths.push(path)
+            subagentChildren.push({
+              path,
+              id: result.childSession?.id || '',
+              agent: typeof result.agent === 'string' ? result.agent : '',
+              task: subagentTaskTitle(result, index),
+            })
+          })
         } catch {}
       }
       if (role !== 'user' && role !== 'assistant') continue
@@ -113,6 +123,7 @@ export async function buildSessionInfo(filePath) {
       parentSessionPath: header.parentSession,
       isSubagentSession,
       subagentChildPaths,
+      subagentChildren,
       research: researchStateFromEntries(
         activeResearchEntries(researchTree, researchLeafId),
         header.id,

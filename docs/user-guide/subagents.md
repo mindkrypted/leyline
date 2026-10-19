@@ -1,6 +1,6 @@
 # Manage subagents
 
-Subagents run delegated tasks in child sessions with separate context.
+Subagents run delegated tasks in child sessions with separate context. Open [child transcripts from the sidebar](./sessions#open-a-subagent-session), or inspect task results from an Activity card.
 
 ![Agent defaults with global subagent model choices](../assets/screenshots/subagents.png)
 
@@ -91,13 +91,13 @@ Resolve pending extension confirmations before opening the inspector. A new conf
 
 ## Inspect delegated runs
 
-Open **Session traces** in the parent header to inspect the subagent tool observation. Available **Child sessions** links open child transcripts. Captured child runs also appear in the selected backend's trace explorer, even though children stay hidden from the session sidebar.
+Open **Session traces** in the parent header to inspect the subagent tool observation. Available **Child sessions** links open child transcripts. Captured child runs also appear in the selected backend's trace explorer.
 
 Trace capture starts on for new runs and can retain delegated prompts and results. See [Tracing](./tracing) for capture controls and privacy.
 
 ## Return to the parent session
 
-Child sessions are hidden from the sidebar. Their header shows **← parent session**.
+Child sessions also open from [nested sidebar rows](./sessions#open-a-subagent-session). Their header shows **← parent session**.
 
 Select **← parent session** to return to the parent transcript. Use a modified
 click to open the parent in a new tab or window.

@@ -412,6 +412,9 @@
 }
 
 .session.project-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 7px;
   height: 36px;
   min-height: 36px;
   border: 0;
@@ -435,6 +438,234 @@
 .session.project-session-row:not(.active):hover {
   background: transparent;
   color: var(--text);
+}
+
+.session.project-session-row:has(> .session-children-toggle) {
+  grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.session.project-session-row .session-link {
+  grid-row: 1;
+  grid-column: 1;
+  min-width: 0;
+  padding-left: 7px;
+}
+
+.session.project-session-row:has(> .session-children-toggle) .session-link {
+  grid-column: 2;
+  padding-left: 0;
+}
+
+.session-children-toggle {
+  display: grid;
+  grid-row: 1;
+  grid-column: 1;
+  place-self: center;
+  place-items: center;
+  width: 20px;
+  height: 26px;
+  border: 0;
+  border-radius: 4px;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  color: #7d7d7d;
+}
+
+.session-children-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.session-children-toggle[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.session-children-toggle:hover,
+.session-children-toggle:focus-visible {
+  color: var(--text);
+}
+
+.session.project-session-row.is-renaming .session-children-toggle {
+  display: none;
+}
+
+.session-child-row {
+  position: relative;
+  height: 30px;
+  min-height: 30px;
+  border-radius: 3px;
+  margin-left: 28px;
+  color: #9d9d9d;
+}
+
+.session-child-row.is-folding {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.session-child-row::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 9px;
+  width: 1px;
+  background: #272727;
+  content: '';
+}
+
+.session-child-row.is-last-child::before {
+  bottom: 15px;
+}
+
+.session-child-row.is-folding::before {
+  bottom: auto;
+  height: 30px;
+}
+
+.session-child-row.is-folding.is-last-child::before {
+  height: 15px;
+}
+
+.session-child-row.active {
+  background: #303030;
+  color: #f0f0f0;
+}
+
+.session-child-row:not(.active):hover {
+  color: var(--text);
+}
+
+.session-child-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  height: 30px;
+  border: 0;
+  border-radius: inherit;
+  outline: 0;
+  background: transparent;
+  padding: 0 7px 0 22px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-child-link:focus-visible {
+  box-shadow: inset 0 0 0 2px #b8b8b8;
+}
+
+.session-child-node {
+  position: absolute;
+  top: 15px;
+  left: 6.5px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #6c6c6c;
+  border-radius: 50%;
+  background: var(--sidebar);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.session-child-row.active .session-child-node {
+  background: #303030;
+}
+
+.session-child-title {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-child-row .session-status {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.session-child-row .session-time {
+  flex: none;
+  color: #707070;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: right;
+}
+
+.session-child-delete {
+  display: grid;
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 5px;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  color: #919191;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--motion-fast) var(--ease-decelerate);
+}
+
+.session-child-delete svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.session-child-delete:hover,
+.session-child-delete:focus-visible {
+  color: var(--text);
+}
+
+.session-child-row:hover .session-child-delete,
+.session-child-row:has(:focus-visible) .session-child-delete {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.session-child-row:hover .session-child-link,
+.session-child-row:has(:focus-visible) .session-child-link {
+  padding-right: 31px;
+}
+
+.session-child-row:hover .session-status,
+.session-child-row:hover .session-time,
+.session-child-row:has(:focus-visible) .session-status,
+.session-child-row:has(:focus-visible) .session-time {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .session-child-delete {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
 }
 
 .project-session-skeleton {

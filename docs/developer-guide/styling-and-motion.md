@@ -38,6 +38,12 @@ System events use muted, centered dividers with document and panel icons and pla
 
 The app's System prompt inspector always overlays the right side below the header. At 760 pixels or less, it fills the width below the header. The export's System prompt inspector reserves space above 1120 pixels and uses a full-height overlay below that width. It fills the viewport width at 760 pixels or less.
 
+## Sidebar subagent tree
+
+Only parent rows with visible chevrons reserve a left chevron column. Plain rows keep normal padding. The entire child branch sits inset under its parent, with a vertical guide and hollow nodes.
+
+Explicit chevron toggles unfold or collapse the branch as one unit in up to 180 ms, with a shared fade and no stagger. Animated heights drive virtualized row positions and spacers so following rows move with the branch. Reduced motion disables the fold animation. Scroll, search, and reload do not start it.
+
 ## Activity and subagent inspector layout
 
 Activity cards retain full message width and assistant-message colors. The collapsed card shows only the newest call in a fixed-height row, with outcome counts in its header. When the only top-level call is `subagent`, the header and row open the inspector without expansion, even for parallel tasks. Multi-call groups retain expansion.

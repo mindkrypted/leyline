@@ -125,6 +125,10 @@ const props = defineProps({
     default: '',
   },
   sessionsLoading: Boolean,
+  subagentChildrenByParentPath: {
+    type: Object,
+    default: () => new Map(),
+  },
   visibleProjects: {
     type: Array,
     default: () => [],
@@ -147,6 +151,7 @@ const emit = defineEmits([
   'retry-pins',
   'retry-sessions',
   'select-backend',
+  'select-child-session',
   'select-project',
   'select-session',
   'toggle-pin-session',
@@ -170,12 +175,16 @@ const sessionQuery = ref('')
 const navigationProjectCwd = ref('')
 const projectOrder = ref([])
 const sessionOrder = ref([])
+const expandedParentOverrides = ref(new Map())
+const sessionFolds = ref(new Map())
 const sessionOrdersByProject = new Map()
 const sessionScroll = ref(null)
 const sessionScrollTop = ref(0)
 const sessionViewportHeight = ref(520)
 const lastSessionByProject = new Map()
 const SESSION_ROW_HEIGHT = 36
+const SESSION_CHILD_ROW_HEIGHT = 30
+const SESSION_FOLD_DURATION = 180
 const SESSION_GROUP_HEIGHT = 26
 const SESSION_OVERSCAN_PX = SESSION_ROW_HEIGHT * 4
 const SKELETON_GROUP_ROWS = [5, 7, 6]
@@ -224,6 +233,8 @@ useModalFocus({
 
 let pendingPinFocusId = null
 let sessionResizeObserver
+let sessionFoldFrame = 0
+let sessionFoldMedia
 
 const sessionSkeletonItems = computed(() => {
   const lastSessionItem = sessionListItems.value.at(-1)
@@ -354,6 +365,7 @@ const currentProjectSessions = computed(() => {
   const projectSessions = [...project.sessions]
   const selected = props.selectedSession
   if (selected?.cwd === project.cwd
+    && !selected.isSubagentSession
     && !projectSessions.some((session) => session.id === selected.id)) {
     projectSessions.unshift(selected)
   }
@@ -402,6 +414,24 @@ watch(
   { immediate: true },
 )
 
+const searchedChildren = computed(() => {
+  const matches = new Map()
+  const query = sessionQuery.value.trim()
+  if (!query) return matches
+  for (const session of currentProjectSessions.value) {
+    const children = childrenForSession(session)
+    if (!children.length) continue
+    matches.set(session.path, children.filter((child) => {
+      return navigationScore([
+        childTitle(child),
+        child.agent,
+        child.id,
+      ], query) > 0
+    }))
+  }
+  return matches
+})
+
 const matchingProjectSessions = computed(() => {
   const byId = new Map(
     currentProjectSessions.value.map((session) => [session.id, session]),
@@ -417,7 +447,8 @@ const matchingProjectSessions = computed(() => {
         session.id,
       ], query),
     }))
-    .filter((item) => item.score > 0)
+    .filter((item) => item.score > 0
+      || (searchedChildren.value.get(item.session.path)?.length || 0) > 0)
     .sort((a, b) => b.score - a.score)
     .map((item) => item.session)
 })
@@ -472,6 +503,28 @@ const sessionListItems = computed(() => {
       session,
       sessionIndex,
       height: SESSION_ROW_HEIGHT,
+    })
+    const fold = sessionFolds.value.get(session.path)
+    if (!parentIsExpanded(session) && !fold) return
+    const children = visibleChildrenFor(session)
+    const visibleHeight = children.length * SESSION_CHILD_ROW_HEIGHT
+      * (fold?.progress ?? 1)
+    children.forEach((child, index) => {
+      const height = Math.max(0, Math.min(
+        SESSION_CHILD_ROW_HEIGHT,
+        visibleHeight - index * SESSION_CHILD_ROW_HEIGHT,
+      ))
+      if (!height) return
+      items.push({
+        key: `child:${child.path || child.id}`,
+        type: 'session-child',
+        session: child,
+        parentSession: session,
+        height,
+        foldProgress: fold?.progress,
+        collapsing: fold?.to === 0,
+        lastChild: index === children.length - 1,
+      })
     })
   })
 
@@ -664,8 +717,14 @@ const navigatorSubtitle = computed(() => {
 })
 
 watch(
-  () => [currentProject.value?.cwd || '', sessionQuery.value],
+  () => [
+    currentProject.value?.cwd || '',
+    sessionQuery.value,
+    props.activeBackendConnection?.id || '',
+    props.activeBackendConnection?.url || '',
+  ],
   async ([cwd], [previousCwd] = []) => {
+    finishSessionFolds()
     pendingPinFocusId = null
     closeSessionActions()
     if (cwd !== previousCwd) sessionQuery.value = ''
@@ -688,7 +747,10 @@ watch(
   },
 )
 
-watch(() => props.selectedSessionId, closeSessionActions)
+watch(() => props.selectedSessionId, () => {
+  finishSessionFolds()
+  closeSessionActions()
+})
 
 watch(
   () => props.pinnedVersion,
@@ -738,6 +800,8 @@ watch(sessionScroll, (element, previous) => {
 })
 
 onMounted(() => {
+  sessionFoldMedia = window.matchMedia('(prefers-reduced-motion: reduce)')
+  sessionFoldMedia.addEventListener('change', finishSessionFolds)
   document.addEventListener('click', closeMenusOnOutsideClick)
   sessionResizeObserver = new ResizeObserver(updateSessionViewport)
   if (sessionScroll.value) sessionResizeObserver.observe(sessionScroll.value)
@@ -745,6 +809,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  finishSessionFolds()
+  sessionFoldMedia?.removeEventListener('change', finishSessionFolds)
   document.removeEventListener('click', closeMenusOnOutsideClick)
   sessionResizeObserver?.disconnect()
 })
@@ -766,16 +832,28 @@ function scrollSelectedSessionIntoView() {
   const index = orderedProjectSessions.value.findIndex((session) => {
     return session.id === props.selectedSessionId
   })
-  scrollSessionIntoView(index)
+  if (index >= 0) {
+    scrollSessionIntoView(index)
+    return
+  }
+  const child = sessionListItems.value.find((item) => {
+    return item.type === 'session-child'
+      && item.session.id === props.selectedSessionId
+  })
+  scrollItemIntoView(child)
 }
 
 function scrollSessionIntoView(index) {
-  const element = sessionScroll.value
-  if (!element || index < 0) return
+  if (index < 0) return
   const item = sessionListItems.value.find((candidate) => {
     return candidate.type === 'session' && candidate.sessionIndex === index
   })
-  if (!item) return
+  scrollItemIntoView(item)
+}
+
+function scrollItemIntoView(item) {
+  const element = sessionScroll.value
+  if (!element || !item) return
   const top = item.top
   const bottom = top + item.height
   if (top < element.scrollTop) element.scrollTop = top
@@ -785,14 +863,20 @@ function scrollSessionIntoView(index) {
   sessionScrollTop.value = element.scrollTop
 }
 
-async function focusSession(index) {
-  const last = orderedProjectSessions.value.length - 1
-  const target = Math.max(0, Math.min(index, last))
-  scrollSessionIntoView(target)
+async function moveSessionFocus(item, direction) {
+  const rows = sessionListItems.value.filter((row) => {
+    return row.type === 'session' || (row.type === 'session-child'
+      && !row.collapsing && row.height >= SESSION_CHILD_ROW_HEIGHT)
+  })
+  const index = rows.findIndex((row) => row.key === item.key)
+  const target = rows[index + direction]
+  if (!target) return
+  scrollItemIntoView(target)
   await nextTick()
-  sessionScroll.value?.querySelector(
-    `[aria-posinset="${target + 1}"]`,
-  )?.focus()
+  const row = sessionScroll.value?.querySelector(
+    `[data-session-id="${CSS.escape(target.session.id)}"]`,
+  )
+  row?.querySelector('.session-link, .session-child-link')?.focus()
 }
 
 function closeMenusOnOutsideClick(event) {
@@ -1001,6 +1085,88 @@ function projectResultMeta(project) {
 
 function statusFor(session) {
   return props.sessionStatus(session.id) || { label: '', tone: '' }
+}
+
+function childrenForSession(session) {
+  if (!session?.path || session.isSubagentSession) return []
+  return props.subagentChildrenByParentPath.get(session.path) || []
+}
+
+function childTitle(child) {
+  return child.label || props.sessionTitle(child)
+}
+
+function childIsLive(child) {
+  return ['running', 'compacting', 'queued'].includes(statusFor(child).tone)
+}
+
+function visibleChildrenFor(session) {
+  const searched = searchedChildren.value.get(session.path)
+  if (searched) return searched
+  return sessionQuery.value.trim() ? [] : childrenForSession(session)
+}
+
+function parentIsExpanded(session) {
+  if (!childrenForSession(session).length) return false
+  if (sessionQuery.value.trim()) return visibleChildrenFor(session).length > 0
+  const override = expandedParentOverrides.value.get(session.path)
+  if (override !== undefined) return override
+  return childrenForSession(session).some((child) => {
+    return child.id === props.selectedSessionId || childIsLive(child)
+  })
+}
+
+function childrenToggleLabel(session) {
+  const count = childrenForSession(session).length
+  const action = parentIsExpanded(session) ? 'Hide' : 'Show'
+  return `${action} ${count} subagent ${count === 1 ? 'session' : 'sessions'} for ${props.sessionTitle(session)}`
+}
+
+function toggleSessionChildren(session) {
+  const expanded = parentIsExpanded(session)
+  const from = sessionFolds.value.get(session.path)?.progress ?? Number(expanded)
+  const to = Number(!expanded)
+  const next = new Map(expandedParentOverrides.value)
+  next.set(session.path, !expanded)
+  expandedParentOverrides.value = next
+  if (sessionFoldMedia?.matches) {
+    finishSessionFolds()
+    return
+  }
+  const folds = new Map(sessionFolds.value)
+  if (from === to) folds.delete(session.path)
+  else folds.set(session.path, {
+    from,
+    to,
+    progress: from,
+    startedAt: performance.now(),
+    duration: SESSION_FOLD_DURATION * Math.abs(to - from),
+  })
+  sessionFolds.value = folds
+  if (!sessionFoldFrame && folds.size) {
+    sessionFoldFrame = requestAnimationFrame(animateSessionFolds)
+  }
+}
+
+function animateSessionFolds(now) {
+  const next = new Map()
+  for (const [path, fold] of sessionFolds.value) {
+    const progress = Math.max(0, Math.min(1, (now - fold.startedAt) / fold.duration))
+    if (progress >= 1) continue
+    const eased = 1 - Math.pow(1 - progress, 3)
+    next.set(path, {
+      ...fold,
+      progress: fold.from + (fold.to - fold.from) * eased,
+    })
+  }
+  sessionFolds.value = next
+  sessionFoldFrame = next.size ? requestAnimationFrame(animateSessionFolds) : 0
+}
+
+function finishSessionFolds() {
+  cancelAnimationFrame(sessionFoldFrame)
+  sessionFoldFrame = 0
+  sessionFolds.value = new Map()
 }
 
 function countLabel(count, label) {
@@ -1232,7 +1398,7 @@ const vFocusSelect = {
                 {{ item.label }}
               </div>
               <div
-                v-else
+                v-else-if="item.type === 'session'"
                 class="session project-session-row"
                 :data-session-id="item.session.id"
                 :class="{
@@ -1259,25 +1425,35 @@ const vFocusSelect = {
                 />
                 <template v-else>
                   <button
+                    v-if="childrenForSession(item.session).length
+                      && !sessionQuery.trim()"
+                    class="session-children-toggle"
+                    type="button"
+                    :aria-expanded="parentIsExpanded(item.session)"
+                    :aria-label="childrenToggleLabel(item.session)"
+                    :title="parentIsExpanded(item.session)
+                      ? 'Hide subagents'
+                      : 'Show subagents'"
+                    @click.stop="toggleSessionChildren(item.session)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="m6 4 4 4-4 4"></path>
+                    </svg>
+                  </button>
+                  <button
                     class="session-link"
                     type="button"
                     :aria-current="item.session.id === selectedSessionId
                       ? 'page'
                       : undefined"
-                    :aria-posinset="item.sessionIndex + 1"
-                    :aria-setsize="orderedProjectSessions.length"
                     @click="emit('select-session', item.session, $event)"
                     @auxclick.middle.prevent="emit(
                       'select-session',
                       item.session,
                       $event,
                     )"
-                    @keydown.down.prevent="focusSession(
-                      item.sessionIndex + 1,
-                    )"
-                    @keydown.up.prevent="focusSession(
-                      item.sessionIndex - 1,
-                    )"
+                    @keydown.down.prevent="moveSessionFocus(item, 1)"
+                    @keydown.up.prevent="moveSessionFocus(item, -1)"
                   >
                     <span class="session-title-with-kind">
                       <svg
@@ -1390,6 +1566,76 @@ const vFocusSelect = {
                     </button>
                   </div>
                 </template>
+              </div>
+              <div
+                v-else
+                class="session-child-row"
+                :data-session-id="item.session.id"
+                :class="{
+                  active: item.session.id === selectedSessionId,
+                  'is-folding': item.foldProgress !== undefined,
+                  'is-last-child': item.lastChild,
+                }"
+                :style="item.foldProgress === undefined ? undefined : {
+                  height: `${item.height}px`,
+                  opacity: item.foldProgress,
+                }"
+                :inert="item.collapsing || item.height < SESSION_CHILD_ROW_HEIGHT"
+                :aria-hidden="item.collapsing || item.height < SESSION_CHILD_ROW_HEIGHT
+                  ? true
+                  : undefined"
+              >
+                <button
+                  class="session-child-link"
+                  type="button"
+                  :aria-current="item.session.id === selectedSessionId
+                    ? 'page'
+                    : undefined"
+                  :title="item.session.agent
+                    ? `${item.session.agent} subagent: ${childTitle(item.session)}`
+                    : childTitle(item.session)"
+                  @keydown.down.prevent="moveSessionFocus(item, 1)"
+                  @keydown.up.prevent="moveSessionFocus(item, -1)"
+                  @click="emit('select-child-session', item.session, $event)"
+                  @auxclick.middle.prevent="emit(
+                    'select-child-session',
+                    item.session,
+                    $event,
+                  )"
+                >
+                  <span class="session-child-node" aria-hidden="true"></span>
+                  <span
+                    class="session-child-title"
+                  >{{ childTitle(item.session) }}</span>
+                  <span
+                    v-if="statusFor(item.session).label"
+                    class="session-status"
+                    :class="`status-${statusFor(item.session).tone}`"
+                  >{{ statusFor(item.session).label }}</span>
+                  <time
+                    v-else
+                    class="session-time"
+                    :datetime="sessionDateTime(item.session)"
+                    :title="sessionFullTime(item.session)"
+                  >{{ sessionListTime(item.session) }}</time>
+                </button>
+                <button
+                  class="session-child-delete"
+                  type="button"
+                  title="Delete subagent session"
+                  :aria-label="`Delete ${sessionTitle(item.session)}`"
+                  :disabled="deletingSessionId === item.session.id"
+                  @click.stop="emit('request-delete-session', item.session)"
+                >
+                  <span v-if="deletingSessionId === item.session.id">…</span>
+                  <svg v-else viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3.5 4.5h9"></path>
+                    <path d="M6.5 4.5v-2h3v2"></path>
+                    <path d="M5 6.5l.5 6h5l.5-6"></path>
+                    <path d="M7 7.5v4"></path>
+                    <path d="M9 7.5v4"></path>
+                  </svg>
+                </button>
               </div>
             </template>
             <div

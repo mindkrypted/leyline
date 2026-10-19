@@ -366,15 +366,31 @@ export function toSessionDto(session) {
     name: session.name,
     parentSessionPath: session.parentSessionPath,
     isSubagentSession: session.isSubagentSession === true,
+    ...(Array.isArray(session.subagentChildren) ? {
+      subagentChildren: session.subagentChildren.slice(0, 50).map((child) => ({
+        id: child.id,
+        agent: child.agent || '',
+        task: truncate(child.task || '', 120),
+      })),
+    } : {}),
     research: compactResearchState(session.research),
     firstMessage: truncate(
-      skillPromptDisplayText(session.firstMessage || ''),
+      session.isSubagentSession
+        ? subagentTaskText(session.firstMessage)
+        : skillPromptDisplayText(session.firstMessage || ''),
       140,
     ),
     messageCount: session.messageCount ?? 0,
     modified: session.modified || session.created || timestampFromPath(session.path),
     timestamp: session.created || timestampFromPath(session.path),
   }
+}
+
+function subagentTaskText(firstMessage) {
+  const text = skillPromptDisplayText(firstMessage || '')
+  const marker = '\n\nTask: '
+  const index = text.lastIndexOf(marker)
+  return index === -1 ? text : text.slice(index + marker.length)
 }
 
 function contextTokensFromEntries(entries) {
