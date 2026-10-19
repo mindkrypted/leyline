@@ -1,4 +1,4 @@
-# <img src="assets/icon.png" width="96" height="96" alt="Leyline icon" align="center"> Leyline
+# [![Leyline: Run concurrent pi sessions in your browser, desktop, or mobile.](assets/readme/header.png)](https://leyline.sh/)
 
 Leyline is a web UI for pi coding-agent sessions. It uses Vue 3 and Vite for
 the frontend. Its native backend uses the pi SDK for sessions, prompts, model
