@@ -6,7 +6,7 @@ if (!parentPort) throw new Error('Session summary worker requires a parent port'
 parentPort.on('message', async (message) => {
   if (message?.kind !== 'scan') return
   try {
-    const session = await buildSessionInfo(message.path, message.goalFallback)
+    const session = await buildSessionInfo(message.path)
     parentPort.postMessage({ kind: 'result', id: message.id, session })
   } catch (error) {
     parentPort.postMessage({

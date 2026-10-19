@@ -176,9 +176,6 @@ export function useSessionWorkspace({
       || selectedSession.value?.contextUsage
       || null
   })
-  const activeGoal = computed(() => {
-    return activeRuntimeSession.value?.state?.goal || null
-  })
   const sidebarRuntimeSummary = computed(() => {
     const states = Object.values(runtimeSessionsById.value)
     const running = states.filter((state) => state.isStreaming).length
@@ -985,38 +982,14 @@ export function useSessionWorkspace({
     return Number.isFinite(value) ? Math.max(0, Number(value)) : 0
   }
 
-  function patchRuntimeExtensionUi(extensionUi, goal) {
+  function patchRuntimeExtensionUi(extensionUi) {
     if (!activeRuntimeSession.value) return
     activeRuntimeSession.value = {
       ...activeRuntimeSession.value,
       state: {
         ...activeRuntimeSession.value.state,
         extensionUi,
-        goal,
       },
-    }
-    if (goal?.objective) patchGoalSessionTitle(goal.objective)
-  }
-
-  function patchGoalSessionTitle(objective) {
-    const id = selectedSessionId.value
-    if (!id) return
-
-    sessions.value = sessions.value.map((session) => {
-      if (session.id !== id) return session
-      if (session.firstMessage && session.firstMessage !== '(no messages)') {
-        return session
-      }
-      return { ...session, firstMessage: objective }
-    })
-
-    const detail = sessionDetail.value
-    if (!detail || detail.session.id !== id) return
-    const firstMessage = detail.session.firstMessage
-    if (firstMessage && firstMessage !== '(no messages)') return
-    sessionDetail.value = {
-      ...detail,
-      session: { ...detail.session, firstMessage: objective },
     }
   }
 
@@ -1566,7 +1539,7 @@ export function useSessionWorkspace({
     if (summary?.messageCount === 0
       || summary?.firstMessage === '(no messages)') {
       const liveTitle = summary?.id === selectedSessionId.value
-        ? activeGoal.value?.objective || liveTurn?.liveFirstUserText?.value
+        ? liveTurn?.liveFirstUserText?.value
         : ''
       if (liveTitle) {
         return liveTitle.length > 140
@@ -1841,7 +1814,6 @@ export function useSessionWorkspace({
   }
 
   return {
-    activeGoal,
     activeRuntimeSession,
     availableModels,
     availableThinkingLevels,

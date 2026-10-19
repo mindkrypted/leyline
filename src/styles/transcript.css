@@ -1107,40 +1107,6 @@
   font-size: 11px;
 }
 
-.goal-banner {
-  width: min(var(--content-max), 100%);
-  margin: 14px auto 0;
-  border: 1px solid rgba(125, 211, 252, 0.2);
-  border-radius: 14px;
-  background: rgba(14, 116, 144, 0.08);
-  padding: 10px 12px;
-  color: #a8b5bd;
-  font-size: 12px;
-}
-
-.goal-banner div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.goal-banner strong {
-  overflow: hidden;
-  color: #d6f3ff;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.goal-banner span,
-.goal-banner p {
-  color: #7fadb9;
-}
-
-.goal-banner p {
-  margin: 6px 0 0;
-}
-
 .live-message-status {
   display: inline-flex;
   align-items: baseline;

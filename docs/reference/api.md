@@ -205,7 +205,6 @@ Active = {
       notifications: object[],
       confirmations: ExtensionConfirmation[]
     },
-    goal: Goal | null,
     research: ResearchState | null
   }
 }
@@ -235,18 +234,6 @@ SlashCommand = {
   name: string,
   description?: string,
   source: "command" | "extension" | "prompt" | "skill"
-}
-
-Goal = {
-  objective: string,
-  status: string,
-  tokenBudget: number | null,
-  continuationLimit: number,
-  continuationsUsed: number,
-  tokensUsed: number,
-  timeUsedSeconds: number,
-  createdAt: number,
-  updatedAt: number
 }
 ```
 
@@ -2627,8 +2614,7 @@ runtime_event: {
 
 extension_ui: {
   activeSessionId: string,
-  state: Active.state.extensionUi,
-  goal: Goal | null
+  state: Active.state.extensionUi
 }
 
 extension_error: {

@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { goalStateFromSession, isGoalStateEvent } from './goal-state.js'
 import { compactionCutEntryId } from './compaction-boundary.js'
 import { isResearchEntry } from '../../lib/research-state.js'
 
@@ -40,12 +39,10 @@ export async function bindRuntimeHandle(handle, events) {
     cleanupExtensionConfirmations(handle)
     throw error
   }
-  syncGoalStateFromSession(handle)
   handle.unsubscribe = handle.runtime.session.subscribe((event) => {
     const handoffId = promptHandoffId(handle, event)
     trackPendingToolResult(handle, event)
     trackRuntimeActivity(handle, event)
-    syncGoalStateFromSession(handle)
     if (event.type === 'agent_settled' || event.type === 'compaction_end') {
       const last = session.messages.findLast((message) => message.role === 'assistant')
       if (event.type === 'agent_settled'
@@ -73,7 +70,6 @@ export async function bindRuntimeHandle(handle, events) {
     } else if (event.type === 'turn_end'
       || event.type === 'agent_settled'
       || event.type === 'session_info_changed'
-      || isGoalStateEvent(event)
       || isResearchStateEvent(event)) {
       events.broadcastActiveSession(handle)
     }
@@ -383,25 +379,6 @@ function broadcastExtensionUi(handle, events) {
   events.broadcastEvent('extension_ui', {
     activeSessionId: handle.sessionId,
     state: handle.extensionUiState,
-    goal: goalStateFromSession(handle.runtime.session),
   })
   events.broadcastActiveSession(handle)
-}
-
-function syncGoalStateFromSession(handle) {
-  if (!handle) return
-  const goal = goalStateFromSession(handle.runtime.session)
-  if (!goal) return
-  const status = goal.status === 'budget_limited'
-    ? 'limited by budget'
-    : goal.status === 'continuation_limited'
-      ? 'limited by continuations'
-      : goal.status
-  handle.extensionUiState = {
-    ...handle.extensionUiState,
-    statuses: {
-      ...handle.extensionUiState.statuses,
-      goal: `goal: ${status}`,
-    },
-  }
 }

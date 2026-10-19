@@ -114,15 +114,6 @@ const BUNDLED_ULTRAFAST_EXTENSION = resolve(
   'ultrafast',
   'index.js',
 )
-const BUNDLED_GOAL_EXTENSION = resolve(
-  __dirname,
-  '..',
-  '..',
-  '.pi',
-  'extensions',
-  'goal',
-  'index.ts',
-)
 const BUNDLED_MEMORY_EXTENSION = resolve(
   __dirname,
   '..',
@@ -307,7 +298,6 @@ function preferBundledExtensions(result) {
     { path: TRACING_EXTENSION_PATH, name: 'pi-elune' },
     { path: BUNDLED_OUTPUT_BUDGET_EXTENSION, name: 'output-budget' },
     { path: BUNDLED_ULTRAFAST_EXTENSION, name: 'ultrafast', command: ULTRAFAST_COMMAND },
-    { path: BUNDLED_GOAL_EXTENSION, name: 'goal', command: 'goal' },
     { path: BUNDLED_MEMORY_EXTENSION, name: 'memory', command: 'memory' },
     { path: BUNDLED_SUBAGENT_EXTENSION, name: 'subagent', tool: 'subagent' },
     { path: BUNDLED_RESEARCH_EXTENSION, name: 'research' },
@@ -437,7 +427,6 @@ async function buildRuntimeResult(
         additionalExtensionPaths: systemPrompt ? [BUNDLED_OUTPUT_BUDGET_EXTENSION] : [
           BUNDLED_OUTPUT_BUDGET_EXTENSION,
           BUNDLED_ULTRAFAST_EXTENSION,
-          BUNDLED_GOAL_EXTENSION,
           BUNDLED_MEMORY_EXTENSION,
           BUNDLED_SUBAGENT_EXTENSION,
           BUNDLED_RESEARCH_EXTENSION,

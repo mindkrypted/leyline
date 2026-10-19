@@ -7,7 +7,6 @@ import { SessionManager } from '@earendil-works/pi-coding-agent'
 import { compactionCutEntryId } from './compaction-boundary.js'
 import { emptyExtensionUiState } from './extension-ui.js'
 import { supportsUltrafastWithAuth, ULTRAFAST_COMMAND } from '../../lib/ultrafast.js'
-import { goalStateFromEntries, goalStateFromSession } from './goal-state.js'
 import { applyRolloutFeedback } from './rollout-feedback.js'
 import {
   compactResearchState,
@@ -143,7 +142,6 @@ export function sessionStateDto(
     },
     extensionUi: extensionUiState,
     pendingConfirmationCount: extensionUiState.confirmations?.length || 0,
-    goal: goalStateFromSession(session),
     research: researchStateFromSession(session),
   }
 }
@@ -254,7 +252,6 @@ function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime
   let messageCount = 0
   let firstMessage = ''
   let name = session.name
-  const goal = goalStateFromEntries(entries)
   const research = researchStateFromEntries(entries, manager.getSessionId())
 
   for (const entry of entries) {
@@ -282,7 +279,7 @@ function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime
     isSubagentSession: session.isSubagentSession === true
       || hasSubagentSessionMarker(entries, manager.getSessionId()),
     research,
-    firstMessage: firstMessage || research?.objective || goal?.objective || '(no messages)',
+    firstMessage: firstMessage || research?.objective || '(no messages)',
     created: session.created || new Date(header.timestamp),
     modified: session.modified
       || sessionModifiedDate(entries, header, new Date()),
@@ -335,7 +332,6 @@ export function sessionInfo(handle) {
   const created = new Date(header.timestamp)
   let messageCount = 0
   let firstMessage = ''
-  const goal = goalStateFromEntries(entries)
   const research = researchStateFromEntries(entries, manager.getSessionId())
 
   for (const entry of entries) {
@@ -355,7 +351,7 @@ export function sessionInfo(handle) {
     parentSessionPath: header.parentSession,
     isSubagentSession: hasSubagentSessionMarker(entries, manager.getSessionId()),
     research,
-    firstMessage: firstMessage || research?.objective || goal?.objective || '(no messages)',
+    firstMessage: firstMessage || research?.objective || '(no messages)',
     created,
     modified: sessionModifiedDate(entries, header, created),
     messageCount,

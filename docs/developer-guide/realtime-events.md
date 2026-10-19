@@ -26,14 +26,14 @@ The server sends these event types:
 | `runtime_roster` | `{ sessionIds }` for the backend's open runtimes |
 | `runtime_removed` | `{ id }` when a runtime is removed |
 | `runtime_event` | `{ activeSessionId, event, handoffId? }` from the pi session subscription |
-| `extension_ui` | `{ activeSessionId, state, goal }` after an extension UI change |
+| `extension_ui` | `{ activeSessionId, state }` after an extension UI change |
 | `extension_error` | `{ activeSessionId, error }` after an extension binding error |
 | `trace_updated` | `{ traceId, sessionId, revision, activeSessionId }` after a trace storage commit |
 | `trace_config` | `{ enabled, error? }` after capture configuration changes or capture failures |
 
 `extension-ui.js` binds each runtime handle to its pi session subscription. It broadcasts every pi event as `runtime_event`.
 
-Queue changes and goal-state messages also trigger a new `active_session` snapshot. Extension UI changes trigger both `extension_ui` and `active_session`.
+Queue changes also trigger a new `active_session` snapshot. Extension UI changes trigger both `extension_ui` and `active_session`.
 
 Editable queue mutations broadcast snapshots through the runtime handle. Native `queue_update` snapshots run in a microtask because pi emits the event before inserting the input into its low-level queue. DTOs ignore stale native display arrays when pi has no queued inputs.
 
@@ -97,13 +97,13 @@ Live user, assistant, System, and tool rows reconcile with projected persisted e
 
 See [Live reconciliation and settlement](./transcript-projection#live-reconciliation-and-settlement) for matching and expansion keys.
 
-## Goal, research, and extension UI state
+## Research and extension UI state
 
-The backend derives the latest goal from `goal-state` custom entries. It folds research state from matching `leyline-research` entries on the active branch.
+The backend folds research state from matching `leyline-research` entries on the active branch.
 
-Runtime snapshots include both states. `App.vue` applies extension UI state only when `activeSessionId` matches the selected session.
+Runtime snapshots include research state. `App.vue` applies extension UI state only when `activeSessionId` matches the selected session.
 
-The goal controls and research surfaces use projected state. The browser does not parse this state from transcript text.
+The research surfaces use projected state. The browser does not parse this state from transcript text.
 
 ## Ultrafast and confirmation state
 

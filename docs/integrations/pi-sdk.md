@@ -22,7 +22,7 @@ Forking opens a separate `SessionManager`, calls `createBranchedSession(entryId)
 
 Pi session logs are tree-structured JSONL records. Normal writes use runtime and session-manager primitives. Reset to here is an explicit exception. It rewrites the file so that the selected active branch ends at the target entry.
 
-Normal runtimes load output-budget, ultrafast, goal, memory, subagent, research, and vision-agent. They also append the Leyline system prompt. Conversation runtimes also install Elune through a named inline factory. Isolated custom-prompt children retain output-budget and inline capture.
+Normal runtimes load output-budget, ultrafast, memory, subagent, research, and vision-agent. They also append the Leyline system prompt. Conversation runtimes also install Elune through a named inline factory. Isolated custom-prompt children retain output-budget and inline capture.
 
 Bundled extensions replace matching conflicts, and Ultrafast runs last. See [Runtime construction](../developer-guide/backend-api#runtime-construction) and [Ultrafast](../developer-guide/backend-api#ultrafast) for the implementation contracts.
 

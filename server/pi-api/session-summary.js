@@ -1,7 +1,6 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { byteLines } from './session-lines.js'
-import { goalStateFromEntries } from './goal-state.js'
 import {
   RESEARCH_CUSTOM_TYPE,
   researchStateFromEntries,
@@ -9,7 +8,7 @@ import {
 
 export const SUBAGENT_SESSION_CUSTOM_TYPE = 'leyline-subagent-session'
 
-export async function buildSessionInfo(filePath, goalFallback) {
+export async function buildSessionInfo(filePath) {
   try {
     const stats = await stat(filePath)
     const lines = byteLines(createReadStream(filePath))
@@ -17,7 +16,6 @@ export async function buildSessionInfo(filePath, goalFallback) {
     let messageCount = 0
     let firstMessage = ''
     let name
-    let goalObjective = ''
     let lastActivityTime = 0
     let isSubagentSession = false
     const subagentChildPaths = []
@@ -54,8 +52,7 @@ export async function buildSessionInfo(filePath, goalFallback) {
 
       if (prefix.includes('"type":"custom"')) {
         if (!line.includes(`"customType":"${SUBAGENT_SESSION_CUSTOM_TYPE}"`)
-          && !line.includes(`"customType":"${RESEARCH_CUSTOM_TYPE}"`)
-          && !line.includes('"customType":"goal-state"')) continue
+          && !line.includes(`"customType":"${RESEARCH_CUSTOM_TYPE}"`)) continue
         try {
           const entry = JSON.parse(line)
           if (entry.customType === SUBAGENT_SESSION_CUSTOM_TYPE
@@ -66,8 +63,6 @@ export async function buildSessionInfo(filePath, goalFallback) {
             const node = researchTree.get(entry.id)
             if (node) node.researchEntry = entry
           }
-          const goal = goalStateFromEntries([entry])
-          if (goal?.objective) goalObjective = goal.objective
         } catch {}
         continue
       }
@@ -125,9 +120,7 @@ export async function buildSessionInfo(filePath, goalFallback) {
       created: new Date(header.timestamp),
       modified,
       messageCount,
-      firstMessage: firstMessage
-        || (goalFallback ? goalObjective : '')
-        || '(no messages)',
+      firstMessage: firstMessage || '(no messages)',
     }
   } catch {
     return null

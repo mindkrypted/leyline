@@ -40,7 +40,7 @@ This command intercepts Leyline API calls and supplies sanitized fixtures. Mock 
 - Projects, folder browsing, session lists, detail, activation, and runtime state
 - Git status and selected-file diffs
 - Memory records, subagent configuration, and vision configuration
-- Queue, goal, research, shell, and image-delegation transcript states
+- Queue, research, shell, and image-delegation transcript states
 - Runtime snapshots and events, Git review notices, and terminal traffic through mock WebSockets, plus exported HTML
 - Trace summaries, paged detail, bookmarks, capture configuration, and trace capability data
 
@@ -150,7 +150,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
 - Subagent captures: compact Activity rows and separate task inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
-- Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, goals, events, terminal, export, and mobile navigation
+- Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
 
 Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. The pinned-session capture pins two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
 

@@ -59,8 +59,8 @@ export default defineConfig({
           { text: 'Memory', link: '/user-guide/memory' },
           { text: 'Subagents', link: '/user-guide/subagents' },
           {
-            text: 'Goals and events',
-            link: '/user-guide/goals-and-events',
+            text: 'Runtime events',
+            link: '/user-guide/runtime-events',
           },
           { text: 'Terminal', link: '/user-guide/terminal' },
           {
@@ -130,7 +130,6 @@ export default defineConfig({
           { text: 'Overview', link: '/integrations/' },
           { text: 'pi SDK integration', link: '/integrations/pi-sdk' },
           { text: 'Elune tracing', link: '/integrations/elune' },
-          { text: 'Goal extension', link: '/integrations/goal-extension' },
           { text: 'Memory', link: '/integrations/memory-integration' },
           { text: 'Subagents', link: '/integrations/subagents' },
           { text: 'Deep research', link: '/integrations/deep-research' },

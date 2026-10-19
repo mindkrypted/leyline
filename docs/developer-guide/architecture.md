@@ -225,7 +225,7 @@ that directory. Elune records use a separate `elune/elune.db` under the same dat
 
 ## Bundled extensions and prompt
 
-Normal runtimes load output-budget, ultrafast, goal, memory, subagent, research, and vision-agent from `.pi/extensions/`. They load the inline Elune capture factory from `@elune/embedded/pi` and append `.pi/LEYLINE_SYSTEM.md` to the system prompt.
+Normal runtimes load output-budget, ultrafast, memory, subagent, research, and vision-agent from `.pi/extensions/`. They load the inline Elune capture factory from `@elune/embedded/pi` and append `.pi/LEYLINE_SYSTEM.md` to the system prompt.
 
 Bundled conflict filtering removes other extensions with matching names or designated commands and tools. The bundled Ultrafast extension runs last, after other provider hooks.
 
@@ -237,11 +237,9 @@ Children with an isolated custom system prompt retain the bundled output-budget 
 
 Reload creates replacement cwd-bound services. It then binds the new session, extensions, event subscription, and extension UI state to the existing handle.
 
-The goal extension stores `goal-state` custom entries. Backend projection finds the latest goal state and includes it in session state.
-
 The research extension stores objective, plan, phase, thread, source, report, and error entries. Citation checks require numbered report links to match non-excluded ledger sources.
 
-Runtime WebSocket updates carry goal, research, and extension UI changes to `App.vue`. The workbench uses this state for controls, progress, source navigation, and session titles.
+Runtime WebSocket updates carry research and extension UI changes to `App.vue`. The workbench uses this state for controls, progress, source navigation, and session titles.
 
 ## Terminal boundary
 

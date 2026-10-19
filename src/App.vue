@@ -200,7 +200,6 @@ const shellRunningSessions = ref(new Set())
 const interrupting = ref(false)
 const activityInterruptingSessionId = ref('')
 const activityActionError = ref('')
-const goalCommandSubmitting = ref('')
 const editingEntry = ref(null)
 const composerDrafts = new Map()
 const queueEditDrafts = new Map()
@@ -493,7 +492,6 @@ const sessionWorkspace = useSessionWorkspace({
   beforeRouteChange: prepareRouteChange,
 })
 const {
-  activeGoal,
   activeRuntimeSession,
   availableModels,
   availableThinkingLevels,
@@ -925,7 +923,7 @@ const {
   },
   onExtensionUi(data) {
     if (data.activeSessionId !== selectedSessionId.value) return
-    patchRuntimeExtensionUi(data.state, data.goal)
+    patchRuntimeExtensionUi(data.state)
     surfaceExtensionNotification(data.state)
   },
   onExtensionError(data) {
@@ -1023,30 +1021,6 @@ const extensionConfirmationNotices = computed(() => {
   const runtime = activeRuntimeSession.value
   if (runtime?.id !== selectedSessionId.value) return []
   return (runtime.state?.extensionUi?.notifications || []).filter(notice => notice.kind === 'confirmation-expired')
-})
-const goalStatusLabel = computed(() => ({
-  complete: 'Complete', budget_limited: 'Token budget reached',
-  continuation_limited: 'Continuation limit reached', paused: 'Paused',
-})[activeGoal.value?.status] || '')
-const goalBudgetLabel = computed(() => {
-  const goal = activeGoal.value
-  if (!goal) return ''
-  const parts = []
-  if (goal.tokenBudget) {
-    const used = compactNumber(goal.tokensUsed)
-    const budget = compactNumber(goal.tokenBudget)
-    parts.push(`${used}/${budget} tokens`)
-  }
-  if (goal.continuationLimit > 0) {
-    parts.push(`${goal.continuationsUsed}/${goal.continuationLimit} turns`)
-  }
-  return parts.join(' · ')
-})
-const goalPrimaryAction = computed(() => {
-  const status = activeGoal.value?.status
-  if (status === 'active') return { label: 'Pause', command: 'pause' }
-  if (status === 'paused') return { label: 'Resume', command: 'resume' }
-  return null
 })
 const shellModeDraft = computed(() => draft.value.trimStart().startsWith('!'))
 const shellDraft = computed(() => shellCommandFromText(draft.value.trim()))
@@ -1394,7 +1368,7 @@ function measureDockSpace() {
     terminalHeightBudget.value = Math.max(44, available - (confirmation ? confirmation + 12 : 0))
   })
 }
-watch([viewport, terminalOpen, confirmationPanelHeight, activeGoal, selectedResearch], measureDockSpace)
+watch([viewport, terminalOpen, confirmationPanelHeight, selectedResearch], measureDockSpace)
 watch(terminalOpen, open => { if (!open) terminalKeysOpen.value = false })
 
 onMounted(async () => {
@@ -3042,7 +3016,6 @@ async function submitDraft(streamingBehavior) {
   const previousDetail = sessionDetail.value
   const shouldFollowOutput = editing || stickToBottom.value
   const startsTurn = !isHandledSlashCommand(text)
-    || slashCommandStartsTurn(text)
   const startsEmptySession = !startupRun.value
     && isEmptySelectedSession.value
     && !editing
@@ -3253,11 +3226,7 @@ async function submitShellCommand(shellCommand, images) {
 }
 
 function isHandledSlashCommand(text) {
-  return /^\/(goal|compact)(?:\s|$)/.test(text)
-}
-
-function slashCommandStartsTurn(text) {
-  return /^\/goal\s+/.test(text) && !/^\/goal\s+(clear|pause)\s*$/i.test(text)
+  return /^\/compact(?:\s|$)/.test(text)
 }
 
 function startEditingEntry(entry) {
@@ -3402,31 +3371,6 @@ function trimSessionToEntry(entryId) {
 
 function imageSrcForComposer(image) {
   return `data:${image.mimeType};base64,${image.data}`
-}
-
-async function runGoalCommand(command) {
-  if (!activeGoal.value || goalCommandSubmitting.value) return
-  if (!selectedSession.value) return
-
-  goalCommandSubmitting.value = command
-  promptError.value = ''
-
-  const sessionId = selectedSessionId.value
-  try {
-    if ((command === 'pause' || command === 'clear') && agentRunning.value) {
-      setLiveActivity('Stopping…')
-      await interruptPiSession(sessionId)
-      setAgentRunning(false)
-    }
-    await submitPrompt(sessionId, `/goal ${command}`)
-    if (command === 'resume') {
-      setAgentRunning(true, 'Thinking…')
-    }
-  } catch (error) {
-    if (selectedSessionId.value === sessionId) promptError.value = error.message
-  } finally {
-    goalCommandSubmitting.value = ''
-  }
 }
 
 async function interruptAgent() {
@@ -3714,7 +3658,7 @@ async function submitStartDraft() {
   if (!targetCwd || creatingSessionCwd.value || startupRun.value) return
 
   closePickerMenus()
-  const animatePrompt = hasPrompt && (!isHandledSlashCommand(text) || slashCommandStartsTurn(text))
+  const animatePrompt = hasPrompt && !isHandledSlashCommand(text)
   startupDraftSnapshot.value = animatePrompt ? {
     ...currentComposerDraft(),
     cwd: targetCwd,
@@ -4311,31 +4255,6 @@ function closePickerMenus() {
 
     <section ref="mainPane" class="main-pane" :inert="workbenchDialogOpen || traceWorkbenchCovered || (!!systemPromptEntry || traceMode === 'inspector') && systemPromptMobile" :aria-hidden="traceWorkbenchCovered || undefined">
       <div v-if="runtimeChromeVisible" class="runtime-chrome">
-
-        <section v-if="activeGoal" class="goal-control-plane">
-          <div class="goal-control-main">
-            <span class="goal-control-kicker">Goal<span v-if="goalStatusLabel"> · {{ goalStatusLabel }}</span></span>
-            <strong>{{ activeGoal.objective }}</strong>
-            <span v-if="goalBudgetLabel">{{ goalBudgetLabel }}</span>
-          </div>
-          <div class="goal-control-actions">
-            <button
-              v-if="goalPrimaryAction"
-              type="button"
-              :disabled="!!goalCommandSubmitting"
-              @click="runGoalCommand(goalPrimaryAction.command)"
-            >
-              {{ goalCommandSubmitting === goalPrimaryAction.command
-                ? '…'
-                : goalPrimaryAction.label }}
-            </button>
-            <button
-              type="button"
-              :disabled="!!goalCommandSubmitting"
-              @click="runGoalCommand('clear')"
-            >{{ goalCommandSubmitting === 'clear' ? '…' : 'Clear' }}</button>
-          </div>
-        </section>
         <section
           v-if="isResearchSession"
           class="research-phase-bar"

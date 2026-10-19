@@ -441,20 +441,6 @@
     display: none;
   }
 
-  .goal-control-plane {
-    align-items: flex-start;
-    padding: 8px 12px;
-  }
-
-  .goal-control-main {
-    display: grid;
-    gap: 5px;
-  }
-
-  .goal-control-actions {
-    padding-top: 1px;
-  }
-
   .mobile-sidebar-button {
     display: grid;
     flex: 0 0 auto;

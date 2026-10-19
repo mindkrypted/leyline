@@ -105,7 +105,6 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/tracing.js`: Owns the lazy Elune store, inline capture bindings, backend configuration, and child usage reconciliation.
 - `server/pi-api/tracing-routes.js`: Routes trace summaries, paged detail, bookmarks, and capture configuration.
 - `server/pi-api/extension-ui.js`: Adapts extension UI state for the browser.
-- `server/pi-api/goal-state.js`: Projects goal extension state.
 - `server/pi-api/fs-browser.js`: Browses local directories.
 - `server/pi-api/git-review.js`: Reads Git status, bounded per-file diffs, and watcher Git state.
 - `server/pi-api/git-review-watch.js`: Shares recursive review watchers and sends review-change WebSocket events.
@@ -132,13 +131,12 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `.pi/LEYLINE_SYSTEM.md`: Adds Leyline operating context to normal runtimes.
 - `.pi/extensions/output-budget/`: Implements one bounded retry for explicit OpenAI-compatible completion-budget errors.
 - `.pi/extensions/ultrafast/`: Owns runtime-local tier controls, provider hooks, connection cleanup, and cost adjustment.
-- `.pi/extensions/goal/`: Implements goal commands, state, and controls.
 - `.pi/extensions/memory/`: Implements memory injection, commands, and tools.
 - `.pi/extensions/subagent/`: Implements single, parallel, and chain subagent tools, including the reserved researcher.
 - `.pi/extensions/research/`: Implements research-session binding, state updates, orchestration protocol, and report checks.
 - `.pi/extensions/vision-agent/`: Implements image-file inspection through an isolated vision child.
 
-Normal runtimes load all seven bundled extensions plus inline Elune capture. Isolated custom-prompt children retain output-budget and inline capture. Native MCP and tool search use SDK factories in `runtime.js`. Leyline does not load Codemode.
+Normal runtimes load all six bundled extensions plus inline Elune capture. Isolated custom-prompt children retain output-budget and inline capture. Native MCP and tool search use SDK factories in `runtime.js`. Leyline does not load Codemode.
 
 ## Embedded Elune dependency
 

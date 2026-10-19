@@ -6,7 +6,7 @@
 
 | Owner | State and behavior |
 | --- | --- |
-| `App.vue` | Global Settings and contextual drawer visibility, fixed agent scope and request targets, sidebar navigation, Git review and research sources, composer/queue drafts, attachments, prompt edits and submission, session kind, goals, project selection, and startup motion |
+| `App.vue` | Global Settings and contextual drawer visibility, fixed agent scope and request targets, sidebar navigation, Git review and research sources, composer/queue drafts, attachments, prompt edits and submission, session kind, project selection, and startup motion |
 | `useSessionWorkspace.js` | Session list, project grouping, routes, selected detail, activation, runtime snapshots, sidebar activity rows, model, thinking, and Ultrafast controls, rename, delete, fork, reset, and reload |
 | `useBackendConnections.js` | App-wide connection records, window-specific selection, connection tests, and default selection |
 | `usePinnedSessions.js` | Pinned session IDs for the active connection, load revisions, pending toggles, errors, and batched cleanup |
@@ -94,7 +94,7 @@ The selected session route is `/sessions/:id`. Browser history changes call the 
 
 ## Active runtime state
 
-`activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, goal state, and research state.
+`activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, and research state.
 
 The runtime WebSocket can send snapshots for all server handles. `App.vue` updates the selected runtime only when the IDs match. Both selected and background state reject older `snapshotRevision` values. This prevents a late HTTP response from restoring stale queue state.
 

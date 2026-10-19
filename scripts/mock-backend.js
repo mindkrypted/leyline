@@ -61,7 +61,6 @@ function activeState() {
     slashCommands: [],
     queuedMessages: { steering: [], followUp: [] },
     extensionUi: { statuses: {}, widgets: {}, notifications: [] },
-    goal: null,
   }
 }
 

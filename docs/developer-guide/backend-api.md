@@ -57,7 +57,6 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | `server/pi-api/tracing.js` | Lazy embedded Elune store, capture bindings, usage reconciliation, and backend capture configuration |
 | `server/pi-api/tracing-routes.js` | Trace summary, paged detail, bookmark, and capture configuration routes |
 | `server/pi-api/extension-ui.js` | Browser-compatible extension UI context and runtime event binding |
-| `server/pi-api/goal-state.js` | Goal custom-entry projection |
 | `server/pi-api/fs-browser.js` | Local directory browsing and path normalization |
 | `server/pi-api/git-review.js` | Read-only Git status, bounded per-file diffs, and watcher Git queries |
 | `server/pi-api/git-review-watch.js` | Shared recursive review watchers and review-change WebSocket clients |
@@ -116,7 +115,7 @@ The WebSocket at `/api/pi/review/events?cwd=...` sends `review_ready` only after
 
 `createAgentSessionRuntime()` wraps the session and services in `AgentSessionRuntime`. Runtime handles keep these objects alive for background work.
 
-Normal runtimes load the bundled output-budget, ultrafast, goal, memory, subagent, research, and vision-agent extensions. They also append the Leyline system prompt.
+Normal runtimes load the bundled output-budget, ultrafast, memory, subagent, research, and vision-agent extensions. They also append the Leyline system prompt.
 
 `preferBundledExtensions()` filters conflicts by extension name and designated command or tool names. It puts the bundled Ultrafast extension last, so later hooks cannot overwrite its enabled tier.
 
@@ -314,17 +313,15 @@ Subagent model precedence is session, project, global, then the agent definition
 
 The subagent and vision execution routes create child pi sessions. They write an explicit marker before they start each child runtime. Normal subagents retain the normal runtime resources and their tool policy. Vision children use an isolated prompt, output-budget and inline capture, an empty tool allowlist, and a session-local image setting override.
 
-## Goal and research state projection
-
-The goal extension writes `goal-state` custom entries. `goal-state.js` finds the latest entry and normalizes budgets, status, and elapsed time.
+## Research state projection
 
 The research extension writes `leyline-research` custom entries. `research-state.js` folds matching entries, normalizes source identity, and derives progress counts.
 
-Session DTOs include normalized goal and research state. Extension events also trigger active-session and extension UI broadcasts.
+Session DTOs include normalized research state. Extension events also trigger active-session and extension UI broadcasts.
 
 Before research completion, `research-citations.js` checks each numeric Markdown citation against a non-excluded ledger source.
 
-The browser does not reconstruct goal state from transcript text. It uses the projected backend state.
+The browser does not reconstruct research state from transcript text. It uses the projected backend state.
 
 ## Frontend client
 

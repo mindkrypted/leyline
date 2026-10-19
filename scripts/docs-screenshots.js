@@ -997,18 +997,6 @@ const visionConfigPayload = (sessionAvailable) => ({
   thinkingSource: sessionAvailable ? 'session' : 'project',
 })
 
-const goal = {
-  objective: 'Prepare a safe release candidate',
-  status: 'active',
-  tokenBudget: 50000,
-  continuationLimit: 8,
-  continuationsUsed: 2,
-  tokensUsed: 12480,
-  timeUsedSeconds: 420,
-  createdAt: fixedNow - 480000,
-  updatedAt: fixedNow,
-}
-
 const traceFixtures = docsTraces(baseEntries, sessions)
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
@@ -1628,10 +1616,9 @@ try {
   })
   await capture({
     browser,
-    file: path.join(docsOutputDir, 'goal-events.png'),
+    file: path.join(docsOutputDir, 'runtime-events.png'),
     route: '/sessions/demo-session',
-    ready: '.goal-control-plane',
-    scenario: 'goal',
+    ready: '.assistant-message',
     interact: async (page) => {
       await page.getByRole('button', { name: 'Events' }).click()
       await page.locator('aside[aria-label="Runtime events"] .event-log-row').first().waitFor()
@@ -2029,7 +2016,6 @@ function runtimeFor(scenario) {
       },
       slashCommands: [
         { name: 'compact', description: 'Compact context', source: 'command' },
-        { name: 'goal', description: 'Start or manage a goal', source: 'extension' },
         { name: 'skill:review', description: 'Load the review skill', source: 'skill' },
       ],
       promptQueue: {
@@ -2045,12 +2031,10 @@ function runtimeFor(scenario) {
       extensionUi: {
         statuses: {
           'leyline-ultrafast': scenario === 'ultrafast' ? 'on' : 'off',
-          ...(scenario === 'goal' ? { goal: 'goal: active' } : {}),
         },
         widgets: {},
         notifications: [],
       },
-      goal: scenario === 'goal' ? goal : null,
       research: research ? researchState : null,
     },
   }
@@ -2236,7 +2220,6 @@ async function capture({
     runtime,
     runtimeSessions: runtimeFixtures.runtimeSessions,
     runtimeEvents: runtimeFixtures.runtimeEvents,
-    goal: scenario === 'goal' ? goal : null,
     terminal,
     emitRuntimeEvents: scenario !== 'home',
   })
@@ -2702,7 +2685,6 @@ function initBrowser({
   runtime,
   runtimeSessions,
   runtimeEvents,
-  goal: activeGoal,
   terminal,
   emitRuntimeEvents,
 }) {
@@ -2782,20 +2764,6 @@ function initBrowser({
           }
         }
         this.emit({ type: 'active_session', data: { ...runtime, snapshotRevision: now + 1 } })
-        if (activeGoal) {
-          this.emit({
-            type: 'extension_ui',
-            data: {
-              activeSessionId: runtime.id,
-              state: {
-                statuses: { goal: 'goal: active' },
-                widgets: {},
-                notifications: [],
-              },
-              goal: activeGoal,
-            },
-          })
-        }
       }, pathname === '/api/pi/terminal' ? 20 : 0)
     }
     emit(frame) {
