@@ -997,7 +997,10 @@ const visionConfigPayload = (sessionAvailable) => ({
   thinkingSource: sessionAvailable ? 'session' : 'project',
 })
 
-const traceFixtures = docsTraces(baseEntries, sessions)
+const traceFixtures = await docsTraces(baseEntries, sessions)
+const primaryTrace = traceFixtures[0]
+const traceEditObservation = primaryTrace.observations.find(item => item.type === 'TOOL' && item.metadata.toolResultEntryId === 'tool-edit')
+const traceFinalGeneration = primaryTrace.observations.find(item => item.type === 'GENERATION' && item.metadata.messageEntryId === 'assistant-2')
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
@@ -1054,8 +1057,9 @@ try {
       await page.getByRole('button', { name: 'Trace explorer', exact: true }).click()
       await waitForTrace(page)
       await page.locator('.elune-table tbody tr').nth(4).waitFor()
-      await page.locator('[data-observation-id="release-edit"]').click()
-      await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+      await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).click()
+      await page.locator('.elune-detail-heading h3').filter({ hasText: traceEditObservation.name }).waitFor()
+      await page.locator('.elune-tabs button').filter({ hasText: /^input$/ }).click()
       await page.locator('.elune-table').getByText('field-notes', { exact: true }).first().waitFor()
       if (await page.getByRole('combobox', { name: 'Trace project', exact: true }).inputValue()) throw new Error('Explorer project filter is not clear')
     },
@@ -1068,13 +1072,12 @@ try {
     scenario: 'trace',
     interact: async (page) => {
       await openTraceInspector(page)
-      await page.locator('[data-observation-id="release-model-3"]').click()
-      await page.locator('.elune-detail-heading h3').filter({ hasText: 'Summarize the change' }).waitFor()
+      await page.locator(`[data-observation-id="${traceFinalGeneration.id}"]`).click()
+      await page.locator('.elune-detail-heading h3').filter({ hasText: traceFinalGeneration.name }).waitFor()
+      await page.locator('.elune-tabs button').filter({ hasText: /^output$/ }).click()
       await page.locator('.trace-host-footer summary').click()
       await assertTraceContentReachable(page)
-      await page.locator('.elune-selected').evaluate(element => { element.scrollTop = 0 })
-      await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = 0 })
-      await page.locator('[data-observation-id="release-model-3"]').scrollIntoViewIfNeeded()
+      await page.locator(`[data-observation-id="${traceFinalGeneration.id}"]`).scrollIntoViewIfNeeded()
     },
   })
   await capture({
@@ -1761,10 +1764,11 @@ try {
 console.log('Screenshot capture complete')
 
 async function waitForTrace(page) {
-  await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: 'Verify before publication' }).waitFor()
-  await page.locator('[data-observation-id="release-edit"]').waitFor()
+  await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: primaryTrace.name }).waitFor()
+  await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).waitFor()
   await page.locator('.trace-host-footer summary').filter({ hasText: 'Capture new runs' }).waitFor()
-  await page.locator('.elune-observations > .elune-pagination').getByText('1–8 of 8 loaded observations', { exact: false }).waitFor()
+  const count = primaryTrace.observations.length
+  await page.locator('.elune-observations > .elune-pagination').getByText(`1–${count} of ${count} loaded observations`, { exact: false }).waitFor()
 }
 
 async function openTraceInspector(page) {
@@ -1773,8 +1777,9 @@ async function openTraceInspector(page) {
   }
   await page.getByRole('button', { name: 'Session traces', exact: true }).click()
   await waitForTrace(page)
-  await page.locator('[data-observation-id="release-edit"]').click()
-  await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+  await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).click()
+  await page.locator('.elune-detail-heading h3').filter({ hasText: traceEditObservation.name }).waitFor()
+  await page.locator('.elune-tabs button').filter({ hasText: /^input$/ }).click()
   await page.locator('.elune-payload').filter({ hasText: 'await verify()' }).waitFor()
   const geometry = await page.locator('.elune-run-select').evaluate(element => {
     const select = element.querySelector('select').getBoundingClientRect()
@@ -1789,9 +1794,9 @@ async function openTraceWorkspace(page) {
   await page.getByRole('button', { name: 'Open workspace', exact: true }).click()
   await page.locator('.trace-panel-workspace .elune-ui[aria-busy="false"]').waitFor()
   await page.locator('.elune-timeline .elune-span.tool').first().waitFor()
-  await page.locator('[data-observation-id="release-edit"][aria-pressed="true"]').waitFor()
-  await page.locator('.elune-tabs button[aria-pressed="true"]').filter({ hasText: 'output' }).waitFor()
-  await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+  await page.locator(`[data-observation-id="${traceEditObservation.id}"][aria-pressed="true"]`).waitFor()
+  await page.locator('.elune-tabs button[aria-pressed="true"]').filter({ hasText: 'input' }).waitFor()
+  await page.locator('.elune-detail-heading h3').filter({ hasText: traceEditObservation.name }).waitFor()
   await assertTraceContentReachable(page)
 }
 
@@ -1813,6 +1818,8 @@ async function assertTraceContentReachable(page) {
     return line.top >= port.top && line.bottom <= Math.min(port.bottom, footer.top) && (hit === element || element.contains(hit)) && footer.bottom <= innerHeight
   })
   if (!reachable) throw new Error('Trace payload last line or capture footer is inaccessible')
+  await page.locator('.elune-selected').evaluate(element => { element.scrollTop = 0 })
+  await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = 0 })
 }
 
 async function openSubagentInspector(page, taskCount, exportPage = false) {

@@ -31,7 +31,7 @@ Captured manual compaction can appear as a separate `pi-compaction` run. Automat
 
 Select **Open workspace** from the inspector or explorer.
 
-![Tracing workspace with a timeline beside the selected observation output](../assets/screenshots/trace-workspace.png)
+![Tracing workspace with a timeline beside the selected observation details](../assets/screenshots/trace-workspace.png)
 
 *The workspace uses the area after the sidebar for the timeline and details.*
 
