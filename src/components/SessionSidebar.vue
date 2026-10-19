@@ -1349,8 +1349,7 @@ const vFocusSelect = {
                     >
                       <span v-if="isPinPending(item.session)">…</span>
                       <svg v-else viewBox="0 0 16 16" aria-hidden="true">
-                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
-                        <path d="m6.5 9.5-4 4"></path>
+                        <path d="M10.667 8V2.667h.667V1.333H4.667v1.333h.667V8l-1.333 1.333v1.333h3.467v4h1.067v-4H12V9.333z"></path>
                       </svg>
                     </button>
                     <button

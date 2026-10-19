@@ -1603,12 +1603,13 @@ kbd {
   stroke-width: 1.5;
 }
 
-.session-pin-button[aria-pressed="true"] {
-  color: #c9c9c9;
+.session-pin-button svg {
+  fill: currentColor;
+  stroke: none;
 }
 
-.session-pin-button[aria-pressed="true"] .pin-head {
-  fill: currentColor;
+.session-pin-button[aria-pressed="true"] {
+  color: #c9c9c9;
 }
 
 .session-pinned-icon {
