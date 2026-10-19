@@ -717,11 +717,11 @@ const toolActivityEntries = [
 ]
 
 const subagentOutcomeResults = [
-  { agent: 'general', task: 'Check release verification\n\nInspect the release script. Confirm that validation finishes before publication and that failed checks stop the release.' },
-  { agent: 'explore', task: 'Inspect packaging configuration' },
-  { agent: 'general', task: 'Review rollback handling' },
-  { agent: 'explore', task: 'Check release notes' },
-  { agent: 'general', task: 'Review publication conditions' },
+  { agent: 'general', title: 'Release verification', task: 'Check release verification\n\nInspect the release script. Confirm that validation finishes before publication and that failed checks stop the release.' },
+  { agent: 'explore', title: 'Packaging configuration', task: 'Inspect packaging configuration' },
+  { agent: 'general', title: 'Rollback handling', task: 'Review rollback handling' },
+  { agent: 'explore', title: 'Release notes', task: 'Check release notes' },
+  { agent: 'general', title: 'Publication conditions', task: 'Review publication conditions' },
 ].map((task, index) => ({
   ...task,
   status: index === 2 ? 'stopped' : 'done',
@@ -837,6 +837,7 @@ const researchEntries = [
       results: researchThreads.map((thread) => ({
         agent: 'researcher',
         agentSource: 'bundled',
+        title: thread.title,
         task: `[${thread.id}] ${thread.task}`,
         status: 'done',
         research: {
@@ -1911,6 +1912,10 @@ async function openSubagentInspector(page, taskCount, exportPage = false) {
   await inspector.waitFor()
   const tasks = inspector.locator('.subagent-inspector-task')
   if (await tasks.count() !== taskCount) throw new Error('Subagent inspector task count changed')
+  const titles = await tasks.locator('.subagent-inspector-task-label').allTextContents()
+  if (titles.some((title, index) => title.trim() !== subagentOutcomeResults[index].title)) {
+    throw new Error('Subagent inspector must show the supplied session titles')
+  }
   await inspector.locator('.subagent-summary').filter({ hasText: `${taskCount - 1} completed` }).waitFor()
   await inspector.locator('.subagent-summary').filter({ hasText: '1 stopped' }).waitFor()
   await tasks.nth(2).click()
@@ -2087,7 +2092,7 @@ function runtimeFor(scenario) {
         toolName: 'subagent',
         args: {
           mode: 'parallel',
-          tasks: subagentSidebarResults.map(({ agent, task }) => ({ agent, task })),
+          tasks: subagentSidebarResults.map(({ agent, title, task }) => ({ agent, title, task })),
         },
         partialResult: {
           content: [{ type: 'text', text: 'One check completed. Two checks are running.' }],

@@ -526,6 +526,7 @@ async function piApiHandler(req, res) {
         }
         try {
           const result = await runSubagent({
+            title: body.title,
             task: body.task,
             cwd: body.cwd,
             parentSessionPath: body.parentSessionPath,

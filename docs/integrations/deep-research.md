@@ -34,6 +34,8 @@ The bundled subagent extension reserves the `researcher` name for deep research.
 
 A researcher inherits the parent model and thinking level by default. An explicit model or thinking value on the subagent task takes priority.
 
+Each subagent task uses its planned thread title as the required `title`. The child session keeps this name in the sidebar.
+
 Research workers receive all tools discovered by their child runtime except `write` and `edit`. This includes `bash`, project-scoped tools, and external tools when they are available.
 
 The worker prompt prohibits file changes. It permits `bash` for CLI tools only when a command does not create, modify, move, rename, or delete files.

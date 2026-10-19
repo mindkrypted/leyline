@@ -27,6 +27,14 @@ The `subagent` tool supports these modes:
 
 Parallel and chain items can set their own model, thinking level, and working directory. An item setting takes priority over the top-level tool setting.
 
+## Required session titles
+
+Every child requires a short, nonblank `title`, separate from its full `task`. Single mode uses a top-level `title`. Each item in `tasks` or `chain` requires its own `title`.
+
+The extension checks all titles before it starts any child. A missing, empty, or whitespace-only title rejects the complete call. The backend also requires a nonblank title on each child request.
+
+Titles remain in live progress and final results, including failures, cancellations, and tasks that did not start. The inspector and HTML export prefer this title. Older sessions retain their existing label fallbacks.
+
 ## Model and thinking selection
 
 Leyline resolves models in this order:
@@ -51,7 +59,9 @@ The extension uses two internal integration routes:
 1. `POST /api/pi/subagents/resolve` resolves stored model overrides.
 2. `POST /api/pi/subagent` creates and runs the child session.
 
-The server creates a pi session with `parentSession` set to the parent session file. It also appends a `leyline-subagent-session` custom record. This marker identifies subagent children for sidebar nesting and distinguishes them from normal forks.
+The server creates a pi session with `parentSession` set to the parent session file. Before runtime startup, it saves the normalized title with `SessionManager.appendSessionInfo()`. The sidebar prefers this session name over task metadata.
+
+The server also appends a `leyline-subagent-session` custom record. This marker identifies subagent children for sidebar nesting and distinguishes them from normal forks.
 
 For older records without the marker, Leyline also finds child paths in parent `subagent` tool results. Identified children appear as [nested sidebar rows](../user-guide/sessions#open-a-subagent-session) under their parent. Each call stays in a compact Activity row. The subagent inspector provides an **Open child session** action for the selected task, and the child session links back to its parent.
 

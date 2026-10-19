@@ -64,7 +64,7 @@ For persisted sessions without message times, `modified` uses the session creati
 
 Session detail and open-runtime summaries use the research objective for `firstMessage` when the branch has no user message. For marked children, `firstMessage` removes the agent prompt wrapper when it contains a `Task:` marker.
 
-`subagentChildren` contains up to 50 child IDs, agent names, and task labels from persisted subagent results. Labels are limited to 120 characters. Runtime snapshots omit the field when no task metadata is available. Clients should preserve existing metadata when the field is absent.
+`subagentChildren` contains up to 50 child IDs, agent names, and display labels from persisted subagent results. The `task` field uses the explicit title when available, with older task labels as a fallback. Labels are limited to 120 characters. Runtime snapshots omit the field when no task metadata is available. Clients should preserve existing metadata when the field is absent.
 
 Use `isSubagentSession` with `parentSessionPath` to identify sidebar children. A parent path alone can describe a normal fork.
 
@@ -2368,6 +2368,7 @@ Request:
 
 ```text
 {
+  title: string,
   task: string,
   cwd: string,
   parentSessionPath?: string,
@@ -2380,6 +2381,8 @@ Request:
   systemPrompt?: string
 }
 ```
+
+`title` is required and must contain a non-whitespace character. The server normalizes whitespace and saves the title as the child's native session name before runtime startup. An invalid title returns `500` with `{ error }` before the server creates a child session.
 
 `parentSessionId` and `_toolCallId` supply capture linkage to the parent session and tool observation. The backend can also resolve the parent by `parentSessionPath`.
 

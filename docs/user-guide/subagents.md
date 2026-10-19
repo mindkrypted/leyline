@@ -63,6 +63,14 @@ The agent can use three subagent modes:
 
 A model or thinking value on one task takes priority over the mode-level value.
 
+## Session titles
+
+The parent agent must supply a short, nonblank title for every child session. This includes each parallel task and chain step. If any title is missing or blank, the call stops before any children start.
+
+Leyline saves the title as the child's session name. The sidebar shows the current session name. The inspector and HTML export show the supplied title, with full instructions under **Full task prompt**.
+
+Older sessions without titles keep their existing label fallbacks.
+
 ## Read a subagent card
 
 Each subagent call stays in one compact row inside an Activity card. Task details open in the subagent inspector instead of expanding the transcript.

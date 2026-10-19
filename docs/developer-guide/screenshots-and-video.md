@@ -95,7 +95,9 @@ DOCS_SCREENSHOT_FILTER=subagent-outcomes.png,subagent-inspector-mobile.png,subag
 | `docs/assets/screenshots/deep-research-mobile.png` | The same report with a mobile citation preview. |
 | `assets/readme/deep-research.png` | The research view in the README frame. |
 
-The inspector helper opens the single-call Activity card from its header, checks task selection and the full prompt, then reopens it from its row. Both entry points must keep the card collapsed and preserve its height and position. The export capture blocks the external preview renderer to verify that the inspector works offline.
+The fixtures give every child an explicit `title`, separate from its full `task` prompt. Research children use their planned thread titles.
+
+The inspector helper opens the single-call Activity card from its header, checks task titles, selection, and the full prompt, then reopens it from its row. Both entry points must keep the card collapsed and preserve its height and position. The export capture blocks the external preview renderer to verify that the inspector works offline.
 
 For sidebar child sessions:
 

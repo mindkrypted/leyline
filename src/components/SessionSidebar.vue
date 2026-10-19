@@ -1093,7 +1093,7 @@ function childrenForSession(session) {
 }
 
 function childTitle(child) {
-  return child.label || props.sessionTitle(child)
+  return child.name || child.label || props.sessionTitle(child)
 }
 
 function childIsLive(child) {

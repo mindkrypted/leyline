@@ -108,9 +108,11 @@ Subagent child sessions appear as nested rows under their parent session in the 
 
 ![Sidebar with subagent child rows nested under their parent session](../assets/screenshots/subagent-sidebar.png)
 
+New child rows show the session title supplied by the parent agent. A renamed child uses its current session name. Older children without names use the task label.
+
 By default, children expand when a child is live or selected. A manual chevron choice overrides this default. Settled children remain available under the parent, but collapse by default when none is live or selected. Children stay in creation order, so live updates do not reorder them.
 
-**Search sessions** also matches child task labels, agent names, and IDs. See [Projects and search](./projects-and-search#find-a-session-in-the-current-project) for search behavior.
+**Search sessions** also matches child titles, agent names, and IDs. See [Projects and search](./projects-and-search#find-a-session-in-the-current-project) for search behavior.
 
 Children do not add to regular session counts and have no separate pins or **Activity** entries. To delete a child, point to its row and select **Delete subagent session**. Confirm deletion in the dialog. This moves the child's JSONL file to Leyline trash.
 

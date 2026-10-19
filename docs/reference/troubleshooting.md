@@ -321,6 +321,9 @@ Confirm these items:
 3. Confirm that the selected child model exists.
 4. Confirm that its provider has usable credentials if authentication is required.
 5. Confirm that each tool in the agent definition is available.
+6. Confirm that every child has a nonblank `title`, including each parallel task and chain step.
+
+If any title is missing or blank, the call stops before any children start. Ask the parent agent to retry with titles. Reload an existing session if its tool schema still lacks the `title` field.
 
 A project agent definition replaces a global definition with the same agent
 name.

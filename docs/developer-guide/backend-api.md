@@ -313,7 +313,9 @@ Subagent model precedence is session, project, global, then the agent definition
 
 The subagent and vision execution routes create child pi sessions. They write an explicit marker before they start each child runtime. Normal subagents retain the normal runtime resources and their tool policy. Vision children use an isolated prompt, output-budget and inline capture, an empty tool allowlist, and a session-local image setting override.
 
-`session-summary.js` reads child task labels and agent names from parent subagent results. `toSessionDto()` includes this data as `subagentChildren` for sidebar grouping. Runtime snapshots omit unavailable metadata so client merges can retain known labels.
+The subagent route requires a nonblank `title`. It saves the title through `SessionManager.appendSessionInfo()` before runtime startup. The isolated vision path supplies `Image inspection` as its title.
+
+`session-summary.js` reads child titles and agent names from parent subagent results, with task labels as a fallback for older sessions. `toSessionDto()` includes this data as `subagentChildren` for sidebar grouping. Runtime snapshots omit unavailable metadata so client merges can retain known labels.
 
 ## Research state projection
 

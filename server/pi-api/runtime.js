@@ -2135,7 +2135,9 @@ function parentTracingContext(parentSessionId, parentSessionPath, toolCallId) {
   }
 }
 
-const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinkingLevel, tools, excludeTools, systemPrompt, isolatedSystemPrompt, images, allowImages = false, signal, onStart }) => {
+const runSubagent = trackRuntimeCreation(async ({ title, task, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinkingLevel, tools, excludeTools, systemPrompt, isolatedSystemPrompt, images, allowImages = false, signal, onStart }) => {
+  const sessionTitle = normalizeSessionName(title)
+  if (!sessionTitle) throw new Error('A nonblank subagent title is required')
   if (!cwd) throw new Error('cwd is required')
   if (!task) throw new Error('task is required')
   if (tools !== undefined && !Array.isArray(tools)) {
@@ -2168,6 +2170,7 @@ const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, 
   }
 
   const childId = sessionManager.getSessionId()
+  sessionManager.appendSessionInfo(sessionTitle)
   sessionManager.appendCustomEntry(SUBAGENT_SESSION_CUSTOM_TYPE, {
     sessionId: childId,
     parentSessionPath: parentSessionPath || null,
@@ -2320,6 +2323,7 @@ const VISION_AGENT_PROMPT =
 async function runVision({ question, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinking, image, signal }) {
   if (!image) throw new Error('image is required')
   return runSubagent({
+    title: 'Image inspection',
     task: question || 'Describe this image in detail.',
     cwd,
     parentSessionPath,

@@ -27,6 +27,16 @@ metadata can appear as a normal session.
 A chain stops when a step fails. Parallel mode returns all results, including
 individual failures.
 
+Every child requires a short, nonblank `title`, separate from its full `task`.
+Single mode uses a top-level `title`. Each parallel task and chain step requires
+its own `title`. If any title is missing or blank, the call fails before any
+children start.
+
+The server saves the title as the child's native pi session name before runtime
+startup. The sidebar shows the current session name. The inspector and HTML
+export show the supplied title and keep the full task prompt separate.
+Older sessions retain their existing label fallbacks.
+
 ## Agent definitions
 
 Put Markdown files with YAML frontmatter in one of these directories:
@@ -102,6 +112,7 @@ Single mode:
 ```json
 {
   "agent": "reviewer",
+  "title": "Review current changes",
   "task": "Review the current diff",
   "model": "inherit",
   "thinking": "high"
@@ -115,8 +126,8 @@ Parallel mode:
   "mode": "parallel",
   "model": "inherit",
   "tasks": [
-    { "agent": "reviewer", "task": "Review correctness" },
-    { "agent": "researcher", "task": "Check the API contract" }
+    { "agent": "reviewer", "title": "Correctness review", "task": "Review correctness" },
+    { "agent": "researcher", "title": "API contract", "task": "Check the API contract" }
   ]
 }
 ```
@@ -127,8 +138,8 @@ Chain mode:
 {
   "mode": "chain",
   "chain": [
-    { "agent": "researcher", "task": "Find the relevant source" },
-    { "agent": "reviewer", "task": "Review this evidence:\n{previous}" }
+    { "agent": "researcher", "title": "Find source evidence", "task": "Find the relevant source" },
+    { "agent": "reviewer", "title": "Review source evidence", "task": "Review this evidence:\n{previous}" }
   ]
 }
 ```
