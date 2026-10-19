@@ -5,13 +5,18 @@ const base = process.env.VITEPRESS_BASE || '/docs/'
 export default defineConfig({
   base,
   outDir: '../dist/docs',
+  appearance: 'force-dark',
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
   ],
   cacheDir: '../node_modules/.vitepress-cache',
   title: 'Leyline',
-  description: 'UI for your pi coding agent sessions',
+  description: 'A local web UI for pi coding agent sessions. Follow concurrent runs and inspect their transcripts and tool calls.',
   themeConfig: {
+    logo: '/leyline-mark.svg',
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/spmurrayzzz/leyline' },
+    ],
     nav: [
       { text: 'Guide', link: '/getting-started/' },
       { text: 'Motivations', link: '/motivations' },

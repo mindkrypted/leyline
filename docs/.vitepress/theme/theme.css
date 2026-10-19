@@ -1,0 +1,70 @@
+:root.dark {
+  --vp-c-bg: #0d0d0d;
+  --vp-c-bg-alt: #111111;
+  --vp-c-bg-elv: #161616;
+  --vp-c-bg-soft: #151515;
+
+  --vp-c-border: #2a2a2a;
+  --vp-c-divider: #212121;
+  --vp-c-gutter: #000000;
+
+  --vp-c-neutral: #ececec;
+  --vp-c-text-1: #ececec;
+  --vp-c-text-2: #afafaf;
+  --vp-c-text-3: #7a7a7a;
+
+  --vp-c-brand-1: #a99cff;
+  --vp-c-brand-2: #9b8cff;
+  --vp-c-brand-3: #8a78ff;
+  --vp-c-brand-soft: rgb(138 120 255 / 14%);
+
+  --vp-button-brand-bg: #8a78ff;
+  --vp-button-brand-hover-bg: #9b8cff;
+  --vp-button-brand-active-bg: #7b68f0;
+
+  --vp-code-block-bg: #121212;
+  --vp-code-copy-code-bg: #1a1a1a;
+  --vp-code-copy-code-hover-bg: #222222;
+  --vp-code-copy-code-active-text: #ececec;
+}
+
+.dark ::selection {
+  background: rgb(138 120 255 / 34%);
+}
+
+.VPNavBar .VPNavBarTitle .logo {
+  --vp-nav-logo-height: 22px;
+}
+
+.landing-page .VPLocalNav {
+  display: none;
+}
+
+.landing-page .VPNavBar.top {
+  background-color: transparent;
+}
+
+.landing-page .VPNavBar:not(.top) {
+  background-color: rgb(13 13 13 / 78%);
+  backdrop-filter: saturate(150%) blur(16px);
+}
+
+.landing-page .VPNavBar:not(.top) .content-body {
+  background-color: transparent;
+}
+
+.landing-page .VPNavBar.top .divider-line {
+  background-color: transparent;
+}
+
+.landing-page .VPNavBar:not(.top) .divider-line {
+  background-color: rgb(255 255 255 / 7%);
+}
+
+@media (max-width: 959px) {
+  .landing-page .VPNavBar,
+  .landing-page .VPNavBar .content-body {
+    background-color: rgb(13 13 13 / 92%);
+    backdrop-filter: saturate(150%) blur(16px);
+  }
+}
