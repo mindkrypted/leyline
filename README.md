@@ -60,7 +60,20 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 
 Read [Motivations](docs/motivations.md) for the project direction.
 
+## Desktop downloads
+
+Download the Apple silicon macOS DMG or Linux x64 archive from
+[GitHub Releases](https://github.com/spmurrayzzz/leyline/releases).
+
+macOS builds use ad-hoc signing and are **not notarized by Apple**. macOS can
+block the first launch. Follow the [macOS installation and security approval
+steps](docs/getting-started/installation.md#macos-desktop-release), including
+the app-specific quarantine fallback if necessary.
+
 ## Requirements
+
+The Node.js, npm, and dependency-installation requirements below apply to
+source builds. The downloaded desktop app includes its backend and runtime.
 
 - macOS or Linux (see the tested setup below)
 - Node.js 22.19.0, as specified in `.nvmrc`

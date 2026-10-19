@@ -4,9 +4,10 @@ Leyline is a local interface for a configured pi coding-agent environment. It
 reads pi sessions and uses pi runtime operations to run work from a browser or
 Electron window.
 
-For a packaged Linux desktop app, follow
-[Linux installation](./linux-installation). You do not need to run a Vite
-server for the installed app.
+For a desktop app, follow [macOS installation](./installation#macos-desktop-release)
+or [Linux installation](./linux-installation). The installed app includes its
+backend and does not need a Vite server. Downloaded macOS builds need
+[security approval](./installation#macos-security-warning) before first launch.
 
 ## Start the browser app
 

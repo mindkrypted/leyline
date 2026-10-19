@@ -33,6 +33,13 @@ The repository does not include a package lock. `@elune/embedded` uses the bare 
 | `npm run electron:dev` | Open Electron at `http://localhost:5173`. Start Vite first. |
 | `npm run electron:build` | Build the app and documentation, then package Electron in `release/`. |
 | `npm run local-publish` | macOS only: build the Apple silicon app, copy it to `/Applications/`, and link the CLI. |
+| `npm run version:patch` | Create a patch version, release commit, and annotated version tag locally. |
+| `npm run version:minor` | Create a minor version, release commit, and annotated version tag locally. |
+| `npm run version:major` | Create a major version, release commit, and annotated version tag locally. |
+
+The version commands require clean tracked files. They create no package lock
+and do not push or publish anything. See
+[Version tags and GitHub releases](../electron/packaging#version-tags-and-github-releases).
 
 For Linux installation and launchers, follow
 [Linux installation](../getting-started/linux-installation). The repository's

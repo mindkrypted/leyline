@@ -360,6 +360,43 @@ not provide the required speech-recognition service.
 
 Use a compatible browser, such as Chrome, for dictation.
 
+## macOS cannot verify Leyline
+
+Downloaded macOS builds use ad-hoc signing and have no Apple notarization.
+macOS can show **“Leyline” Not Opened** or say Apple could not verify that the
+app is free of malware.
+
+For a verified release you trust, use **System Settings → Privacy & Security →
+Open Anyway**. Follow the [macOS installation guide](../getting-started/installation#macos-security-warning)
+for the complete steps and the app-specific quarantine fallback.
+
+This approval can be necessary again after an update. Leyline does not remove
+quarantine automatically.
+
+## macOS says Leyline is damaged
+
+Download the current official release and verify its DMG against the matching
+`SHA256SUMS`. Copy the app to Applications, then check its signature:
+
+```bash
+codesign --verify --deep --strict --verbose=2 "/Applications/Leyline.app"
+```
+
+A valid bundle reports `valid on disk` and `satisfies its Designated Requirement`.
+Errors such as `code has no resources but signature indicates they must be present`
+or `a sealed resource is missing or invalid` indicate a signature or resource
+integrity failure. Do not remove quarantine to bypass a failed signature check.
+Download a fresh release and report the release version and exact error if the
+failure continues.
+
+If the checksum and signature checks pass, follow the
+[security approval steps](../getting-started/installation#macos-security-warning).
+Use the [quarantine fallback](../getting-started/installation#quarantine-fallback)
+only for a verified release you trust.
+
+Signature verification checks bundle integrity. It does not establish Apple
+notarization or a trusted publisher identity.
+
 ## The packaged terminal fails with `ENOTDIR`
 
 Rebuild with `npm run electron:build`. The packaging script must unpack the
