@@ -215,6 +215,7 @@ const composerFrameRef = ref(null)
 const startComposerAnchor = ref(null)
 const mobileProjectTrigger = ref(null)
 const composerDockAnchor = ref(null)
+const compactionDock = ref(null)
 const startupDraftSnapshot = ref(null)
 const modelPickerOpen = ref(false)
 const thinkingPickerOpen = ref(false)
@@ -417,14 +418,15 @@ const persistedTranscriptItems = computed(() => groupToolActivity(
   entries.value.map(entry => ({ ...entry, persistedEntry: entry })),
 ))
 const liveTranscriptItems = computed(() => groupToolActivity(liveFlowItems.value))
-const compactionCutIndex = computed(() => {
+const compactionBoundary = computed(() => {
+  if (!compactingContext.value) return null
   const cutEntryId = compaction.value?.cutEntryId
-  if (!cutEntryId) return persistedTranscriptItems.value.length
-  const index = persistedTranscriptItems.value.findIndex((item) => {
-    if (item.type !== 'tool-activity') return activityEntry(item).id === cutEntryId
-    return item.items.some((call) => activityEntry(call).id === cutEntryId)
-  })
-  return index === -1 ? persistedTranscriptItems.value.length : index
+  const items = [...persistedTranscriptItems.value, ...liveTranscriptItems.value]
+  const index = cutEntryId ? items.findIndex((item) => {
+    const calls = item.type === 'tool-activity' ? item.items : [item]
+    return calls.some((call) => activityEntry(call).id === cutEntryId)
+  }) : -1
+  return { index: index < 0 ? items.length : index, resolved: index >= 0 }
 })
 const inspectedSubagent = computed(() => {
   if (!subagentSelection.value) return null
@@ -4312,6 +4314,7 @@ function closePickerMenus() {
           'session-loading-workbench': sessionLoading,
           'session-handoff-workbench': sessionHandoff,
           'session-switching': sessionSwitching,
+          'compacting-workbench': compactingContext,
           'start-workbench-shell': !initializing && startFlowVisible,
           'startup-workbench': startupShellVisible,
           'in-project-startup-workbench': inProjectNewSessionRun,
@@ -4510,15 +4513,17 @@ function closePickerMenus() {
             :key="`${selectedSession.id}:${item.id}`"
           >
             <CompactionBoundary
-              v-if="compactingContext && itemIndex === compactionCutIndex"
+              v-if="compactionBoundary?.index === itemIndex"
               :reason="compaction?.reason || ''"
               :started-at="compaction?.startedAt || 0"
               :tokens="contextUsage?.tokens ?? null"
+              :viewport="workbench"
+              :dock="compactionDock"
             />
 
             <MobileToolActivity
               v-if="item.type === 'tool-activity'"
-              :class="{ 'is-frozen': compactingContext && itemIndex < compactionCutIndex }"
+              :class="{ 'is-frozen': compactionBoundary?.resolved && itemIndex < compactionBoundary.index }"
               :group="item"
               :expanded="isActivityExpanded(item)"
               @toggle="toggleActivity"
@@ -4551,7 +4556,7 @@ function closePickerMenus() {
               :data-entry-id="item.id"
               :class="{
                 'message-enter': isEnteringEntry(item),
-                'is-frozen': compactingContext && itemIndex < compactionCutIndex,
+                'is-frozen': compactionBoundary?.resolved && itemIndex < compactionBoundary.index,
               }"
               :copied-entry-id="copiedEntryId"
               :entry="activityEntry(item)"
@@ -4576,13 +4581,6 @@ function closePickerMenus() {
               @toggle-tool="toggleTool"
             />
           </template>
-
-          <CompactionBoundary
-            v-if="compactingContext && compactionCutIndex >= persistedTranscriptItems.length"
-            :reason="compaction?.reason || ''"
-            :started-at="compaction?.startedAt || 0"
-            :tokens="contextUsage?.tokens ?? null"
-          />
         </template>
 
         <TransitionGroup
@@ -4593,12 +4591,24 @@ function closePickerMenus() {
           :class="{ 'is-active': liveTurnActive, 'is-running': agentRunning }"
         >
           <div
-            v-for="item in liveTranscriptItems"
+            v-for="(item, itemIndex) in liveTranscriptItems"
             :key="item.id"
             class="live-item"
             :data-entry-id="item.persistedEntry?.id || item.id"
-            :class="liveItemClass(item)"
+            :class="[liveItemClass(item), {
+              'is-frozen': compactionBoundary?.resolved
+                && persistedTranscriptItems.length + itemIndex < compactionBoundary.index,
+            }]"
           >
+            <CompactionBoundary
+              v-if="compactionBoundary?.index === persistedTranscriptItems.length + itemIndex"
+              :reason="compaction?.reason || ''"
+              :started-at="compaction?.startedAt || 0"
+              :tokens="contextUsage?.tokens ?? null"
+              :viewport="workbench"
+              :dock="compactionDock"
+            />
+
             <MobileToolActivity
               v-if="item.type === 'tool-activity'"
               :group="item"
@@ -4670,6 +4680,16 @@ function closePickerMenus() {
 
           </div>
         </TransitionGroup>
+
+        <CompactionBoundary
+          v-if="!startupRun && !inProjectNewSessionRun
+            && compactionBoundary?.index === persistedTranscriptItems.length + liveTranscriptItems.length"
+          :reason="compaction?.reason || ''"
+          :started-at="compaction?.startedAt || 0"
+          :tokens="contextUsage?.tokens ?? null"
+          :viewport="workbench"
+          :dock="compactionDock"
+        />
       </div>
 
       <button
@@ -4758,6 +4778,7 @@ function closePickerMenus() {
         }"
         :style="composerFrameStyle"
       >
+        <div ref="compactionDock" class="compaction-boundary-dock"></div>
         <div
           class="composer-layer start-composer-layer"
           :class="{ 'is-active': homeComposerVisible && !extensionConfirmations.length && !confirmationPanelHeight }"
