@@ -29,7 +29,7 @@ jobs:
       - run: npm install
       - run: npm run docs:build
         env:
-          VITEPRESS_BASE: /leyline/
+          VITEPRESS_BASE: /
       - run: touch dist/docs/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
