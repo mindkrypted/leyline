@@ -1806,6 +1806,7 @@ export function useSessionWorkspace({
   }
 
   function dispose() {
+    sessionSelectionToken += 1
     sessionListRequestToken += 1
     startRuntimeRequests.clear()
     clearInterval(projectAgeTimer)
