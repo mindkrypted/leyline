@@ -64,6 +64,10 @@ app.on('second-instance', (_event, argv) => {
   if (command) sendWindowCommand(window, command.name, command.detail)
 })
 
+function hasPrimaryModifier(input) {
+  return process.platform === 'darwin' ? input.meta : input.control
+}
+
 async function createWindow(initialCommand, initialUrl = '') {
   await environmentReady
   const url = initialUrl
@@ -76,7 +80,7 @@ async function createWindow(initialCommand, initialUrl = '') {
     minWidth: 360,
     minHeight: 420,
     backgroundColor: '#0b0b10',
-    autoHideMenuBar: process.platform === 'linux',
+    autoHideMenuBar: process.platform === 'linux' || process.platform === 'win32',
     webPreferences: {
       backgroundThrottling: false,
       contextIsolation: true,
@@ -112,7 +116,7 @@ async function createWindow(initialCommand, initialUrl = '') {
     const key = input.key?.toLowerCase()
     const isNewWindow = input.type === 'keyDown'
       && key === 'n'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isNewSession = input.type === 'keyDown'
       && key === 'n'
@@ -120,22 +124,22 @@ async function createWindow(initialCommand, initialUrl = '') {
       && !input.shift
     const isCloseWindow = input.type === 'keyDown'
       && key === 'w'
-      && input.meta
+      && hasPrimaryModifier(input)
     const isToggleTerminal = input.type === 'keyDown'
       && key === 't'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isToggleSessionDetails = input.type === 'keyDown'
       && key === 'e'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isToggleMemory = input.type === 'keyDown'
       && key === 'm'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isToggleSidebar = input.type === 'keyDown'
       && key === 'e'
-      && input.meta
+      && hasPrimaryModifier(input)
       && !input.shift
     if (
       !isNewWindow
@@ -654,6 +658,15 @@ function installApplicationMenu() {
 if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     await environmentReady
+    // Diagnostic only: GPU feature status is misleading before the first
+    // window loads (Chromium reports software paths at whenReady, then
+    // enables GPU compositing once a compositor exists — verified on an
+    // RTX 4090). Log a few seconds in so the reading is truthful.
+    setTimeout(() => {
+      try {
+        console.log('[leyline] GPU feature status', app.getGPUFeatureStatus())
+      } catch {}
+    }, 4000).unref?.()
     installApplicationMenu()
     await createWindow(nativeCommandFromArgv(process.argv))
   })

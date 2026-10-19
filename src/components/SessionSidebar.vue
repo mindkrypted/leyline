@@ -3,6 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { backendDisplayAddress } from '../lib/backend'
 import { sessionTime } from '../lib/format'
 
+const isWindows = /Win/i.test(navigator.platform || navigator.userAgent || '')
+const quickSwitchShortcutLabel = isWindows ? 'Ctrl+K' : '⌘K'
+
 const props = defineProps({
   activityActionError: {
     type: String,
@@ -1356,7 +1359,7 @@ const vFocusSelect = {
             <strong>Go to</strong>
             <small>Projects and sessions</small>
           </span>
-          <kbd class="sidebar-project-shortcut-key" aria-hidden="true">⌘K</kbd>
+          <kbd class="sidebar-project-shortcut-key" aria-hidden="true">{{ quickSwitchShortcutLabel }}</kbd>
         </button>
         <button
           class="sidebar-project-shortcut"

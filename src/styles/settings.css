@@ -1557,7 +1557,7 @@
 }
 
 .pi-settings-thinking-map input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 .pi-settings-thinking-map input:disabled {

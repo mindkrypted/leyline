@@ -6,6 +6,9 @@ import UltrafastToggle from './UltrafastToggle.vue'
 import PromptQueue from './PromptQueue.vue'
 import { formatMode } from '../lib/format'
 
+const isWindows = /Win/i.test(navigator.platform || navigator.userAgent || '')
+const steerShortcutLabel = isWindows ? 'Alt+Enter' : 'Option+Enter'
+
 const props = defineProps({
   agentRunning: Boolean,
   attachedImages: {
@@ -452,7 +455,7 @@ function updateDraft(event) {
                 :disabled="submitDisabled || promptQueue.held"
                 :title="promptQueue.held ? 'Resume the queue before steering' : 'Deliver at the agent’s next input boundary'"
                 @click="submitFromMenu('steer')"
-              ><span>Steer current run</span><kbd>Option+Enter</kbd></button>
+              ><span>Steer current run</span><kbd>{{ steerShortcutLabel }}</kbd></button>
             </div>
           </div>
         </div>
