@@ -72,6 +72,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           test -x release/Leyline-darwin-arm64/Leyline.app/Contents/MacOS/Leyline
+          codesign --verify --deep --strict --verbose=2 release/Leyline-darwin-arm64/Leyline.app
           mkdir -p artifacts
           ln -s /Applications release/Leyline-darwin-arm64/Applications
           hdiutil create \
@@ -134,7 +135,7 @@ jobs:
               flags+=(--prerelease)
             fi
             gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
-              --notes "macOS builds are unsigned and not notarized. macOS may block the first launch."
+              --notes "macOS builds use ad-hoc signing and are not notarized. macOS may block the first launch."
           fi
           gh release upload "$GITHUB_REF_NAME" \
             artifacts/*.dmg artifacts/*.tar.gz artifacts/SHA256SUMS \
