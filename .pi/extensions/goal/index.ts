@@ -555,7 +555,15 @@ export default function goalExtension(pi: ExtensionAPI) {
 			}),
 		}),
 		async execute() {
-			if (!state.goal) throw new Error("no goal is currently set");
+			// No goal is a benign precondition, not a failure: report it as a
+			// normal result (like get_goal does) so the model can simply move
+			// on instead of receiving a tool error.
+			if (!state.goal) {
+				return {
+					content: [{ type: "text", text: goalResponse(state.goal) }],
+					details: { goal: state.goal },
+				};
+			}
 			setStatus("complete");
 			return {
 				content: [{ type: "text", text: goalResponse(state.goal, true) }],

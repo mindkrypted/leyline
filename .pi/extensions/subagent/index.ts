@@ -356,15 +356,9 @@ function subagentParameters(agentNames: string[]) {
     thinking: Type.Optional(StringEnum(THINKING_SETTINGS, {
       description: "Optional thinking-level override for child agents. Use 'inherit' for the parent session's current level.",
     })),
-    mode: Type.Optional(
-      Type.Enum({
-        single: "single",
-        parallel: "parallel",
-        chain: "chain",
-      } as const, {
-        description: "Execution mode (default: single)",
-      }),
-    ),
+    mode: Type.Optional(StringEnum(["single", "parallel", "chain"] as const, {
+      description: "Execution mode (default: single)",
+    })),
     cwd: Type.Optional(
       Type.String({
         description: "Working directory for the child agent",
