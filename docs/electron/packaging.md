@@ -1,3 +1,7 @@
+---
+description: Build and install the Leyline desktop app for macOS or Linux, including native terminal files and embedded tracing.
+---
+
 # Packaging
 
 ## Build the desktop app

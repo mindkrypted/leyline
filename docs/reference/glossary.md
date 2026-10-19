@@ -1,3 +1,7 @@
+---
+description: Definitions of Leyline terms, including sessions, runtimes, steering, subagents, memory, tracing, and backend connections.
+---
+
 # Glossary
 
 - **Active run**: Work that a pi runtime is currently generating or executing.

@@ -1,3 +1,7 @@
+---
+description: Find Leyline's frontend, backend, shared modules, Electron shell, extensions, styles, and development scripts.
+---
+
 # Project layout
 
 ## Frontend

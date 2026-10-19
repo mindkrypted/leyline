@@ -1,3 +1,7 @@
+---
+description: Create your first Leyline session, select a project and model, check trace capture, and send a prompt.
+---
+
 # First run
 
 Trace capture starts on for new runs. Before submitting private data, check

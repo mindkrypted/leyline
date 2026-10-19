@@ -1,3 +1,7 @@
+---
+description: Commands to run, build, package, and capture Leyline, plus CLI options for the desktop app.
+---
+
 # Commands
 
 ## Install dependencies

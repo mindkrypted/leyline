@@ -1,3 +1,7 @@
+---
+description: Resolve Leyline startup, backend connection, live update, model, terminal, and trace capture problems.
+---
+
 # Troubleshooting
 
 ## The dev server does not start
