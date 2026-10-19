@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import {
   basename,
   dirname,
@@ -41,6 +40,7 @@ import {
   toSessionDto,
 } from './dtos.js'
 import { html, json, readJson } from './http.js'
+import { leylineDataDir } from './leyline-db.js'
 import {
   createMemory,
   deleteMemories,
@@ -426,6 +426,26 @@ async function buildRuntimeResult(
                 pi.on('session_start', () => {
                   if (pi.getSettings().defaultTools?.includes('-tool_search')) return
                   pi.setActiveTools([...pi.getActiveTools(), 'tool_search'])
+                })
+                // OD-2/AGT-3: on win32 offer powershell alongside bash by
+                // default. Only where no explicit tool selection is in force:
+                // Leyline passed no `tools` allowlist for this session, pi
+                // did not exclude it, and settings hold no '-powershell' and
+                // no plain defaultTools entries (plain entries replace the
+                // default selection in pi; an empty list selects none).
+                pi.on('session_start', () => {
+                  if (process.platform !== 'win32') return
+                  if (tools !== undefined || excludeTools.includes('powershell')) return
+                  const defaultTools = pi.getSettings().defaultTools
+                  if (defaultTools?.includes('-powershell')) return
+                  if (Array.isArray(defaultTools)
+                    && !defaultTools.includes('+powershell')
+                    && (defaultTools.length === 0
+                      || defaultTools.some((entry) => typeof entry === 'string'
+                        && !entry.startsWith('+') && !entry.startsWith('-')))) return
+                  const activeTools = pi.getActiveTools()
+                  if (activeTools.includes('powershell')) return
+                  pi.setActiveTools([...activeTools, 'powershell'])
                 })
               },
               builtin: true,
@@ -1035,9 +1055,7 @@ function imageFileExtension(mimeType) {
 }
 
 function visionImageBaseDir() {
-  const root = process.env.LEYLINE_MEMORY_DIR
-    || join(homedir(), '.local', 'share', 'leyline')
-  return join(root, 'attachments')
+  return join(leylineDataDir(), 'attachments')
 }
 
 async function writeVisionImage(session, image) {

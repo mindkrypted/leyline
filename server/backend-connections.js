@@ -1,11 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
 import { setCorsHeaders } from './pi-api/cors.js'
 import { json, readJson } from './pi-api/http.js'
+import { openMemoryDb } from './pi-api/leyline-db.js'
 
 const BUILTIN_CONNECTION_ID = 'builtin'
 const THINKING_DEFAULT_VALUES = new Set(['collapsed', 'expanded'])
@@ -413,9 +410,7 @@ function validUrl(value) {
 }
 
 function openDb() {
-  mkdirSync(dirname(dbPath()), { recursive: true })
-  const db = new DatabaseSync(dbPath())
-  db.exec('PRAGMA busy_timeout = 2000')
+  const db = openMemoryDb()
   db.exec(`
     CREATE TABLE IF NOT EXISTS backend_connections (
       id TEXT PRIMARY KEY,
@@ -441,10 +436,4 @@ function openDb() {
       ON pinned_sessions(connection_id, pinned_at DESC);
   `)
   return db
-}
-
-function dbPath() {
-  const dir = process.env.LEYLINE_MEMORY_DIR
-    || join(homedir(), '.local', 'share', 'leyline')
-  return join(dir, 'memory.sqlite')
 }
