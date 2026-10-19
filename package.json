@@ -15,7 +15,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "local-publish": "./scripts/local-publish.sh",
-    "electron:dev": "LEYLINE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron:dev": "node scripts/electron-dev.js",
     "electron:build": "./scripts/electron-build.sh",
     "screenshot": "node scripts/screenshot.js",
     "docs:screenshots": "node scripts/docs-screenshots.js",
@@ -24,9 +24,9 @@
     "mock-backend": "node scripts/mock-backend.js"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.99.1",
-    "@earendil-works/pi-coding-agent": "1.2.0",
-    "@elune/embedded": "spmurrayzzz/elune",
+    "@earendil-works/pi-ai": "1.3.0",
+    "@earendil-works/pi-coding-agent": "1.3.0",
+    "@elune/embedded": "git+https://github.com/spmurrayzzz/elune.git#27d7d3681bfeb57d9b02d66cff4583cdfccf9c0f",
     "@pierre/diffs": "1.2.0-beta.6",
     "@vitejs/plugin-vue": "6.0.7",
     "@xterm/addon-fit": "0.11.0",
