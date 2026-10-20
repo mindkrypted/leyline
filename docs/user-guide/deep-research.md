@@ -28,11 +28,11 @@ The phase bar shows four steps:
 - **Synthesize**: The lead compares the thread results and builds the citation ledger.
 - **Report**: The lead writes the final cited report.
 
-A research plan normally contains two to five threads. The **Research threads** card shows each thread ID, title, source count, and status.
+A research plan normally contains two to five threads. The **Research threads** row stays compact inside Activity. Select it to open the [subagent inspector](./subagents#read-a-subagent-card), then select a thread to read its prompt, source count, status, and result.
 
-Select a thread row to open its child session. Use Command-click, Ctrl-click, or
-middle-click to open it in a new tab or window. The child transcript contains
-the worker's tool calls, source work, and final result.
+Select **Open child session** in the inspector to open the worker's transcript. Use Command-click, Ctrl-click, or middle-click on that control to open it in a new tab or window. The child transcript contains the worker's tool calls, source work, and final result.
+
+Research workers also appear as [nested child rows](./sessions#open-a-subagent-session) under the research parent in the sidebar.
 
 The sidebar marks each research session with a flask. During a run, the row can show its current phase or **gather N/N**. A selected completed session shows **ready**.
 
@@ -102,6 +102,6 @@ A backend process restart does not restart interrupted worker calls. Reopen the 
 
 ## Export the research
 
-**Export transcript** writes the report, research-thread cards, and every ledger source to the HTML file. It keeps cited, supporting, and excluded sources.
+**Export transcript** writes the report, research-thread results, and every ledger source to the HTML file. Thread results open in the exported subagent inspector. The export keeps cited, supporting, and excluded sources.
 
 Exported citations are normal links. The standalone file does not focus a ledger card when you select a citation.

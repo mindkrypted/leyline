@@ -33,7 +33,7 @@ export async function listPersistedSessions() {
     const files = sessionDir
       ? await sessionFiles(sessionDir)
       : await defaultSessionFiles()
-    return listSessionsFromFiles(files, !!sessionDir)
+    return listSessionsFromFiles(files)
   })()
   pendingSessionList = request
   try {
@@ -113,8 +113,8 @@ export function configuredSessionDir(cwd) {
   return SettingsManager.create(cwd, getAgentDir()).getSessionDir()
 }
 
-async function listSessionsFromFiles(files, goalFallback) {
-  const sessions = await buildSessionInfos(files, goalFallback)
+async function listSessionsFromFiles(files) {
+  const sessions = await buildSessionInfos(files)
   const marked = await markSubagentSessions(sessions)
   return marked.sort((a, b) => b.modified.getTime() - a.modified.getTime())
 }
@@ -273,7 +273,7 @@ function sessionHeaderFromLine(line) {
   }
 }
 
-async function buildSessionInfos(files, goalFallback) {
+async function buildSessionInfos(files) {
   const sessions = new Array(files.length)
   const misses = []
   let nextIndex = 0
@@ -300,7 +300,7 @@ async function buildSessionInfos(files, goalFallback) {
   }))
   if (misses.length) {
     misses.sort((a, b) => a.index - b.index)
-    const results = await readSessionMisses(misses, goalFallback)
+    const results = await readSessionMisses(misses)
     for (const result of results) {
       sessions[result.index] = result.session
       if (!result.session) continue
@@ -318,22 +318,22 @@ async function buildSessionInfos(files, goalFallback) {
   return sessions.filter(Boolean)
 }
 
-async function readSessionMisses(misses, goalFallback) {
+async function readSessionMisses(misses) {
   if (summaryShuttingDown) throw new Error('Summary scanner is shutting down')
   try {
     if (!summaryPool) summaryPool = createSummaryPool(SESSION_SUMMARY_WORKERS)
-    return await summaryPool.scan(misses, goalFallback)
+    return await summaryPool.scan(misses)
   } catch (error) {
     if (summaryShuttingDown || isClosedPoolError(error)) throw error
     const failedPool = summaryPool
     summaryPool = null
     await failedPool?.close().catch(() => {})
     if (summaryShuttingDown) throw new Error('Summary scanner is shutting down')
-    return readSessionMissesOnThread(misses, goalFallback)
+    return readSessionMissesOnThread(misses)
   }
 }
 
-async function readSessionMissesOnThread(misses, goalFallback) {
+async function readSessionMissesOnThread(misses) {
   const results = new Array(misses.length)
   let nextIndex = 0
   const workerCount = Math.min(PROJECT_SCAN_CONCURRENCY, misses.length)
@@ -343,7 +343,7 @@ async function readSessionMissesOnThread(misses, goalFallback) {
       const job = misses[index]
       results[index] = {
         ...job,
-        session: await buildSessionInfo(job.path, goalFallback),
+        session: await buildSessionInfo(job.path),
       }
     }
   }))

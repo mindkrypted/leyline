@@ -10,7 +10,7 @@ const props = defineProps({
   },
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'open-source'])
 const view = ref('cited')
 const views = computed(() => [
   {
@@ -84,6 +84,24 @@ function sourceSummary(source) {
   return source.claim || source.evidence || ''
 }
 
+function openSource(source, event) {
+  const anchor = event.currentTarget
+  const rect = anchor.getBoundingClientRect()
+  emit('open-source', {
+    anchor,
+    id: source.id,
+    origin: 'ledger',
+    rect: {
+      bottom: rect.bottom,
+      height: rect.height,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+    },
+    source,
+  })
+}
+
 function invalidCitationTarget(source) {
   return props.research?.invalidLinks?.find((link) => {
     return link.id === source.id
@@ -130,13 +148,11 @@ function invalidCitationTarget(source) {
           'invalid-citation': !!invalidCitationTarget(source),
         }"
       >
-        <component
-          :is="source.url ? 'a' : 'div'"
+        <button
           class="research-source-select"
-          :href="source.url || undefined"
-          :target="source.url ? '_blank' : undefined"
-          :rel="source.url ? 'noreferrer' : undefined"
+          type="button"
           :title="source.path || source.url || undefined"
+          @click="openSource(source, $event)"
         >
           <span class="research-source-card-head">
             <b>{{ source.id }}</b>
@@ -160,7 +176,7 @@ function invalidCitationTarget(source) {
           <span v-if="sourceSummary(source)" class="research-source-summary">
             {{ sourceSummary(source) }}
           </span>
-        </component>
+        </button>
       </article>
       <article
         v-for="link in unmatchedInvalidLinks"

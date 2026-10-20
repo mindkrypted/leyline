@@ -1,5 +1,5 @@
 export const BUILTIN_BACKEND_CONNECTION_ID = 'builtin'
-export const BACKEND_API_VERSION = 1
+export const BACKEND_API_VERSION = 2
 
 let activeBackendBaseUrl = ''
 

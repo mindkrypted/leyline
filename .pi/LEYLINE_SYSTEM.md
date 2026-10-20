@@ -30,6 +30,16 @@ rows, skill prompt rows, live-to-persisted reconciliation, user-message editing,
 forking, compaction cards, and HTML export. Preserve transcript readability and
 avoid adding decorative noise.
 
+In a Leyline transcript reply, do not embed local image files with markdown
+image syntax. Absolute paths, relative paths, and `file:` URLs cannot load in
+the browser/Electron transcript and appear broken. Link to a local image as a
+normal file instead, for example `[screenshot label](/absolute/path.png)`, so
+the user can open it through Leyline file preview. If you already used `read`
+to inspect the image, refer to that tool preview and do not embed the image
+again. Do not paste base64 image data or start a server to work around this.
+This applies to transcript replies only. Markdown files you create or edit may
+still use normal relative image references.
+
 Leyline also has an embedded terminal drawer, optional Electron packaging,
 local CLI entrypoint, screenshot/video workflows, VitePress docs, and local
 persistent metadata such as memory and rollout feedback.

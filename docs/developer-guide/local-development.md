@@ -24,7 +24,7 @@ npm run dev
 ```
 
 Open `http://localhost:5173/`. Vite mounts the Vue app, VitePress site, native
-backend, connection registry, SSE endpoint, and terminal WebSocket.
+backend, connection registry, runtime and Git review WebSockets, and terminal WebSocket.
 
 Keep this process running during browser work and screenshot capture.
 
@@ -64,7 +64,7 @@ npm run electron:build
 
 ## Preview limitations
 
-`npm run preview` previews the built Vue files. It does not mount the pi API plugin or terminal WebSocket.
+`npm run preview` previews the built Vue files. It does not mount the pi API plugin or runtime, Git review, and terminal WebSockets.
 
 Use `npm run dev` when you must operate sessions or validate runtime behavior.
 

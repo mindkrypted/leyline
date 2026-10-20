@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import CopyIcon from './CopyIcon.vue'
 import SmoothMarkdownBlock from './SmoothMarkdownBlock.vue'
 
 const props = defineProps({
@@ -32,10 +33,6 @@ const thinkingExpanded = ref(props.thinkingInitiallyExpanded)
 
 function copyTitle(id) {
   return props.copiedEntryId === id ? 'Copied' : 'Copy'
-}
-
-function copyGlyph(id) {
-  return props.copiedEntryId === id ? '✓' : '⧉'
 }
 
 function openImage(src, title) {
@@ -88,7 +85,7 @@ function openImage(src, title) {
         :title="copyTitle(messageId)"
         @click="emit('copy')"
       >
-        {{ copyGlyph(messageId) }}
+        <CopyIcon :copied="copiedEntryId === messageId" />
       </button>
     </div>
     <template v-for="(block, index) in blocks" :key="`live-${index}`">

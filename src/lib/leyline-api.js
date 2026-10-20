@@ -41,6 +41,17 @@ export function setDefaultBackendConnection(id) {
   )
 }
 
+export function fetchNetworkAccess() {
+  return shellRequest('/api/leyline/network-access', 'Failed to load network access settings')
+}
+
+export function saveNetworkAccess(values) {
+  return shellRequest('/api/leyline/network-access', 'Failed to save network access settings', {
+    method: 'PUT',
+    body: values,
+  })
+}
+
 export function getLeylineSetting(key) {
   return shellRequest(
     `/api/leyline/settings/${encodeURIComponent(key)}`,

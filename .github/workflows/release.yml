@@ -1,0 +1,142 @@
+name: Build releases
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: darwin-arm64
+          - os: ubuntu-22.04
+            target: linux-x64
+    defaults:
+      run:
+        shell: bash
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Verify build target
+        run: |
+          actual="$(node -p 'process.platform + "-" + process.arch')"
+          echo "Building $actual"
+          test "$actual" = "$TARGET"
+      - name: Set package version
+        id: version
+        run: |
+          version="0.0.0-dev.${GITHUB_RUN_NUMBER}"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-].+)?$ ]]; then
+              echo "::error::Release tags must use v followed by a semantic version, such as v0.1.0."
+              exit 1
+            fi
+          fi
+          npm version "$version" --no-git-tag-version --no-package-lock --ignore-scripts --allow-same-version
+          test "$(node -p 'require("./package.json").version')" = "${version%%+*}"
+          npm pkg set version="$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: safedep/pmg@v1
+        if: runner.os == 'Linux'
+        with:
+          config-file: pmg.yml
+          disable-telemetry: "true"
+      - name: Install dependencies
+        run: npm install --no-package-lock
+      - name: Build desktop app
+        run: npm run electron:build
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          test -x release/Leyline-darwin-arm64/Leyline.app/Contents/MacOS/Leyline
+          codesign --verify --deep --strict --verbose=2 release/Leyline-darwin-arm64/Leyline.app
+          mkdir -p artifacts
+          ln -s /Applications release/Leyline-darwin-arm64/Applications
+          hdiutil create \
+            -volname Leyline \
+            -srcfolder release/Leyline-darwin-arm64 \
+            -format UDZO \
+            "artifacts/Leyline-${VERSION}-macos-arm64.dmg"
+          hdiutil verify "artifacts/Leyline-${VERSION}-macos-arm64.dmg"
+      - name: Create Linux archive
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          test -x release/Leyline-linux-x64/Leyline
+          mkdir -p artifacts
+          tar -czf "artifacts/Leyline-${VERSION}-linux-x64.tar.gz" -C release Leyline-linux-x64
+      - name: Create checksums
+        working-directory: artifacts
+        run: shasum -a 256 -- * > "SHA256SUMS-${TARGET}.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leyline-${{ matrix.target }}
+          path: artifacts/
+          if-no-files-found: error
+          compression-level: 0
+
+  release:
+    name: Create draft release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: leyline-*
+          path: artifacts
+          merge-multiple: true
+      - name: Verify and combine checksums
+        working-directory: artifacts
+        run: |
+          sha256sum --check SHA256SUMS-*.txt
+          sha256sum -- *.dmg *.tar.gz > SHA256SUMS
+      - name: Create or update draft release
+        shell: bash
+        run: |
+          if is_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [[ "$is_draft" != "true" ]]; then
+              echo "::error::Refusing to change an already published release."
+              exit 1
+            fi
+          else
+            flags=(--draft --verify-tag --title "Leyline $GITHUB_REF_NAME" --generate-notes)
+            if [[ "${GITHUB_REF_NAME%%+*}" == *-* ]]; then
+              flags+=(--prerelease)
+            fi
+            gh release create "$GITHUB_REF_NAME" "${flags[@]}" \
+              --notes "macOS builds use ad-hoc signing and are not notarized. macOS may block the first launch."
+          fi
+          gh release upload "$GITHUB_REF_NAME" \
+            artifacts/*.dmg artifacts/*.tar.gz artifacts/SHA256SUMS \
+            --clobber

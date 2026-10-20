@@ -1,4 +1,18 @@
+---
+description: Build and install the Leyline desktop app for macOS or Linux, including native terminal files and embedded tracing.
+---
+
 # Packaging
+
+## Download a release
+
+Published [GitHub Releases](https://github.com/spmurrayzzz/leyline/releases)
+include an Apple silicon macOS DMG, a Linux x64 archive, and `SHA256SUMS`.
+Expand **Assets** on the release page to find the downloads. The **Tags** page
+lists source archives only.
+
+For macOS installation, checksum verification, and first-launch security
+approval, follow [Installation](../getting-started/installation#macos-desktop-release).
 
 ## Build the desktop app
 
@@ -22,6 +36,16 @@ The build also places `@elune/embedded`, including its SQLite worker, in
 The package needs no sibling Elune checkout or standalone Go server. See
 [Elune integration](../integrations/elune).
 
+On macOS, Electron Packager ad-hoc signs the completed bundle, including its
+helpers and frameworks. Signing failures stop the build. The release workflow
+also runs strict, recursive `codesign` verification before creating the DMG.
+DMG integrity checks alone do not validate the app's signature.
+
+Ad-hoc signing requires no Apple credentials. It does not provide Developer ID
+signing or Apple notarization. Users can still see a macOS security warning and
+need [manual approval](../getting-started/installation#macos-security-warning).
+The build does not remove quarantine or disable Gatekeeper.
+
 After dependency or backend updates, rebuild, install, and restart the app.
 A browser refresh cannot update files in an installed Electron package.
 
@@ -32,6 +56,29 @@ The packaging flow uses these files:
 - `electron/leyline-server-process.js`
 - `server/leyline-server.js`
 - `server/pi-api/`
+
+## Version tags and GitHub releases
+
+From a clean tracked working tree, run one local version command:
+
+```bash
+npm run version:patch
+npm run version:minor
+npm run version:major
+```
+
+Each command updates `package.json`, creates a release commit, and adds an
+annotated `v` version tag. It creates no package lock and does not push or
+publish anything.
+
+After you push the commit and tag, `.github/workflows/release.yml` builds both
+platforms and creates a **draft GitHub Release** with the packages and
+checksums. Publishing the draft is a separate manual action. Only users with
+repository write access can see the draft and download its assets.
+
+A manual **Actions → Build releases → Run workflow** run uploads workflow
+artifacts only. It does not create a release or a version tag. Download those
+artifacts from the completed workflow run's summary page.
 
 ## Install on Linux
 
@@ -44,7 +91,8 @@ both currently assume a macOS app bundle.
 
 ## Install on Apple silicon macOS
 
-Run:
+For a downloaded DMG, follow [Installation](../getting-started/installation#macos-desktop-release).
+To build and install from your source checkout, run:
 
 ```bash
 npm run local-publish

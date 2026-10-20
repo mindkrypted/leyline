@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto'
-import { THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
+import { createHash, randomUUID } from 'node:crypto'
+import { NETWORK_ACCESS_PORT_SETTING_KEY, NETWORK_ACCESS_SETTING_KEY, THINKING_DEFAULT_SETTING_KEY } from '../lib/leyline-settings.js'
+import { networkAccessStatus, setNetworkAccess } from './network-access.js'
 import { setCorsHeaders } from './pi-api/cors.js'
 import { json, readJson } from './pi-api/http.js'
 import { openMemoryDb } from './pi-api/leyline-db.js'
@@ -24,6 +25,22 @@ export async function backendConnectionsHandler(req, res) {
   const url = new URL(req.url, 'http://localhost')
 
   try {
+    if (url.pathname === '/network-access') {
+      if (req.method === 'GET') return json(res, await networkAccessStatus())
+      if (req.method !== 'PUT') return json(res, { error: 'Method not allowed' }, 405)
+      const body = await readJson(req, { maxBytes: 1024 })
+      if (body?.enabled === undefined && body?.port === undefined) {
+        return json(res, { error: 'Enabled or port is required' }, 400)
+      }
+      if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
+        return json(res, { error: 'Enabled must be a boolean' }, 400)
+      }
+      if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 0 || body.port > 65535)) {
+        return json(res, { error: 'Port must be an integer from 0 through 65535' }, 400)
+      }
+      return json(res, await setNetworkAccess(body, res))
+    }
+
     if (url.pathname === '/connections') {
       if (req.method === 'GET') return json(res, readRegistry())
       if (req.method === 'POST') {
@@ -216,6 +233,22 @@ function registryDto(db) {
     ? storedDefault
     : BUILTIN_CONNECTION_ID
   return { connections, defaultConnectionId }
+}
+
+export function readNetworkAccessSettings(owner) {
+  const scope = createHash('sha256').update(owner).digest('hex')
+  const enabledKey = `${NETWORK_ACCESS_SETTING_KEY}.${scope}`
+  const portKey = `${NETWORK_ACCESS_PORT_SETTING_KEY}.${scope}`
+  const values = readBackendSettings([enabledKey, portKey])
+  const port = Number(values[portKey])
+  return {
+    enabled: values[enabledKey] === 'true',
+    port: Number.isInteger(port) && port >= 0 && port <= 65535 ? port : 0,
+    persist: ({ enabled, port }) => writeBackendSettings({
+      [enabledKey]: String(enabled),
+      [portKey]: String(port),
+    }),
+  }
 }
 
 export function readBackendSettings(keys) {

@@ -6,8 +6,11 @@ const PierrePreview = defineAsyncComponent(() => import('./PierrePreview.vue'))
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import CopyIcon from './CopyIcon.vue'
+import { mobileToolStatus, toolStatusTone } from '../../lib/tool-activity.js'
 import { researchSourcesMatch } from '../../lib/research-state.js'
 import { systemPromptInfo } from '../../lib/system-prompt.js'
+import { subagentCallTitle } from '../../lib/subagent-view.js'
 import {
   entryClass,
   imageBlocksFor,
@@ -37,6 +40,7 @@ const props = defineProps({
   },
   skillExpanded: Boolean,
   systemPromptSelected: Boolean,
+  subagentInspectorSelected: Boolean,
   thinkingInitiallyExpanded: Boolean,
   toolExpanded: Boolean,
   toolStatus: {
@@ -50,7 +54,7 @@ const emit = defineEmits([
   'edit',
   'fork',
   'mark-feedback',
-  'navigate-child-session',
+  'inspect-subagent',
   'open-image',
   'open-research-source',
   'open-system-prompt',
@@ -114,13 +118,13 @@ function copyTitle(id) {
   return props.copiedEntryId === id ? 'Copied' : 'Copy'
 }
 
-function copyGlyph(id) {
-  return props.copiedEntryId === id ? '✓' : '⧉'
-}
-
 function isLocalEntry(entry) {
   return entry?.persisted === false
     || String(entry?.id || '').startsWith('local-')
+}
+
+function hasToolResult(entry) {
+  return Boolean(entry.text || entry.preview)
 }
 
 function canEditEntry(entry) {
@@ -165,83 +169,11 @@ function isSubagentEntry(entry) {
   return entry.type === 'tool' && entry.toolName === 'subagent'
 }
 
-function liveEntryToolStatus() {
-  if (props.toolStatus === 'preparing') return 'preparing'
-  if (props.toolStatus === 'running') return 'running'
-  if (props.toolStatus === 'reading') return 'reading result'
-  if (props.toolStatus === 'error') return 'error'
-  if (props.toolStatus === 'aborted') return 'aborted'
-  return ''
-}
-
-function toolStatusTone(status) {
-  if (['preparing', 'running', 'reading result'].includes(status)) return 'running'
-  if (['error', 'aborted'].includes(status)) return 'error'
-  return 'completed'
-}
-
 function entryToolStatus(entry) {
-  return liveEntryToolStatus() || (entry.isError ? 'error' : 'completed')
+  return mobileToolStatus(entry, props.toolStatus)
 }
 
-function subagentStatus(result) {
-  if (result.status === 'queued') return 'queued'
-  if (result.status === 'running') return 'running'
-  if (result.status === 'error') return 'error'
-  if (result.status === 'done') return 'completed'
-  if (result.error || result.exitCode !== 0) return 'error'
-  if (!result.messages.length && !result.childSession) return 'running'
-  return 'completed'
-}
-
-function entrySubagentStatus(entry) {
-  const liveStatus = liveEntryToolStatus()
-  if (liveStatus) return liveStatus
-  if (entry.subagentDetails?.background) return 'running'
-  if (entry.isError || entry.subagentDetails?.results?.some((result) => subagentStatus(result) === 'error')) return 'error'
-  if (entry.subagentDetails?.results?.some((result) => {
-    return ['queued', 'running'].includes(subagentStatus(result))
-  })) return 'running'
-  return 'completed'
-}
-
-function subagentFinalOutput(result) {
-  if (result.error) return result.error
-  if (result.research?.summary) return result.research.summary
-  for (let i = result.messages.length - 1; i >= 0; i--) {
-    const message = result.messages[i]
-    if (message.role === 'assistant' || message.role === 'error') return message.content.trim()
-  }
-  return ''
-}
-
-function subagentTarget(entry) {
-  if (entry.researchThreads) return entry.code || ''
-  const agent = entry.label.replace(/^Subagent · /, '')
-  if (agent && agent !== 'subagent' && agent !== entry.code) return agent
-  return entry.code || ''
-}
-
-function researchThreadId(result, index) {
-  return result.research?.threadId
-    || result.task?.match(/^\s*\[([^\]]+)\]/)?.[1]
-    || `T${index + 1}`
-}
-
-function researchThreadTitle(result) {
-  return result.research?.title
-    || result.task?.replace(/^\s*\[[^\]]+\]\s*/, '')
-    || result.agent
-}
-
-function researchSourceCount(result) {
-  return result.research?.sources?.length || 0
-}
-
-function navigateChildSession(childSession, event) {
-  if (!childSession) return
-  emit('navigate-child-session', childSession, event)
-}
+const toolTone = computed(() => toolStatusTone(entryToolStatus(props.entry)))
 
 function citationTarget(value) {
   try {
@@ -282,6 +214,7 @@ function openMarkdownContent(event) {
   emit('open-research-source', {
     anchor: link,
     id,
+    origin: 'citation',
     rect: {
       bottom: rect.bottom,
       height: rect.height,
@@ -320,7 +253,7 @@ function openMarkdownContent(event) {
       :title="copyTitle(entry.id)"
       @click="emit('copy', entry)"
     >
-      {{ copyGlyph(entry.id) }}
+      <CopyIcon :copied="copiedEntryId === entry.id" />
     </button>
   </div>
 
@@ -349,150 +282,84 @@ function openMarkdownContent(event) {
   <article
     v-else-if="isSubagentEntry(entry)"
     class="tool-card subagent-card transcript-tool"
-    :class="{
-      'is-expanded': toolExpanded,
-      'research-thread-card': entry.researchThreads,
-    }"
-    @click="emit('toggle-tool', entry)"
+    :class="{ 'is-inspected': subagentInspectorSelected }"
   >
     <div class="subagent-header">
-      <span class="chevron">›</span>
-      <span class="subagent-icon" aria-hidden="true">
-        <svg viewBox="0 0 16 16" fill="none">
-          <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
-          <path d="m10 7 3 3-3 3" />
-        </svg>
-      </span>
-      <span class="subagent-label">
-        {{ entry.researchThreads ? 'Research threads' : 'Subagent' }}
-      </span>
-      <code v-if="subagentTarget(entry)">{{ subagentTarget(entry) }}</code>
-      <em
-        class="subagent-status"
-        :class="`status-${toolStatusTone(entrySubagentStatus(entry))}`"
-      >
-        {{ entrySubagentStatus(entry) }}
-      </em>
       <button
-        class="copy-button"
+        class="tool-inspect-button"
         type="button"
-        :title="copyTitle(entry.id)"
-        @click.stop="emit('copy', entry)"
+        aria-haspopup="dialog"
+        :aria-expanded="subagentInspectorSelected"
+        :aria-controls="subagentInspectorSelected ? 'subagent-inspector' : undefined"
+        @click="emit('inspect-subagent', entry, $event)"
       >
-        {{ copyGlyph(entry.id) }}
+        <span class="subagent-icon" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none">
+            <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
+            <path d="m10 7 3 3-3 3" />
+          </svg>
+        </span>
+        <span class="subagent-label">{{ entry.researchThreads ? 'Research threads' : 'Subagent' }}</span>
+        <span class="subagent-call-title" :title="subagentCallTitle(entry)">{{ subagentCallTitle(entry) }}</span>
+        <svg class="subagent-inspect-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" />
+        </svg>
       </button>
-    </div>
-
-    <div
-      v-if="entry.subagentDetails?.results?.length"
-      class="subagent-results"
-    >
-      <div
-        v-for="(result, index) in entry.subagentDetails.results"
-        :key="index"
-        class="subagent-result-item"
-        :class="{ 'has-session': result.childSession }"
-        @click.stop="navigateChildSession(result.childSession, $event)"
-        @auxclick.middle.stop.prevent="navigateChildSession(
-          result.childSession,
-          $event,
-        )"
-      >
-        <span class="subagent-result-agent">
-          {{ entry.researchThreads ? researchThreadId(result, index) : result.agent }}
-        </span>
-        <span class="subagent-result-task">
-          {{ entry.researchThreads ? researchThreadTitle(result) : result.task }}
-        </span>
-        <span
-          v-if="entry.researchThreads"
-          class="research-thread-meta"
-        >
-          {{ researchSourceCount(result) }} sources · {{ subagentStatus(result) }}
-        </span>
-        <span
-          v-else-if="result.childSession"
-          class="subagent-child-link"
-        >
-          {{ subagentStatus(result) === 'running'
-            ? '→ view live session'
-            : '→ view session' }}
-        </span>
-      </div>
-    </div>
-
-    <div class="tool-expand-wrapper" :class="{ 'is-expanded': toolExpanded }">
-      <div class="tool-expand-inner">
-        <div
-          v-if="toolContentMounted"
-          class="tool-expanded-body subagent-expanded"
-          @click.stop
-        >
-          <div
-            v-if="entry.isError && entry.text"
-            class="tool-error-summary"
-          >
-            <strong>Error</strong>
-            <pre>{{ entry.text }}</pre>
-          </div>
-          <template v-if="entry.subagentDetails?.results?.length">
-            <div
-              v-for="(result, index) in entry.subagentDetails.results"
-              :key="index"
-              class="subagent-detail-block"
-            >
-              <div class="subagent-detail-header">
-                <strong>{{ result.agent }}</strong>
-                <span class="subagent-detail-task">{{ result.task }}</span>
-              </div>
-              <pre v-if="subagentFinalOutput(result)" class="subagent-detail-output">{{ subagentFinalOutput(result) }}</pre>
-              <div v-if="result.childSession" class="subagent-child-meta">
-                <span>Session: {{ result.childSession.id }}</span>
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="tool-preview-clip tool-plain-preview">
-              <pre
-                v-if="toolJsonHtml"
-                class="tool-output json-output"
-                v-html="toolJsonHtml"
-              ></pre>
-              <pre v-else class="tool-output">{{ entry.text }}</pre>
-            </div>
-          </template>
-        </div>
-      </div>
     </div>
   </article>
 
   <article
     v-else-if="entry.type === 'tool'"
     class="tool-card transcript-tool"
-    :class="{ 'is-expanded': toolExpanded, 'error-card': entry.isError }"
-    @click="emit('toggle-tool', entry)"
+    :class="{ 'is-expanded': toolExpanded, 'error-card': ['error', 'failed'].includes(entryToolStatus(entry)) }"
   >
     <div class="tool-card-header">
-      <span class="chevron">›</span>
-      <span>{{ entry.label }}</span>
-      <code v-if="entry.code" :title="entry.code">{{ entry.code }}</code>
-      <span
-        v-if="entry.contextLabel"
-        class="tool-context-pill"
-        :class="{ 'is-excluded': entry.excludeFromContext }"
-      >
-        {{ entry.contextLabel }}
-      </span>
-      <em :class="`status-${toolStatusTone(entryToolStatus(entry))}`">
-        {{ entryToolStatus(entry) }}
-      </em>
       <button
+        class="tool-expand-button"
+        type="button"
+        :aria-expanded="toolExpanded"
+        @click="emit('toggle-tool', entry)"
+      >
+        <span class="chevron">›</span>
+        <span class="tool-label">{{ entry.label }}</span>
+        <code v-if="entry.code" :title="entry.code">{{ entry.code }}</code>
+        <span
+          v-if="entry.contextLabel"
+          class="tool-context-pill"
+          :class="{ 'is-excluded': entry.excludeFromContext }"
+        >
+          {{ entry.contextLabel }}
+        </span>
+        <span
+          class="tool-status-mark"
+          :class="`status-${toolTone}`"
+          :title="entryToolStatus(entry)"
+          role="img"
+          :aria-label="entryToolStatus(entry)"
+        >
+          <span v-if="toolTone === 'running'" class="tool-status-spinner" aria-hidden="true"></span>
+          <svg v-else-if="toolTone === 'completed'" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3.1 8.5 6.4 11.7 12.9 4.4" />
+          </svg>
+          <svg v-else-if="toolTone === 'error'" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4.3 4.3 11.7 11.7M11.7 4.3 4.3 11.7" />
+          </svg>
+          <svg v-else-if="toolTone === 'stopped'" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M5 5h6v6H5z" />
+          </svg>
+          <span v-else class="tool-status-question" aria-hidden="true">?</span>
+        </span>
+      </button>
+      <button
+        v-if="hasToolResult(entry)"
         class="copy-button"
         type="button"
         title="Open full screen"
-        @click.stop="emit('open-tool-fullscreen', entry)"
+        @click.stop="emit('open-tool-fullscreen', entry, $event)"
       >
-        ⛶
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+          <path d="M8 3H3v5m13-5h5v5m0 8v5h-5M3 16v5h5" />
+        </svg>
       </button>
       <button
         v-if="!isLocalEntry(entry)"
@@ -517,12 +384,13 @@ function openMarkdownContent(event) {
         </svg>
       </button>
       <button
+        v-if="hasToolResult(entry)"
         class="copy-button"
         type="button"
         :title="copyTitle(entry.id)"
         @click.stop="emit('copy', entry)"
       >
-        {{ copyGlyph(entry.id) }}
+        <CopyIcon :copied="copiedEntryId === entry.id" />
       </button>
     </div>
     <div class="tool-expand-wrapper" :class="{ 'is-expanded': toolExpanded }">
@@ -532,6 +400,7 @@ function openMarkdownContent(event) {
           class="tool-expanded-body"
           @click.stop
         >
+          <div v-if="entry.code && !toolCommandCode(entry)" class="mobile-tool-target"><code>{{ entry.preview?.path || entry.code }}</code></div>
           <div v-if="toolCommandCode(entry)" class="tool-command-block">
             <strong>Command</strong>
             <pre>{{ entry.code }}</pre>
@@ -552,6 +421,7 @@ function openMarkdownContent(event) {
                 'open-image',
                 imageSrc(entry.preview),
                 'Read image preview',
+                $event,
               )"
             >
               <img :src="imageSrc(entry.preview)" alt="Read image preview" />
@@ -565,12 +435,12 @@ function openMarkdownContent(event) {
             <button
               class="tool-preview-cta"
               type="button"
-              @click="emit('open-tool-fullscreen', entry)"
+              @click="emit('open-tool-fullscreen', entry, $event)"
             >
               Open full screen
             </button>
           </template>
-          <template v-else>
+          <template v-else-if="hasToolResult(entry)">
             <div class="tool-preview-clip tool-plain-preview">
               <pre
                 v-if="toolJsonHtml"
@@ -582,7 +452,7 @@ function openMarkdownContent(event) {
             <button
               class="tool-preview-cta"
               type="button"
-              @click="emit('open-tool-fullscreen', entry)"
+              @click="emit('open-tool-fullscreen', entry, $event)"
             >
               Open full screen
             </button>
@@ -692,7 +562,7 @@ function openMarkdownContent(event) {
         :title="copyTitle(entry.id)"
         @click="emit('copy', entry)"
       >
-        {{ copyGlyph(entry.id) }}
+        <CopyIcon :copied="copiedEntryId === entry.id" />
       </button>
     </div>
     <div

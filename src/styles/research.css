@@ -217,28 +217,6 @@ button.research-mode-chip {
   border-color: rgb(138 120 255 / 18%);
 }
 
-.research-thread-card .subagent-icon {
-  color: var(--accent);
-}
-
-.research-thread-card .subagent-results {
-  margin-left: 39px;
-}
-
-.research-thread-card .subagent-result-item {
-  grid-template-columns: 28px minmax(0, 1fr) auto;
-}
-
-.research-thread-card .subagent-result-agent {
-  color: #a99cff;
-}
-
-.research-thread-meta {
-  color: var(--muted);
-  font-size: 10px;
-  white-space: nowrap;
-}
-
 .research-report-message {
   overflow: hidden;
   border: 1px solid #35333e;
@@ -332,7 +310,12 @@ button.research-mode-chip {
   --citation-preview-arrow-left: 24px;
   position: fixed;
   z-index: 20;
+  display: flex;
+  flex-direction: column;
   width: min(352px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  max-height: calc(100dvh - 28px);
+  overflow-wrap: anywhere;
   border: 1px solid #3a3645;
   border-radius: 11px;
   background: #19191b;
@@ -362,6 +345,7 @@ button.research-mode-chip {
 
 .research-citation-preview-head {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -382,9 +366,7 @@ button.research-mode-chip {
 }
 
 .research-citation-preview-head span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .research-citation-preview-head button {
@@ -406,7 +388,13 @@ button.research-mode-chip {
   color: var(--text);
 }
 
-.research-citation-preview > strong {
+.research-citation-preview-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.research-citation-preview-body > strong {
   display: block;
   margin-top: 10px;
   color: #ededed;
@@ -418,6 +406,15 @@ button.research-mode-chip {
 
 .research-citation-preview p {
   margin: 9px 0 0;
+  white-space: pre-wrap;
+}
+
+.research-citation-preview-field-label {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
 }
 
 .research-citation-preview-claim {
@@ -426,7 +423,8 @@ button.research-mode-chip {
   line-height: 1.5;
 }
 
-.research-citation-preview-evidence {
+.research-citation-preview-evidence,
+.research-citation-preview-exclusion {
   border-top: 1px solid #2e2c33;
   padding-top: 9px;
   color: #919191;
@@ -434,8 +432,8 @@ button.research-mode-chip {
   line-height: 1.5;
 }
 
-.research-citation-preview > a,
-.research-citation-preview > code {
+.research-citation-preview-body > a,
+.research-citation-preview-body > code {
   display: block;
   width: fit-content;
   max-width: 100%;
@@ -575,9 +573,17 @@ button.research-mode-chip {
   display: block;
   width: 100%;
   min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
   color: inherit;
+  font: inherit;
   text-align: left;
   text-decoration: none;
+}
+
+button.research-source-select {
+  cursor: pointer;
 }
 
 .research-source-card:hover {
@@ -782,18 +788,6 @@ button.research-mode-chip {
     font-size: 7px;
   }
 
-  .research-thread-card .subagent-results {
-    margin-left: 0;
-  }
-
-  .research-thread-card .subagent-result-item {
-    grid-template-columns: 22px minmax(0, 1fr) auto;
-  }
-
-  .research-thread-meta {
-    font-size: 8px;
-  }
-
   .research-report-heading {
     padding: 8px 10px;
   }
@@ -808,7 +802,7 @@ button.research-mode-chip {
     right: 10px;
     width: auto;
     max-height: calc(100vh - 20px);
-    overflow-y: auto;
+    max-height: calc(100dvh - 20px);
   }
 
   .research-citation-preview.is-sheet::before {
@@ -821,6 +815,32 @@ button.research-mode-chip {
     border-left: 0;
     box-shadow: none;
   }
+}
+
+/* Use the primary pointer so touchscreens do not enlarge hybrid desktop controls. */
+@media (pointer: coarse) {
+  .research-sources-toggle,
+  .research-phase-summary button,
+  button.research-mode-chip,
+  .research-sources-header button,
+  .research-source-filters button,
+  button.research-source-select,
+  .research-citation-preview-head button,
+  .research-citation-preview-body > a {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .research-citation-preview-body > a {
+    display: flex;
+    align-items: center;
+  }
+}
+
+.research-citation-preview :is(button, a):focus-visible,
+.research-source-filters button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

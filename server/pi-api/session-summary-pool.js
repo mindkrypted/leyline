@@ -72,7 +72,7 @@ export function createSummaryPool(count) {
   }
 
   return {
-    async scan(jobs, goalFallback) {
+    async scan(jobs) {
       await ready
       if (failure) throw failure
       const results = new Array(jobs.length)
@@ -85,7 +85,6 @@ export function createSummaryPool(count) {
           const index = nextIndex++
           const session = await request(handle, {
             path: jobs[index].path,
-            goalFallback,
           })
           results[index] = { ...jobs[index], session }
         }

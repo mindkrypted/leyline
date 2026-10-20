@@ -55,6 +55,17 @@ export function saveFileSettings(settings) {
   })
 }
 
+export function fetchRuntimeSettings() {
+  return apiRequest('/api/pi/settings/runtime', 'Failed to load runtime settings')
+}
+
+export function saveRuntimeSettings({ idleTimeoutMinutes }) {
+  return apiRequest('/api/pi/settings/runtime', 'Failed to save runtime settings', {
+    method: 'PUT',
+    body: { idleTimeoutMinutes },
+  })
+}
+
 export function performFileAction(sessionId, target, action = 'preview') {
   return apiRequest(
     `/api/pi/sessions/${encodeURIComponent(sessionId)}/file`,

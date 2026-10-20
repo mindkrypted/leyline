@@ -6,7 +6,7 @@
 
 | Owner | State and behavior |
 | --- | --- |
-| `App.vue` | Global Settings and contextual drawer visibility, fixed agent scope and request targets, sidebar navigation, Git review and research sources, composer/queue drafts, attachments, prompt edits and submission, session kind, goals, project selection, and startup motion |
+| `App.vue` | Global Settings and contextual drawer visibility, fixed agent scope and request targets, sidebar navigation, Git review and research sources, composer/queue drafts, attachments, prompt edits and submission, session kind, project selection, and startup motion |
 | `useSessionWorkspace.js` | Session list, project grouping, routes, selected detail, activation, runtime snapshots, sidebar activity rows, model, thinking, and Ultrafast controls, rename, delete, fork, reset, and reload |
 | `useBackendConnections.js` | App-wide connection records, window-specific selection, connection tests, and default selection |
 | `usePinnedSessions.js` | Pinned session IDs for the active connection, load revisions, pending toggles, errors, and batched cleanup |
@@ -18,12 +18,14 @@
 | `useSettingsOperation.js` | Private operation polling, answers, cancellation, and backend-bound cleanup |
 | `useLiveTurnProjection.js` | Optimistic user entries, live assistant blocks, System rows, tools, compaction activity, and live-to-persisted reconciliation |
 | `PromptQueue.vue` | Queue expansion, active edit, action menus, queue mutations, and tray width measurement |
-| `useRuntimeEvents.js` | EventSource lifecycle, connection state, the local event log, and dedicated trace notice subscribers |
+| `useRuntimeEvents.js` | Runtime WebSocket subscription, connection state, the local event log, and dedicated trace notice subscribers |
+| `src/lib/event-socket.js` | Shared runtime/review WebSocket client, selected-backend URLs, reconnect backoff, timeouts, heartbeat replies, and stale-socket guards |
 | `App.vue` / `TracePanel.vue` | Trace surface mode, small selection and return state, selected-backend client, capture controls, and view cleanup |
 | `useMemoryInspector.js` | Visible Memory data, loading, optimistic mutations, dirty-state guards, and drawer state |
 | `useProjectBrowser.js` | Project picker state, folder expansion, and project-browser visibility |
 | `useToolExpansion.js` | Tool and skill expansion, copy state, and fullscreen previews |
 | `SystemPromptInspector.vue` | Tabs, raw view, event actions, and rendering for the System event selected by `App.vue` |
+| `SubagentInspector.vue` | Selected task and reader position for the subagent call selected by `App.vue` |
 | `useWorkbenchScroll.js` | Bottom following, composer space, new-output state, and Jump to latest |
 | `useTerminal.js` | xterm, WebSocket, PTY status, focus, fit, and drawer height |
 | `useDictation.js` | Browser speech-recognition state inside both composer components |
@@ -33,7 +35,13 @@
 
 `App.vue` creates the composables and passes narrow props and events to components. Components do not own session runtime objects.
 
-`SessionSidebar.vue` renders the current project and its virtualized session list. It owns session search, navigator search, stable project order, and cross-project activity groups. Outside search, it derives one pinned-first array for rows, arrow-key focus, and ARIA positions.
+`SessionSidebar.vue` renders the current project and its virtualized session list. It owns session search, navigator search, stable project order, and cross-project activity groups. It flattens ordered parents and visible children into positioned rows for virtualization and arrow-key focus. Outside search, parents remain pinned-first. Row buttons expose `aria-current`, and parent chevrons expose `aria-expanded`. Collapsing or partially revealed child rows are inert and use `aria-hidden`.
+
+`useSessionWorkspace.js` supplies `subagentChildrenByParentPath` for sessions with both `isSubagentSession` and `parentSessionPath`. A parent path alone does not classify a subagent. The map joins child IDs to task labels and agent names from the parent's `subagentChildren` metadata. `session-summary.js` reads this metadata from persisted subagent tool results. Session DTOs include child IDs, task labels, and agent names without child paths.
+
+`SessionSidebar.vue` prefers the child's current session `name` over its task metadata label. The inspector and HTML export prefer the explicit result `title`, while keeping the full `task` prompt separate. Older records retain their existing title fallbacks.
+
+Runtime summary merges preserve existing `subagentChildren` when a snapshot omits it. Children stay in creation order, independent of runtime activity. Sidebar search keeps parent context and shows only matching children. Children remain outside regular session counts, pin controls, and the **Activity** navigator.
 
 `SessionComposer.vue` and `StartComposer.vue` own local input mechanics and dictation adapters.
 
@@ -51,7 +59,7 @@
 It stores the active ID in window `sessionStorage` and configures
 `src/lib/backend.js` before workspace requests begin.
 
-A backend switch verifies `GET /api/pi/info` and reloads the window. `App.vue` then opens SSE and loads sessions from the selected backend.
+A backend switch verifies `GET /api/pi/info` and reloads the window. `App.vue` then opens the runtime WebSocket and loads sessions from the selected backend.
 
 Retry uses the same connection flow. Transcript preferences always use the native backend, not the selected runtime backend.
 
@@ -63,7 +71,7 @@ Pinned sessions also use the native backend. `App.vue` captures the active conne
 
 Inspector scopes its list to the selected session. Workspace retains that session and the selected trace. Explorer searches across projects on the selected backend. It does not merge saved connections.
 
-`src/lib/trace-client.js` receives the selected connection and the existing SSE subscription adapter. Views receive the client through props. Display and connection settings still use the native backend, while capture settings use this trace client's selected backend.
+`src/lib/trace-client.js` receives the selected connection and the existing runtime WebSocket subscription adapter. Views receive the client through props. Display and connection settings still use the native backend, while capture settings use this trace client's selected backend.
 
 The host retains selection, tab, observation offset and limit, list filters, page, and return origin. It preserves selection between Inspector or Explorer and Workspace without retaining complete trace trees. Backend and ordinary session navigation reset trace state.
 
@@ -92,9 +100,9 @@ The selected session route is `/sessions/:id`. Browser history changes call the 
 
 ## Active runtime state
 
-`activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, goal state, and research state.
+`activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, and research state.
 
-SSE can send snapshots for all server handles. `App.vue` updates the selected runtime only when the IDs match. Both selected and background state reject older `snapshotRevision` values. This prevents a late HTTP response from restoring stale queue state.
+The runtime WebSocket can send snapshots for all server handles. `App.vue` updates the selected runtime only when the IDs match. Both selected and background state reject older `snapshotRevision` values. This prevents a late HTTP response from restoring stale queue state.
 
 Background event summaries remain in `runtimeSessionsById`. They supply current-project row status and the **Activity** navigator for all nonselected live sessions.
 
@@ -144,6 +152,8 @@ At the next turn start, the composable clears the previous turn's matched live r
 
 `message_update` events update live assistant output. They do not trigger a detail refresh.
 
+Each runtime WebSocket connection receives snapshots and the runtime roster. On reconnect, `useRuntimeEvents.js` also invokes the existing refresh callbacks. See [Realtime events](./realtime-events).
+
 Settlement, reconnect, and manual compaction schedule immediate detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming tool and message events use live projection instead of per-event detail fetches.
 
 ## Project browser and Project settings
@@ -176,6 +186,14 @@ The global modal has Display, Connections, Files, Agent defaults, Models & provi
 
 Electron's `CommandOrControl+,` command opens global Settings idempotently. Command+Shift+E toggles Session details, not global Settings. It does nothing on Home or while blocking overlays are open.
 
+### Network access
+
+`NetworkAccessSettings.vue` mounts lazily inside Connections. It loads native-backend state on mount and window focus through `src/lib/leyline-api.js`. The switch sends only `{ enabled }`. **Proxy port → Apply** sends only `{ port }`, with a blank field represented as `0`. The backend resolves omitted values inside its serialized operation, preserving concurrent changes from other clients.
+
+The controls wait for the live response before changing saved state. The port draft survives focus refreshes and switch changes. Failed requests retain the previous saved state and the draft, and show an error.
+
+The component shows actual sharing URLs and the unauthenticated full-access warning. It warns separately when startup configuration exposes the origin. The toggle does not reload the window or change the selected backend, composer drafts, or runtime subscriptions. The current window's saved remote selection never redirects this native setting.
+
 ### Agent defaults and overrides
 
 `AgentSettings.vue` replaces the former Subagents and Vision configuration drawers. The containing surface fixes `scope`: global in Agent defaults, project in Project settings, and session in Session details. There is no scope picker inside global Settings.
@@ -194,7 +212,7 @@ These overrides use the existing subagent and vision APIs and Leyline SQLite. Th
 
 `src/lib/pi-settings-api.js` sends Settings requests to the selected backend with caching disabled. `useSettingsOperation.js` retains the starting backend URL, polls every 500 ms, and retries most polling errors after two seconds. It sequences answers and poll responses, and cancels owned work during cleanup. A late action response after navigation also receives cancellation.
 
-`PiSettingsOperation.vue` displays private prompts and controlled progress messages. It clears submitted values and uses password inputs for secret and manual-code prompts. Operations never use shared session SSE or extension-confirmation cards. See [Settings operations](../reference/api#settings-operations) for exact shapes.
+`PiSettingsOperation.vue` displays private prompts and controlled progress messages. It clears submitted values and uses password inputs for secret and manual-code prompts. Operations never use the shared runtime WebSocket or extension-confirmation cards. See [Settings operations](../reference/api#settings-operations) for exact shapes.
 
 `ProviderSettings.vue` offers **Test connection** per saved model and beside **Save** in provider and model editors. Editor tests send unsaved form values and the inventory revision without saving configuration or changing live runtimes or transcripts. The provider editor has a separate test-only model ID that is never saved. API keys stay optional, and removing a key reference does not sign out a stored credential.
 
@@ -238,7 +256,7 @@ A valid citation event resolves the source, closes an open third rail, and opens
 
 The selected desktop session mounts `ReviewPane.vue` while the pane is closed. It loads Git status for the header, but waits for `open` or `prepare` before fetching and preparing the selected diff. Status readiness alone does not emit a successful `prepared` state.
 
-When the backend reports `reviewWatch`, `ReviewPane.vue` subscribes to `/api/pi/review/events?cwd=...` only after Git status reports `available`. Non-Git directories receive no watcher. Stream open and `review_change` events queue status refreshes that preserve selection. While closed, changes mark the diff for refresh without rebuilding its preview. The stream closes when the repository becomes unavailable, its cwd changes, or the component unmounts.
+When the backend reports `reviewWatch`, `ReviewPane.vue` opens `/api/pi/review/events?cwd=...` through `openEventSocket()` only after Git status reports `available`. Non-Git directories receive no watcher. `review_ready` and `review_change` events queue status refreshes that preserve selection. The server sends `review_ready` after watcher setup, so socket open does not trigger a refresh. While the pane is closed, changes mark the diff for refresh without rebuilding its preview. The socket closes when the repository becomes unavailable, its cwd changes, or the component unmounts.
 
 A settled runtime event for the selected project and a completed composer shell command still increment the review refresh token. These triggers and the manual refresh control remain available when filesystem watching is unavailable.
 
@@ -249,6 +267,16 @@ Expanded review hides the transcript and uses the full workspace after the sideb
 `useToolExpansion.js` stores tool and skill expansion state, clipboard fallback state, and the selected fullscreen tool. System rows instead open `SystemPromptInspector.vue`. `App.vue` owns the selected event and follows its live-to-persisted handoff without resetting inspector tabs or raw view. See [System messages](./transcript-projection#system-messages).
 
 Expansion state resets when the selected session changes. Preview content remains part of the projected transcript entry.
+
+## Subagent inspector state
+
+`App.vue` owns `subagentSelection`, the opener, and the modal focus scope. It resolves the selected call across persisted and live Activity projections by `toolCallId`, with `id` as the fallback. The component key stays stable during live updates and saved-entry reconciliation, preserving task selection and reader position. `SubagentInspector.vue` resets reader position when the user selects a task.
+
+`singleSubagentEntry()` bypasses Activity expansion when the group's only top-level tool call is `subagent`. Both its header and compact row open the inspector directly, including calls with parallel tasks. Multi-call groups still expand before individual subagent rows open the inspector. `useToolExpansion.js` does not own subagent inspector selection.
+
+`useModalFocus()` contains focus and restores the opener on close. Opening the subagent inspector pauses transcript auto-follow. Escape, the close button, or the backdrop closes it. Session or backend changes, removal of the selected call, and new pending extension confirmations also close it. An existing pending confirmation prevents it from opening.
+
+This state is separate from the System prompt inspector and trace Inspector. See [Tool Activity and subagent inspector](./transcript-projection#tool-activity-and-subagent-inspector) for renderer boundaries.
 
 ## Workbench scrolling
 
@@ -270,6 +298,6 @@ The terminal is independent and can remain open below the workbench. Session cha
 
 ## Cleanup
 
-`App.vue` closes SSE, WebSocket, timers, observers, and composable resources during unmount.
+`App.vue` and its components close runtime, review, and terminal WebSockets, timers, observers, and composable resources during unmount.
 
 Keep external listeners and timers in their owning composable where possible. Let `App.vue` own only cross-feature coordination.

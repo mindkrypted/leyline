@@ -14,15 +14,16 @@ const emit = defineEmits(['update:category', 'close'])
 const modalEl = ref(null)
 const categories = [
   { id: 'display', label: 'Display', description: 'Choose how transcripts first appear.' },
-  { id: 'connections', label: 'Connections', description: 'Save connections here. Each window keeps its own active backend.' },
+  { id: 'connections', label: 'Connections', description: 'Each window uses its own backend connection.' },
   { id: 'files', label: 'Files', description: 'Set the editor for files opened on this backend.' },
   { id: 'agents', label: 'Agent defaults', description: 'Used when a project or session has no override.' },
+  { id: 'runtime', label: 'Runtime', description: 'Control cleanup of idle sessions on this backend.' },
   { id: 'providers', label: 'Models & providers', description: '' },
   { id: 'mcp', label: 'MCP servers', description: '' },
 ]
 const availableCategories = computed(() => categories.filter((item) => {
   if (item.id === 'files') return props.fileLinksAvailable
-  if (['providers', 'mcp'].includes(item.id)) return props.piSettingsAvailable
+  if (['runtime', 'providers', 'mcp'].includes(item.id)) return props.piSettingsAvailable
   return true
 }))
 const selected = computed(() => availableCategories.value.find((item) => item.id === props.category) || categories[0])
@@ -173,6 +174,9 @@ function handleKeydown(event) {
                     <rect x="3" y="3" width="18" height="7" rx="1" /><rect x="3" y="14" width="18" height="7" rx="1" /><path d="M7 6.5h.1M7 17.5h.1" />
                   </template>
                   <path v-else-if="item.id === 'files'" d="M13 3H5v18h14V9zM13 3v6h6M8 14h8M8 17h5" />
+                  <template v-else-if="item.id === 'runtime'">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                  </template>
                   <path v-else-if="item.id === 'providers'" d="M8 3v5m8-5v5M5 8h14v3a7 7 0 0 1-7 7v4M12 18a7 7 0 0 1-7-7" />
                   <template v-else-if="item.id === 'mcp'">
                     <rect x="8" y="3" width="8" height="6" rx="1" /><rect x="2" y="16" width="7" height="5" rx="1" /><rect x="15" y="16" width="7" height="5" rx="1" /><path d="M12 9v4M5 16v-3h14v3" />

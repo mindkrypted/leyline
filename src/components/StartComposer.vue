@@ -1,11 +1,16 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useDictation } from '../composables/useDictation'
 import ModelPicker from './ModelPicker.vue'
+import MobileComposerControls from './MobileComposerControls.vue'
+import { useMobileComposerInput } from '../composables/useMobileComposerInput'
 import UltrafastToggle from './UltrafastToggle.vue'
 import { formatMode } from '../lib/format'
 
 const props = defineProps({
+  mobile: Boolean,
+  settingsError: { type: String, default: '' },
+  startProjectTrigger: { default: null },
   attachedImages: {
     type: Array,
     default: () => [],
@@ -112,10 +117,14 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
+  'composition-start',
+  'composition-end',
+  'input-blur',
   'keydown',
   'open-image',
   'open-project-browser',
   'paste',
+  'pick-images',
   'remove-image',
   'select-model',
   'select-project',
@@ -133,7 +142,13 @@ const emit = defineEmits([
 
 const form = ref(null)
 const textarea = ref(null)
-const startProjectMenuMaxHeight = ref(360)
+const mobileControls = ref(null)
+const mobileSheetOpen = ref(false)
+useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
+const startProjectMenu = ref(null)
+const startProjectMenuStyle = ref({})
+let projectMenuObserver
+let projectMenuFrame = 0
 const shellMode = computed(() => props.draft.trimStart().startsWith('!'))
 const researchMode = computed(() => props.sessionKind === 'research')
 const hiddenShellMode = computed(() => props.draft.trimStart().startsWith('!!'))
@@ -160,24 +175,83 @@ const {
   setDraft: (value) => emit('update:draft', value),
 })
 
-watch(() => props.startProjectPickerOpen, (open) => {
-  if (open) updateStartProjectMenuMaxHeight()
+watch(() => props.startProjectPickerOpen, scheduleProjectMenu, { flush: 'post' })
+watch(() => props.startProjectTrigger, (element, previous) => {
+  if (previous) projectMenuObserver?.unobserve(previous)
+  if (element) projectMenuObserver?.observe(element)
+  scheduleProjectMenu()
+}, { flush: 'post' })
+watch(startProjectMenu, (element, previous) => {
+  if (previous) projectMenuObserver?.unobserve(previous)
+  if (element) projectMenuObserver?.observe(element)
+  scheduleProjectMenu()
 })
 
 onMounted(() => {
-  window.addEventListener('resize', updateStartProjectMenuMaxHeight)
+  projectMenuObserver = new ResizeObserver(scheduleProjectMenu)
+  if (form.value) projectMenuObserver.observe(form.value)
+  if (props.startProjectTrigger) projectMenuObserver.observe(props.startProjectTrigger)
+  if (startProjectMenu.value) projectMenuObserver.observe(startProjectMenu.value)
+  window.addEventListener('resize', scheduleProjectMenu)
+  window.addEventListener('scroll', scheduleProjectMenu, true)
+  window.visualViewport?.addEventListener('resize', scheduleProjectMenu)
+  window.visualViewport?.addEventListener('scroll', scheduleProjectMenu)
+  scheduleProjectMenu()
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateStartProjectMenuMaxHeight)
+  projectMenuObserver?.disconnect()
+  cancelAnimationFrame(projectMenuFrame)
+  window.removeEventListener('resize', scheduleProjectMenu)
+  window.removeEventListener('scroll', scheduleProjectMenu, true)
+  window.visualViewport?.removeEventListener('resize', scheduleProjectMenu)
+  window.visualViewport?.removeEventListener('scroll', scheduleProjectMenu)
 })
 
-function updateStartProjectMenuMaxHeight() {
-  if (!props.startProjectPickerOpen || !form.value) return
-  const available = window.innerHeight
-    - form.value.getBoundingClientRect().bottom
-    - 20
-  startProjectMenuMaxHeight.value = Math.max(0, Math.min(360, available))
+function scheduleProjectMenu() {
+  if (!props.startProjectPickerOpen || projectMenuFrame) return
+  projectMenuFrame = requestAnimationFrame(() => {
+    projectMenuFrame = 0
+    updateProjectMenu()
+  })
+}
+
+function updateProjectMenu() {
+  if (!props.startProjectPickerOpen || !form.value || !startProjectMenu.value) return
+  const rect = (props.mobile && props.startProjectTrigger || form.value).getBoundingClientRect()
+  const viewport = window.visualViewport
+  const top = (viewport?.offsetTop || 0) + 8
+  const left = (viewport?.offsetLeft || 0) + 8
+  const bottom = top + (viewport?.height || window.innerHeight) - 16
+  const right = left + (viewport?.width || window.innerWidth) - 16
+  const above = Math.max(0, rect.top - top - 8)
+  const below = Math.max(0, bottom - rect.bottom - 8)
+  const preferred = Math.min(360, startProjectMenu.value.scrollHeight + 2)
+  const minimum = Math.min(160, preferred)
+  const placement = below >= minimum && (below >= preferred || below >= above)
+    ? 'below' : above >= minimum ? 'above' : 'bounded'
+  const height = Math.max(0, Math.min(preferred,
+    placement === 'below' ? below : placement === 'above' ? above : bottom - top))
+  const width = Math.max(0, Math.min(300, right - left))
+  const menuTop = placement === 'above' ? rect.top - height - 8
+    : placement === 'below' ? rect.bottom + 8
+      : Math.max(top, Math.min(rect.top, bottom - height))
+  const menuLeft = Math.max(left, Math.min(rect.left + (props.mobile ? 0 : 12), right - width))
+  startProjectMenuStyle.value = props.mobile ? {
+    position: 'fixed',
+    zIndex: 70,
+    top: `${menuTop}px`,
+    left: `${menuLeft}px`,
+    width: `${width}px`,
+    maxHeight: `${height}px`,
+    transformOrigin: placement === 'above' ? 'bottom left' : 'top left',
+  } : {
+    top: `${menuTop - rect.top - form.value.clientTop}px`,
+    left: `${menuLeft - rect.left - form.value.clientLeft}px`,
+    width: `${width}px`,
+    maxHeight: `${height}px`,
+    transformOrigin: placement === 'above' ? 'bottom left' : 'top left',
+  }
 }
 
 function updateDraft(event) {
@@ -185,11 +259,32 @@ function updateDraft(event) {
   emit('show-slash-picker')
 }
 
+async function insertNewline() {
+  const input = textarea.value
+  if (!input || inputDisabled.value) return
+  input.setRangeText('\n', input.selectionStart, input.selectionEnd, 'end')
+  const value = input.value
+  const caret = input.selectionStart
+  updateDraft({ target: input })
+  await nextTick()
+  if (textarea.value !== input || inputDisabled.value || props.draft !== value) return
+  input.focus({ preventScroll: true })
+  input.setSelectionRange(caret, caret)
+}
+
 function focus() {
   if (!inputDisabled.value) textarea.value?.focus()
 }
 
-defineExpose({ form, focus })
+function dismissMobileSheet() {
+  return mobileControls.value?.dismiss() || false
+}
+
+function openMobileDetails(event) {
+  mobileControls.value?.open('details', event)
+}
+
+defineExpose({ form, focus, mobileSheetOpen, dismissMobileSheet, openMobileDetails })
 </script>
 
 <template>
@@ -214,9 +309,10 @@ defineExpose({ form, focus })
           ? 'Describe the research question, constraints, and desired report'
           : 'Ask Leyline anything'"
         :disabled="inputDisabled"
-        @keydown="switchingUltrafast && $event.key === 'Enter' && !$event.shiftKey
-          ? $event.preventDefault()
-          : emit('keydown', $event)"
+        @keydown="emit('keydown', $event)"
+        @compositionstart="emit('composition-start', $event)"
+        @compositionend="emit('composition-end', $event)"
+        @blur="emit('input-blur', $event)"
         @input="updateDraft"
         @paste="emit('paste', $event)"
       ></textarea>
@@ -228,7 +324,8 @@ defineExpose({ form, focus })
           :key="`${command.source}-${command.name}`"
           type="button"
           :class="{ active: index === slashActiveIndex }"
-          @mousedown.prevent="emit('select-slash-command', command)"
+          @mousedown.prevent
+          @click="emit('select-slash-command', command)"
         >
           <span class="slash-command-name">/{{ command.name }}</span>
           <span class="slash-command-description">
@@ -251,7 +348,7 @@ defineExpose({ form, focus })
           class="attachment-preview-button"
           type="button"
           :aria-label="`Open attached image ${index + 1}`"
-          @click="emit('open-image', image.preview, `Attached image ${index + 1}`)"
+          @click="emit('open-image', image.preview, `Attached image ${index + 1}`, $event)"
         >
           <img :src="image.preview" alt="Pasted image" />
         </button>
@@ -276,6 +373,32 @@ defineExpose({ form, focus })
       <div class="composer-primary-row">
         <div class="composer-row-spacer"></div>
         <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
+          <MobileComposerControls
+            v-if="mobile"
+            ref="mobileControls"
+            :available-models="availableModels"
+            :available-thinking-levels="availableThinkingLevels"
+            :current-model-label="currentModelLabel"
+            :selected-model-key="selectedModelKey"
+            :model-key="modelKey"
+            :thinking-level="thinkingLevel"
+            :disabled="inputDisabled"
+            :settings-disabled="switchingModel || switchingThinking || switchingUltrafast"
+            :settings-error="settingsError"
+            :image-disabled="shellMode"
+            :ultrafast-available="ultrafastAvailable"
+            :ultrafast-enabled="ultrafastEnabled"
+            :research-enabled="researchEnabled"
+            :research="researchMode"
+            :tool-names="toolNames"
+            @open="mobileSheetOpen = $event"
+            @select-model="emit('select-model', $event)"
+            @select-thinking="emit('select-thinking', $event)"
+            @toggle-ultrafast="emit('toggle-ultrafast')"
+            @toggle-research="emit('toggle-session-kind')"
+            @pick-images="emit('pick-images', $event)"
+            @newline="insertNewline"
+          />
           <ModelPicker
             :available-models="availableModels"
             :current-model-label="currentModelLabel"
@@ -370,6 +493,19 @@ defineExpose({ form, focus })
       </div>
       <div class="composer-context-row">
         <button
+          class="composer-chip composer-input-action"
+          type="button"
+          :disabled="inputDisabled || shellMode"
+          @click="emit('pick-images', $event)"
+        >Add image</button>
+        <button
+          class="composer-chip composer-input-action composer-newline-button"
+          type="button"
+          :disabled="inputDisabled"
+          @mousedown.prevent
+          @click="insertNewline"
+        >New line</button>
+        <button
           class="start-project-button"
           type="button"
           @click="emit('toggle-project-picker')"
@@ -435,17 +571,20 @@ defineExpose({ form, focus })
         </div>
       </div>
     </div>
+    <Teleport to="body" :disabled="!mobile">
     <Transition name="composer-popover">
       <div
         v-if="startProjectPickerOpen"
+        ref="startProjectMenu"
         class="start-project-menu"
-        :style="{ maxHeight: `${startProjectMenuMaxHeight}px` }"
+        :style="startProjectMenuStyle"
       >
         <label>
           <span>⌕</span>
           <input
             :value="startProjectQuery"
             placeholder="Search projects"
+            aria-label="Search projects"
             @input="emit('update:startProjectQuery', $event.target.value)"
           />
         </label>
@@ -471,5 +610,44 @@ defineExpose({ form, focus })
         </button>
       </div>
     </Transition>
+    </Teleport>
   </form>
 </template>
+
+<style scoped>
+.composer-context-row {
+  flex-wrap: wrap;
+}
+
+.composer-input-action {
+  flex: none;
+  min-height: 28px;
+}
+
+.composer-newline-button {
+  display: none;
+}
+
+.start-project-menu {
+  align-content: start;
+  grid-auto-rows: max-content;
+  overscroll-behavior: contain;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .start-composer textarea,
+  .start-project-menu input {
+    font-size: 16px;
+  }
+
+  .composer-input-action,
+  .start-project-menu button {
+    min-height: 44px;
+  }
+
+  .start-composer .composer-context-row > .composer-chip.composer-input-action {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+</style>

@@ -18,7 +18,8 @@ parentPort.on('message', (event) => {
 })
 
 try {
-  starting = startLeylineServer().then(server => { leylineServer = server })
+  starting = startLeylineServer({ networkAccessOwner: process.argv[2] })
+    .then(server => { leylineServer = server })
   await starting
   if (!stopping) parentPort.postMessage({ type: 'ready', url: leylineServer.url })
 } catch (error) {

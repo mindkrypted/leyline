@@ -11,12 +11,15 @@ import {
 } from 'vue'
 const TranscriptEntry = defineAsyncComponent(() => import('./components/TranscriptEntry.vue'))
 const SystemPromptInspector = defineAsyncComponent(() => import('./components/SystemPromptInspector.vue'))
+const SubagentInspector = defineAsyncComponent(() => import('./components/SubagentInspector.vue'))
 const TracePanel = defineAsyncComponent(() => import('./components/TracePanel.vue'))
 const LiveAssistantMessage = defineAsyncComponent(() => import('./components/LiveAssistantMessage.vue'))
 const PierrePreview = defineAsyncComponent(() => import('./components/PierrePreview.vue'))
 const FilePreview = defineAsyncComponent(() => import('./components/FilePreview.vue'))
 const FileContextMenu = defineAsyncComponent(() => import('./components/FileContextMenu.vue'))
 const FileLinkSettings = defineAsyncComponent(() => import('./components/FileLinkSettings.vue'))
+const NetworkAccessSettings = defineAsyncComponent(() => import('./components/NetworkAccessSettings.vue'))
+const RuntimeSettings = defineAsyncComponent(() => import('./components/RuntimeSettings.vue'))
 const ProjectBrowser = defineAsyncComponent(() => import('./components/ProjectBrowser.vue'))
 const ProjectDetailDrawer = defineAsyncComponent(() => import('./components/ProjectDetailDrawer.vue'))
 const ReviewPane = defineAsyncComponent(() => import('./components/ReviewPane.vue'))
@@ -27,15 +30,21 @@ const AgentSettings = defineAsyncComponent(() => import('./components/AgentSetti
 const GlobalSettingsModal = defineAsyncComponent(() => import('./components/GlobalSettingsModal.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./components/ProviderSettings.vue'))
 const McpSettings = defineAsyncComponent(() => import('./components/McpSettings.vue'))
+import CopyIcon from './components/CopyIcon.vue'
+import CompactionBoundary from './components/CompactionBoundary.vue'
 import ExtensionConfirmations from './components/ExtensionConfirmations.vue'
 import StartComposer from './components/StartComposer.vue'
 import SessionComposer from './components/SessionComposer.vue'
+import MobileToolActivity from './components/MobileToolActivity.vue'
+import { activityEntry, activityStatus, groupToolActivity, singleSubagentEntry } from '../lib/tool-activity.js'
 import SessionSidebar from './components/SessionSidebar.vue'
 import { useBackendConnections } from './composables/useBackendConnections'
 import { useComposerMotion } from './composables/useComposerMotion'
 import { useFileLinks } from './composables/useFileLinks'
 import { useLiveTurnProjection } from './composables/useLiveTurnProjection'
 import { useMemoryInspector } from './composables/useMemoryInspector'
+import { useModalFocus } from './composables/useModalFocus'
+import { useVisibleViewport } from './composables/useVisibleViewport'
 import { usePinnedSessions } from './composables/usePinnedSessions'
 import { useProjectBrowser } from './composables/useProjectBrowser'
 import { useRuntimeEvents } from './composables/useRuntimeEvents'
@@ -48,6 +57,7 @@ import { backendDisplayAddress, backendHttpUrl } from './lib/backend'
 import { fuzzyScore } from './lib/fuzzy'
 import { createTraceClient } from './lib/trace-client'
 import {
+  compactNumber,
   eventTime,
   formatMode,
   modelChip,
@@ -79,6 +89,34 @@ import {
   toolCommandCode,
 } from './lib/transcript'
 
+const viewport = useVisibleViewport()
+const sidebarRef = ref(null)
+const mainPane = ref(null)
+const imageDialog = ref(null)
+const toolDialog = ref(null)
+const imageOpener = shallowRef(null)
+const toolOpener = shallowRef(null)
+const subagentInspector = ref(null)
+const subagentOpener = shallowRef(null)
+const subagentSelection = ref('')
+const reviewPane = ref(null)
+const reviewOpener = shallowRef(null)
+const headerMoreOpen = ref(false)
+const headerActions = ref(null)
+const headerMoreButton = ref(null)
+const composerImageInput = ref(null)
+const composerReadPending = ref(false)
+const compositionInputs = new WeakMap()
+let imageChooser = null
+let layoutObserver
+let layoutFrame = 0
+const terminalHeightBudget = ref(310)
+const confirmationMaxHeight = ref(320)
+const terminalKeysOpen = ref(false)
+const terminalKeys = [
+  ['interrupt', 'Ctrl-C'], ['escape', 'Esc'], ['tab', 'Tab'],
+  ['left', 'Left'], ['down', 'Down'], ['up', 'Up'], ['right', 'Right'],
+]
 const sidebarOpen = ref(false)
 const sidebarNavigator = ref('')
 const desktopSidebarHidden = ref(false)
@@ -163,7 +201,6 @@ const shellRunningSessions = ref(new Set())
 const interrupting = ref(false)
 const activityInterruptingSessionId = ref('')
 const activityActionError = ref('')
-const goalCommandSubmitting = ref('')
 const editingEntry = ref(null)
 const composerDrafts = new Map()
 const queueEditDrafts = new Map()
@@ -177,6 +214,7 @@ const confirmationPanelHeight = ref(0)
 const startComposerRef = ref(null)
 const composerFrameRef = ref(null)
 const startComposerAnchor = ref(null)
+const mobileProjectTrigger = ref(null)
 const composerDockAnchor = ref(null)
 const startupDraftSnapshot = ref(null)
 const modelPickerOpen = ref(false)
@@ -231,7 +269,7 @@ const researchEnabled = computed(() => {
   return activeBackendConnectionInfo.value?.capabilities?.research === true
 })
 const reviewAvailable = computed(() => {
-  return reviewEnabled.value && reviewDesktopAvailable.value
+  return reviewEnabled.value
 })
 const reviewHasLineStats = computed(() => {
   const summary = reviewSummary.value
@@ -297,6 +335,7 @@ const {
   terminalOpen,
   terminalStatus,
   resizeTerminal,
+  sendKey,
   toggleTerminal,
   startTerminalResize,
   stopTerminalResize,
@@ -304,7 +343,8 @@ const {
   setTerminalDrawerHeight,
   terminalDrawerHeight,
   disposeTerminalResize,
-} = useTerminal()
+} = useTerminal({ maxHeight: terminalHeightBudget })
+const terminalCompact = computed(() => terminalDrawerHeight.value < 70)
 const initPhaseFloorMs = 340
 
 const selectedSessionExportUrl = computed(() => {
@@ -328,7 +368,10 @@ const pendingInitialSessionPath = ref('')
 const requiredInitialBackendConnectionId = ref('')
 let composerScannerSettlingTimer = null
 let composerCommitTimer = null
-const workbenchScroll = useWorkbenchScroll({ workbench, composerRef, isActive: () => !traceWorkbenchCovered.value })
+const workbenchScroll = useWorkbenchScroll({
+  workbench, composerRef, isActive: () => !traceWorkbenchCovered.value && !subagentSelection.value,
+  prepareEntry: expandEntryActivity,
+})
 const {
   composerHeight,
   stickToBottom,
@@ -354,6 +397,7 @@ const {
   agentRunning,
   beginUserTurn,
   clearLiveOutput,
+  compaction,
   compactingContext,
   dispose: disposeLiveTurn,
   entries,
@@ -370,6 +414,74 @@ const {
 const liveFlowItems = computed(() => {
   return liveItems.value.filter((item) => item.type !== 'activity')
 })
+const persistedTranscriptItems = computed(() => groupToolActivity(
+  entries.value.map(entry => ({ ...entry, persistedEntry: entry })),
+))
+const liveTranscriptItems = computed(() => groupToolActivity(liveFlowItems.value))
+const compactionBoundary = computed(() => {
+  if (!compactingContext.value) return null
+  const cutEntryId = compaction.value?.cutEntryId
+  const items = [...persistedTranscriptItems.value, ...liveTranscriptItems.value]
+  const index = cutEntryId ? items.findIndex((item) => {
+    const calls = item.type === 'tool-activity' ? item.items : [item]
+    return calls.some((call) => activityEntry(call).id === cutEntryId)
+  }) : -1
+  return { index: index < 0 ? items.length : index, resolved: index >= 0 }
+})
+const inspectedSubagent = computed(() => {
+  if (!subagentSelection.value) return null
+  for (const group of [...persistedTranscriptItems.value, ...liveTranscriptItems.value]) {
+    if (group.type !== 'tool-activity') continue
+    const call = group.items.find(item => {
+      const entry = activityEntry(item)
+      return entry.toolName === 'subagent' && (entry.toolCallId || entry.id) === subagentSelection.value
+    })
+    if (call) return call
+  }
+  return null
+})
+const expandedActivity = ref(new Map())
+function isActivityExpanded(group) {
+  if (singleSubagentEntry(group)) return false
+  return expandedActivity.value.get(group.id)
+    ?? group.items.some(item => isToolExpanded(activityEntry(item)))
+}
+function expandEntryActivity(entryId) {
+  const group = [...persistedTranscriptItems.value, ...liveTranscriptItems.value]
+    .find(item => item.type === 'tool-activity'
+      && item.items.some(call => activityEntry(call).id === entryId))
+  if (group && !isActivityExpanded(group)) {
+    expandedActivity.value = new Map(expandedActivity.value).set(group.id, true)
+  }
+}
+function toggleActivity(group, event) {
+  const subagent = singleSubagentEntry(group)
+  if (subagent) {
+    openSubagentInspector(subagent, event)
+    return
+  }
+  const next = new Map(expandedActivity.value)
+  next.set(group.id, !isActivityExpanded(group))
+  expandedActivity.value = next
+}
+function toggleActivityTool(group, entry) {
+  if (isActivityExpanded(group)) toggleTool(entry)
+  else toggleActivity(group)
+}
+function inspectActivitySubagent(group, entry, event) {
+  if (isActivityExpanded(group)) openSubagentInspector(entry, event)
+  else toggleActivity(group, event)
+}
+function openSubagentInspector(entry, event) {
+  if (extensionConfirmations.value.length) return
+  subagentOpener.value = event?.currentTarget || document.activeElement
+  subagentSelection.value = entry.toolCallId || entry.id
+  closePickerMenus()
+  pauseScroll()
+}
+function closeSubagentInspector() {
+  subagentSelection.value = ''
+}
 const sessionWorkspace = useSessionWorkspace({
   liveTurn,
   terminal: {
@@ -379,9 +491,9 @@ const sessionWorkspace = useSessionWorkspace({
   scrollToLatest,
   shouldFollowOutput,
   markNewOutput,
+  beforeRouteChange: prepareRouteChange,
 })
 const {
-  activeGoal,
   activeRuntimeSession,
   availableModels,
   availableThinkingLevels,
@@ -461,6 +573,7 @@ const {
   sessionsLoading,
   sessionSwitching,
   sessionTitle,
+  subagentChildrenByParentPath,
   sidebarActivitySessions,
   startSelectedModel,
   startSelectedThinkingLevel,
@@ -487,12 +600,13 @@ const homeComposerVisible = computed(() => !initializing.value && Boolean(
 const composerMotion = useComposerMotion({
   frame: composerFrameRef,
   homeAnchor: startComposerAnchor,
+  mobile: () => systemPromptMobile.value,
   dockAnchor: composerDockAnchor,
   startComposer: startComposerRef,
   sessionComposer: composerRef,
   workbench,
   homeVisible: homeComposerVisible,
-  isSessionVisible: () => !homeComposerVisible.value || extensionConfirmations.value.length > 0,
+  isSessionVisible: () => !homeComposerVisible.value || extensionConfirmations.value.length > 0 || confirmationPanelHeight.value > 0,
   onReveal(kind) {
     if (kind !== 'home') return
     finishStartupRun()
@@ -531,6 +645,7 @@ const selectedResearch = computed(() => {
     || null
 })
 const isResearchSession = computed(() => Boolean(selectedResearch.value))
+const canInspectResearch = computed(() => Boolean(selectedResearch.value?.sourceCount || selectedResearch.value?.invalidLinks?.length))
 const researchReportNeedsRepair = computed(() => {
   return selectedResearch.value?.status === 'error'
     && selectedResearch.value?.phase === 'report'
@@ -590,16 +705,16 @@ watch(researchEnabled, (enabled) => {
 watch(
   () => [
     selectedSessionId.value,
-    selectedResearch.value?.sourceCount || 0,
+    canInspectResearch.value,
   ],
-  ([sessionId, sourceCount], [previousSessionId] = []) => {
+  ([sessionId, canInspect], [previousSessionId] = []) => {
     if (sessionId !== previousSessionId) {
       closeResearchCitationPreview()
       if (researchSourcesDismissedSessionId !== sessionId) {
         researchSourcesDismissedSessionId = ''
       }
     }
-    if (!selectedResearch.value || !sourceCount) {
+    if (!canInspect) {
       researchSourcesOpen.value = false
       closeResearchCitationPreview()
       return
@@ -680,7 +795,7 @@ const {
   fullscreenToolMarkdown,
   isToolExpanded,
   toggleTool,
-  openToolFullscreen,
+  openToolFullscreen: showToolFullscreen,
   closeToolFullscreen,
   isSkillExpanded,
   toggleSkill,
@@ -690,7 +805,6 @@ const {
   copyEntry,
   copyTranscriptItem,
   copyTitle,
-  copyGlyph,
 } = toolExpansion
 const {
   filePreview,
@@ -759,8 +873,8 @@ const {
   closeMemoryDrawer,
   confirmDiscardMemoryChanges,
   loadVisibleMemory,
-  createMemory,
-  updateMemory,
+  memoryTarget,
+  saveMemory,
   archiveMemories,
   restoreMemories,
   deleteMemories,
@@ -812,7 +926,7 @@ const {
   },
   onExtensionUi(data) {
     if (data.activeSessionId !== selectedSessionId.value) return
-    patchRuntimeExtensionUi(data.state, data.goal)
+    patchRuntimeExtensionUi(data.state)
     surfaceExtensionNotification(data.state)
   },
   onExtensionError(data) {
@@ -906,25 +1020,10 @@ const extensionConfirmations = computed(() => {
   if (!selectedSessionId.value || runtime?.id !== selectedSessionId.value) return []
   return runtime.state?.extensionUi?.confirmations || []
 })
-const goalBudgetLabel = computed(() => {
-  const goal = activeGoal.value
-  if (!goal) return ''
-  const parts = []
-  if (goal.tokenBudget) {
-    const used = compactNumber(goal.tokensUsed)
-    const budget = compactNumber(goal.tokenBudget)
-    parts.push(`${used}/${budget} tokens`)
-  }
-  if (goal.continuationLimit > 0) {
-    parts.push(`${goal.continuationsUsed}/${goal.continuationLimit} turns`)
-  }
-  return parts.join(' · ')
-})
-const goalPrimaryAction = computed(() => {
-  const status = activeGoal.value?.status
-  if (status === 'active') return { label: 'Pause', command: 'pause' }
-  if (status === 'paused') return { label: 'Resume', command: 'resume' }
-  return null
+const extensionConfirmationNotices = computed(() => {
+  const runtime = activeRuntimeSession.value
+  if (runtime?.id !== selectedSessionId.value) return []
+  return (runtime.state?.extensionUi?.notifications || []).filter(notice => notice.kind === 'confirmation-expired')
 })
 const shellModeDraft = computed(() => draft.value.trimStart().startsWith('!'))
 const shellDraft = computed(() => shellCommandFromText(draft.value.trim()))
@@ -1143,6 +1242,10 @@ watch(selectedSessionId, (sessionId, previousSessionId) => {
   }
   expandedTools.value = new Set()
   expandedSkills.value = new Set()
+  expandedActivity.value = new Map()
+  closeSubagentInspector()
+  startComposerRef.value?.dismissMobileSheet()
+  composerRef.value?.dismissMobileSheet()
   closeSystemPrompt(false)
   closeToolFullscreen()
   closeFileMenu(false)
@@ -1156,7 +1259,14 @@ watch(selectedSessionId, (sessionId, previousSessionId) => {
 watch([activeBackendConnectionId, () => activeBackendConnection.value?.url], () => {
   resetTracing()
   closeSystemPrompt(false)
+  closeSubagentInspector()
 }, { flush: 'sync' })
+watch(inspectedSubagent, call => {
+  if (!call) closeSubagentInspector()
+})
+watch(() => extensionConfirmations.value.length, count => {
+  if (count) closeSubagentInspector()
+})
 watch(activeBackendConnectionId, (connectionId) => {
   if (connectionId) void loadPinnedSessions(connectionId)
 })
@@ -1222,7 +1332,53 @@ watch(composerScannerSourceActive, (active, wasActive) => {
   }, 420)
 })
 
+const activeFocusScope = computed(() => {
+  if (settingsOpen.value || filePreview.value || fileMenu.value || projectBrowserOpen.value || deleteConfirmProject.value || deleteConfirmSession.value) return 'external'
+  if (fullscreenImage.value) return 'image'
+  if (fullscreenTool.value) return 'tool'
+  if (inspectedSubagent.value) return 'subagent'
+  if (['quick', 'activity'].includes(sidebarNavigator.value) || sidebarRef.value?.sessionActionsOpen) return 'sidebar'
+  if (!reviewDesktopAvailable.value && reviewOpen.value) return 'review'
+  if (headerMoreOpen.value) return 'header'
+  return ''
+})
+const mobileComposerSheetOpen = computed(() => Boolean(startComposerRef.value?.mobileSheetOpen || composerRef.value?.mobileSheetOpen))
+const workbenchDialogOpen = computed(() => mobileComposerSheetOpen.value || ['image', 'tool', 'subagent', 'sidebar', 'review'].includes(activeFocusScope.value))
+watch(mobileComposerSheetOpen, open => {
+  if (open) closePickerMenus()
+})
+watch([activeFocusScope, () => extensionConfirmations.value.length, sessionLoading, sessionSwitching, composerMotionState], values => {
+  if (!values.some(Boolean)) return
+  startComposerRef.value?.dismissMobileSheet()
+  composerRef.value?.dismissMobileSheet()
+})
+useModalFocus({ dialog: imageDialog, active: () => activeFocusScope.value === 'image', opener: imageOpener, initialFocus: imageDialog, fallbackSelector: '.header-more-button, .brand-home' })
+useModalFocus({ dialog: toolDialog, active: () => activeFocusScope.value === 'tool', opener: toolOpener, initialFocus: toolDialog, fallbackSelector: '.header-more-button, .brand-home' })
+useModalFocus({ dialog: () => subagentInspector.value?.element, active: () => activeFocusScope.value === 'subagent', opener: subagentOpener, initialFocus: () => subagentInspector.value?.element, fallbackSelector: '.header-more-button, .brand-home' })
+useModalFocus({ dialog: () => !reviewDesktopAvailable.value && reviewOpen.value ? reviewPane.value?.element : null, active: () => activeFocusScope.value === 'review', opener: reviewOpener, fallbackSelector: '.header-more-button, .review-toggle-button' })
+useModalFocus({ dialog: () => headerMoreOpen.value ? headerActions.value : null, active: () => activeFocusScope.value === 'header', opener: headerMoreButton, fallbackSelector: '.header-more-button' })
+
+function measureDockSpace() {
+  cancelAnimationFrame(layoutFrame)
+  layoutFrame = requestAnimationFrame(() => {
+    if (!mainPane.value || !composerFrameRef.value) return
+    const chrome = mainPane.value.querySelector('.runtime-chrome')?.offsetHeight || 0
+    const height = mainPane.value.clientHeight - chrome
+    const composer = composerFrameRef.value.offsetHeight
+    const available = Math.max(0, height - composer - 34)
+    confirmationMaxHeight.value = Math.max(44, Math.min(320, available - (terminalOpen.value ? 48 : 0)))
+    const confirmation = Math.min(confirmationPanelHeight.value, confirmationMaxHeight.value)
+    terminalHeightBudget.value = Math.max(44, available - (confirmation ? confirmation + 12 : 0))
+  })
+}
+watch([viewport, terminalOpen, confirmationPanelHeight, selectedResearch], measureDockSpace)
+watch(terminalOpen, open => { if (!open) terminalKeysOpen.value = false })
+
 onMounted(async () => {
+  layoutObserver = new ResizeObserver(measureDockSpace)
+  if (mainPane.value) layoutObserver.observe(mainPane.value)
+  if (composerFrameRef.value) layoutObserver.observe(composerFrameRef.value)
+  measureDockSpace()
   reviewDesktopQuery = window.matchMedia('(min-width: 1121px)')
   reviewDesktopAvailable.value = reviewDesktopQuery.matches
   reviewDesktopQuery.addEventListener('change', handleReviewDesktopChange)
@@ -1230,6 +1386,7 @@ onMounted(async () => {
   window.addEventListener('keydown', handleGlobalKeydown, true)
   window.addEventListener('click', closeMenusOnOutsideClick)
   window.addEventListener('popstate', handleRouteChange)
+  window.addEventListener('hashchange', handleRouteChange)
   window.addEventListener('leyline:new-session', handleNativeNewSession)
   window.addEventListener('leyline:toggle-terminal', handleNativeToggleTerminal)
   window.addEventListener('leyline:open-settings', handleNativeOpenSettings)
@@ -1256,11 +1413,14 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  layoutObserver?.disconnect()
+  cancelAnimationFrame(layoutFrame)
   reviewDesktopQuery?.removeEventListener('change', handleReviewDesktopChange)
   systemPromptViewport.removeEventListener('change', updateSystemPromptViewport)
   window.removeEventListener('keydown', handleGlobalKeydown, true)
   window.removeEventListener('click', closeMenusOnOutsideClick)
   window.removeEventListener('popstate', handleRouteChange)
+  window.removeEventListener('hashchange', handleRouteChange)
   window.removeEventListener('leyline:new-session', handleNativeNewSession)
   window.removeEventListener('leyline:toggle-terminal', handleNativeToggleTerminal)
   window.removeEventListener('leyline:open-settings', handleNativeOpenSettings)
@@ -1463,7 +1623,11 @@ async function createSessionForCwd(cwd, options = {}) {
 }
 
 async function selectSession(session, options, traceRevision) {
-  if (memoryDirty.value && !confirmDiscardMemoryChanges()) return
+  if (settingsOpen.value && !confirmPiSettingsLeave()) return
+  if (!confirmDiscardMemoryChanges()) return
+  settingsOpen.value = false
+  memoryOpen.value = false
+  headerMoreOpen.value = false
   if (traceRevision !== traceViewRevision) resetTracing()
   sidebarNavigator.value = ''
   await workspaceSelectSession(session, options)
@@ -1642,9 +1806,26 @@ function openMobileSidebar() {
   sidebarOpen.value = true
 }
 
-function handleRouteChange() {
+function prepareRouteChange() {
+  if (settingsOpen.value && !confirmPiSettingsLeave()) return false
+  if (!confirmDiscardMemoryChanges()) return false
+  settingsOpen.value = false
+  memoryOpen.value = false
+  sidebarNavigator.value = ''
+  sidebarOpen.value = false
+  sidebarRef.value?.closeSessionActions()
+  headerMoreOpen.value = false
+  terminalKeysOpen.value = false
+  closeSubagentInspector()
+  closeImageFullscreen()
+  closeToolFullscreen()
+  closeReview(true)
   resetTracing()
-  return workspaceHandleRouteChange()
+  return true
+}
+
+function handleRouteChange(event) {
+  return workspaceHandleRouteChange(event)
 }
 
 function handleNativeNewSession(event) {
@@ -1888,7 +2069,7 @@ async function closeSystemPrompt(restoreFocus = true) {
 }
 
 function openResearchSources() {
-  if (!selectedResearch.value?.sourceCount) return
+  if (!canInspectResearch.value) return
   closeSystemPrompt(false)
   closeResearchCitationPreview()
   closeReview(true)
@@ -1897,6 +2078,7 @@ function openResearchSources() {
 }
 
 function closeResearchSources(dismiss = true) {
+  if (researchCitationPreview.value?.origin === 'ledger') closeResearchCitationPreview()
   researchSourcesOpen.value = false
   if (dismiss) researchSourcesDismissedSessionId = selectedSessionId.value
 }
@@ -1917,15 +2099,16 @@ async function openResearchSource(payload) {
   const id = Number(payload?.id || 0)
   const source = selectedResearch.value?.sources?.find((item) => {
     return item.id === id
-  }) || payload?.source
+  })
   if (!source || !payload?.rect) return
-  const paneWasOpen = researchSourcesOpen.value
+  const ledger = payload.origin === 'ledger'
+  const paneWasOpen = (!ledger && researchSourcesOpen.value)
     || reviewOpen.value
     || reviewClosing.value
     || !!systemPromptEntry.value
   closeSystemPrompt(false)
   closeReview(true)
-  closeResearchSources(false)
+  if (!ledger) closeResearchSources(false)
   closeResearchCitationPreview()
   const token = researchCitationPreviewToken
   researchCitationAnchor = payload.anchor || null
@@ -1947,11 +2130,13 @@ async function openResearchSource(payload) {
       top: anchorRect.top,
       width: anchorRect.width,
     },
+    origin: ledger ? 'ledger' : 'citation',
     source,
   }
 }
 
 function openReview() {
+  reviewOpener.value = document.activeElement
   closeSystemPrompt(false)
   closeResearchCitationPreview()
   closeResearchSources(true)
@@ -2052,6 +2237,7 @@ function toggleReviewExpanded() {
 }
 
 function navigateHome() {
+  if (!prepareRouteChange()) return
   resetTracing()
   clearPendingWorkspaceTargets()
   workspaceNavigateHome()
@@ -2085,25 +2271,6 @@ function eventSummary(item) {
     return event.error?.message || event.error || 'extension error'
   }
   return item.activeSessionId ? item.activeSessionId.slice(0, 8) : 'runtime'
-}
-
-function liveToolStatus(tool) {
-  if (tool.status === 'preparing') return 'preparing'
-  if (tool.status === 'running') return 'running'
-  if (tool.status === 'reading') return 'reading result'
-  if (tool.status === 'error') return 'error'
-  if (tool.status === 'aborted') return 'aborted'
-  return 'completed'
-}
-
-function isLiveSubagentTool(item) {
-  return item.toolName === 'subagent'
-}
-
-function liveSubagentTarget(item) {
-  const agent = item.label?.replace(/^Subagent · /, '') || ''
-  if (agent && agent !== 'subagent' && agent !== item.code) return agent
-  return item.code || ''
 }
 
 function liveItemClass(item) {
@@ -2148,6 +2315,7 @@ function openGlobalSettings(category) {
   }
   settingsOpener.value = document.activeElement
   if (typeof category === 'string') settingsCategory.value = category
+  closeSubagentInspector()
   closeImageFullscreen()
   closeToolFullscreen()
   closeResearchCitationPreview()
@@ -2575,17 +2743,6 @@ function surfaceExtensionNotification(state) {
   }
 }
 
-function compactNumber(value) {
-  const number = Number(value || 0)
-  if (number >= 1_000_000) return `${trimNumber(number / 1_000_000)}M`
-  if (number >= 1_000) return `${trimNumber(number / 1_000)}K`
-  return String(number)
-}
-
-function trimNumber(value) {
-  return value.toFixed(1).replace(/\.0$/, '')
-}
-
 function retryComposerFocus(attempt = 0) {
   const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
   if (composer) {
@@ -2686,6 +2843,7 @@ function composerDraftState(key) {
 
 function moveComposerDraft(sourceKey, sessionId) {
   const targetKey = composerDraftKey(sessionId)
+  if (imageChooser?.key === sourceKey) imageChooser.key = targetKey
   const state = composerDraftState(sourceKey)
   for (const paste of pendingComposerPastes) {
     if (paste.valid && paste.key === sourceKey) paste.key = targetKey
@@ -2729,6 +2887,7 @@ async function settleComposerPastes(key) {
 
 function discardComposerDraft(sessionId) {
   const key = composerDraftKey(sessionId)
+  if (imageChooser?.key === key) imageChooser = null
   for (const paste of pendingComposerPastes) {
     if (paste.key === key) paste.valid = false
   }
@@ -2767,6 +2926,14 @@ function restoreComposerEdit(key, entry, text, images) {
 }
 
 async function submitDraft(streamingBehavior) {
+  if (composerReadPending.value) return
+  const owner = activeComposerDraftKey
+  if (hasPendingComposerPastes(owner)) {
+    composerReadPending.value = true
+    try { await settleComposerPastes(owner) }
+    finally { composerReadPending.value = false }
+    if (owner !== activeComposerDraftKey) return
+  }
   const submittedDraft = draft.value
   const text = submittedDraft.trim()
   const submittedAttachments = attachedImages.value
@@ -2852,7 +3019,6 @@ async function submitDraft(streamingBehavior) {
   const previousDetail = sessionDetail.value
   const shouldFollowOutput = editing || stickToBottom.value
   const startsTurn = !isHandledSlashCommand(text)
-    || slashCommandStartsTurn(text)
   const startsEmptySession = !startupRun.value
     && isEmptySelectedSession.value
     && !editing
@@ -2872,18 +3038,19 @@ async function submitDraft(streamingBehavior) {
   }
   const motionToken = startsEmptySession ? composerMotion.begin('session') : null
   if (!startsEmptySession && !startupRun.value) pulseComposerCommit()
-  const localEntry = beginUserTurn(text, images)
-  promptSubmitting.value = true
-  promptError.value = ''
-  if (!editing) {
-    draft.value = ''
-    attachedImages.value = []
-  }
-  if (shouldFollowOutput) await scrollToLatest()
-  else hasNewOutput.value = true
-
+  let localEntry
   let promptAccepted = false
   try {
+    localEntry = beginUserTurn(text, images)
+    promptSubmitting.value = true
+    promptError.value = ''
+    if (!editing) {
+      draft.value = ''
+      attachedImages.value = []
+    }
+    if (shouldFollowOutput) await scrollToLatest()
+    else hasNewOutput.value = true
+
     const data = editing
       ? await editPrompt(
         sessionId,
@@ -3062,11 +3229,7 @@ async function submitShellCommand(shellCommand, images) {
 }
 
 function isHandledSlashCommand(text) {
-  return /^\/(goal|compact)(?:\s|$)/.test(text)
-}
-
-function slashCommandStartsTurn(text) {
-  return /^\/goal\s+/.test(text) && !/^\/goal\s+(clear|pause)\s*$/i.test(text)
+  return /^\/compact(?:\s|$)/.test(text)
 }
 
 function startEditingEntry(entry) {
@@ -3213,31 +3376,6 @@ function imageSrcForComposer(image) {
   return `data:${image.mimeType};base64,${image.data}`
 }
 
-async function runGoalCommand(command) {
-  if (!activeGoal.value || goalCommandSubmitting.value) return
-  if (!selectedSession.value) return
-
-  goalCommandSubmitting.value = command
-  promptError.value = ''
-
-  const sessionId = selectedSessionId.value
-  try {
-    if ((command === 'pause' || command === 'clear') && agentRunning.value) {
-      setLiveActivity('Stopping…')
-      await interruptPiSession(sessionId)
-      setAgentRunning(false)
-    }
-    await submitPrompt(sessionId, `/goal ${command}`)
-    if (command === 'resume') {
-      setAgentRunning(true, 'Thinking…')
-    }
-  } catch (error) {
-    if (selectedSessionId.value === sessionId) promptError.value = error.message
-  } finally {
-    goalCommandSubmitting.value = ''
-  }
-}
-
 async function interruptAgent() {
   if ((!agentRunning.value && !composerCompacting.value && !composerShellRunning.value)
     || interrupting.value) return
@@ -3380,22 +3518,62 @@ function handleSlashPickerKeydown(event) {
   return false
 }
 
+function handleComposerCompositionStart(event) {
+  compositionInputs.set(event.target, { key: activeComposerDraftKey, composing: true })
+}
+
+function handleComposerCompositionEnd(event) {
+  const state = compositionInputs.get(event.target)
+  if (!state) return
+  setTimeout(() => { if (compositionInputs.get(event.target) === state) state.composing = false }, 0)
+}
+
+function handleComposerInputBlur(event) {
+  compositionInputs.delete(event.target)
+}
+
+function isComposingInput(event) {
+  return event.isComposing || event.keyCode === 229 || compositionInputs.get(event.target)?.composing
+}
+
 function handleComposerKeydown(event) {
+  if (isComposingInput(event)) return
   if (handleSlashPickerKeydown(event)) return
   if (event.key !== 'Enter' || event.shiftKey) return
   event.preventDefault()
   submitDraft(event.altKey ? 'steer' : 'followUp')
 }
 
-async function handleComposerPaste(event) {
-  const files = Array.from(event.clipboardData?.files || [])
-    .filter((file) => file.type.startsWith('image/'))
-  if (!files.length) return
+function openComposerImagePicker() {
+  imageChooser = { key: activeComposerDraftKey, valid: true }
+  composerImageInput.value.value = ''
+  composerImageInput.value.click()
+}
 
+function cancelComposerImageSelection() {
+  imageChooser = null
+}
+
+function handleComposerImageSelection(event) {
+  const owner = imageChooser
+  imageChooser = null
+  if (owner?.valid) void addComposerImages([...event.target.files], owner.key)
+  event.target.value = ''
+}
+
+function handleComposerPaste(event) {
+  const files = Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/'))
+  if (!files.length) return
   event.preventDefault()
+  void addComposerImages(files, activeComposerDraftKey)
+}
+
+async function addComposerImages(files, key) {
+  files = files.filter(file => file.type.startsWith('image/'))
+  if (!files.length) return
   promptError.value = ''
   const paste = {
-    key: activeComposerDraftKey,
+    key,
     promise: Promise.all(files.map(fileToImageContent)),
     valid: true,
   }
@@ -3419,9 +3597,15 @@ function removeAttachedImage(index) {
   })
 }
 
-function openImageFullscreen(src, title = 'Image preview') {
+function openImageFullscreen(src, title = 'Image preview', event) {
   if (!src) return
+  imageOpener.value = event?.currentTarget || document.activeElement
   fullscreenImage.value = { src, title }
+}
+
+function openToolFullscreen(entry, event) {
+  toolOpener.value = event?.currentTarget || document.activeElement
+  showToolFullscreen(entry)
 }
 
 function closeImageFullscreen() {
@@ -3448,6 +3632,11 @@ function fileToImageContent(file) {
 }
 
 function handleStartComposerKeydown(event) {
+  if (isComposingInput(event)) return
+  if (switchingUltrafast.value && event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    return
+  }
   if (handleSlashPickerKeydown(event)) return
   if (event.key !== 'Enter' || event.shiftKey) return
   event.preventDefault()
@@ -3472,7 +3661,7 @@ async function submitStartDraft() {
   if (!targetCwd || creatingSessionCwd.value || startupRun.value) return
 
   closePickerMenus()
-  const animatePrompt = hasPrompt && (!isHandledSlashCommand(text) || slashCommandStartsTurn(text))
+  const animatePrompt = hasPrompt && !isHandledSlashCommand(text)
   startupDraftSnapshot.value = animatePrompt ? {
     ...currentComposerDraft(),
     cwd: targetCwd,
@@ -3519,6 +3708,7 @@ async function submitStartDraft() {
 }
 
 function handleGlobalKeydown(event) {
+  if (isComposingInput(event)) return
   if (settingsOpen.value) {
     if (event.key === 'Escape') {
       if (event.target?.closest?.('.global-settings-modal')) return
@@ -3541,7 +3731,7 @@ function handleGlobalKeydown(event) {
     closePickerMenus()
     closeProjectBrowser()
     closeResearchCitationPreview()
-    setSidebarNavigator('quick')
+    sidebarRef.value?.openNavigator('quick', event)
     return
   }
   if (event.key === 'Escape') handleEscape(event)
@@ -3549,13 +3739,20 @@ function handleGlobalKeydown(event) {
 
 function anyEscapeTargetOpen(ignoreQueue = false) {
   return Boolean(
-    (!ignoreQueue && composerRef.value?.queueUiOpen)
+    mobileComposerSheetOpen.value
+    || (!ignoreQueue && composerRef.value?.queueUiOpen)
     || fullscreenImage.value
     || fullscreenTool.value
+    || inspectedSubagent.value
     || filePreview.value
     || fileMenu.value
     || projectBrowserOpen.value
     || sidebarNavigator.value
+    || sidebarRef.value?.sessionActionsOpen
+    || sidebarOpen.value
+    || headerMoreOpen.value
+    || terminalKeysOpen.value
+    || (!reviewDesktopAvailable.value && (reviewOpen.value || reviewOpenRequested.value))
     || settingsOpen.value
     || eventLogOpen.value
     || sessionDetailsOpen.value
@@ -3578,6 +3775,13 @@ function anyEscapeTargetOpen(ignoreQueue = false) {
 }
 
 function handleEscape(event) {
+  if (mobileComposerSheetOpen.value) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    startComposerRef.value?.dismissMobileSheet()
+    composerRef.value?.dismissMobileSheet()
+    return
+  }
   if (fileMenu.value || filePreview.value) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
@@ -3585,14 +3789,30 @@ function handleEscape(event) {
     else closeFilePreview()
     return
   }
-  if (sidebarNavigator.value || projectBrowserOpen.value || deleteConfirmActive.value || fullscreenImage.value || fullscreenTool.value) {
+  if (sidebarNavigator.value || projectBrowserOpen.value || deleteConfirmActive.value || fullscreenImage.value || fullscreenTool.value || inspectedSubagent.value) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
     if (deleteConfirmActive.value) cancelConfirmDelete()
     else if (projectBrowserOpen.value) closeProjectBrowser()
     else if (fullscreenImage.value) closeImageFullscreen()
     else if (fullscreenTool.value) closeToolFullscreen()
+    else if (inspectedSubagent.value) closeSubagentInspector()
     else sidebarNavigator.value = ''
+    return
+  }
+  if (headerMoreOpen.value || terminalKeysOpen.value || sidebarRef.value?.sessionActionsOpen) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    headerMoreOpen.value = false
+    terminalKeysOpen.value = false
+    sidebarRef.value?.closeSessionActions()
+    return
+  }
+  if (sidebarOpen.value || (!reviewDesktopAvailable.value && (reviewOpen.value || reviewOpenRequested.value))) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    if (sidebarOpen.value) sidebarOpen.value = false
+    else closeReview()
     return
   }
   if (traceMode.value) {
@@ -3658,10 +3878,12 @@ function clearPendingWorkspaceTargets() {
   url.searchParams.delete('leylineSessionPath')
   if (url.search === previous) return
   const next = `${url.pathname}${url.search}${url.hash}`
-  window.history.replaceState({}, '', next)
+  window.history.replaceState(window.history.state, '', next)
 }
 
 function closeMenusOnOutsideClick(event) {
+  if (!event.target.closest('.topbar-meta')) headerMoreOpen.value = false
+  if (!event.target.closest('.terminal-header, .terminal-keys')) terminalKeysOpen.value = false
   composerRef.value?.closePopovers?.(event)
   if (event.target.closest('.project-browser-modal')) return
   if (event.target.closest('.model-picker')) return
@@ -3700,10 +3922,10 @@ function closePickerMenus() {
       'terminal-open': terminalOpen,
       'event-log-open': eventLogOpen,
       'memory-open': memoryOpen,
-      'review-open': reviewAvailable && reviewOpen && !!selectedSession,
-      'review-expanded': reviewAvailable && reviewOpen && reviewExpanded
+      'review-open': reviewDesktopAvailable && reviewAvailable && reviewOpen && !!selectedSession,
+      'review-expanded': reviewDesktopAvailable && reviewAvailable && reviewOpen && reviewExpanded
         && !!selectedSession,
-      'review-transcript-hidden': reviewAvailable
+      'review-transcript-hidden': reviewDesktopAvailable && reviewAvailable
         && (reviewOpen || reviewClosing) && reviewPaneExpanded
         && !!selectedSession,
       'research-open': researchSourcesOpen
@@ -3714,6 +3936,7 @@ function closePickerMenus() {
     }"
     :style="{
       '--composer-height': `${composerHeight}px`,
+      '--confirmation-max-height': `${confirmationMaxHeight}px`,
       '--composer-reserved-height': confirmationPanelHeight
         ? `calc(${composerReservedHeight} + ${confirmationPanelHeight + 12}px)`
         : composerReservedHeight,
@@ -3739,7 +3962,8 @@ function closePickerMenus() {
       @select="createSessionForCwd"
     />
 
-    <header class="app-header">
+    <input ref="composerImageInput" type="file" accept="image/*" multiple hidden @change="handleComposerImageSelection" @cancel="cancelComposerImageSelection" />
+    <header class="app-header" :inert="workbenchDialogOpen">
       <div class="app-header-brand">
         <button
           class="brand-home"
@@ -3773,6 +3997,7 @@ function closePickerMenus() {
           aria-label="Open sessions"
           @click="openMobileSidebar"
         >☰</button>
+        <button v-if="systemPromptMobile && homeComposerVisible" type="button" class="topbar-icon-button mobile-home-details" aria-label="Session details" aria-haspopup="dialog" @click="startComposerRef?.openMobileDetails($event)">•••</button>
         <div v-if="selectedSession" class="workbench-title-row">
           <button
             v-if="selectedSession.isSubagentSession
@@ -3826,6 +4051,8 @@ function closePickerMenus() {
               : selectedResearch.phase }}</span>
         </div>
         <div v-if="selectedSession" class="topbar-meta">
+          <button ref="headerMoreButton" class="header-more-button topbar-icon-button" type="button" aria-label="Session actions" :aria-expanded="headerMoreOpen" @click="headerMoreOpen = !headerMoreOpen">•••</button>
+          <div ref="headerActions" class="header-utilities" :class="{ open: headerMoreOpen }" role="group" aria-label="Session actions" @click="headerMoreOpen = false">
           <button
             v-if="tracingAvailable"
             class="topbar-icon-button trace-inspector-toggle"
@@ -3853,7 +4080,7 @@ function closePickerMenus() {
             </svg>
           </button>
           <button
-            v-if="isResearchSession && selectedResearch.sourceCount"
+            v-if="canInspectResearch"
             class="topbar-icon-button research-sources-toggle"
             :class="{ active: researchSourcesOpen }"
             type="button"
@@ -3963,11 +4190,15 @@ function closePickerMenus() {
               </svg>
             </a>
           </template>
+          </div>
         </div>
       </div>
     </header>
 
     <SessionSidebar
+      ref="sidebarRef"
+      :navigator-focus-active="activeFocusScope === 'sidebar'"
+      :inert="workbenchDialogOpen"
       :activity-action-error="activityActionError"
       :active-backend-connection="activeBackendConnection"
       :agent-running="agentRunning"
@@ -4001,6 +4232,7 @@ function closePickerMenus() {
       :sessions-hydrating="sessionsHydrating"
       :sessions-hydration-error="sessionsHydrationError"
       :sessions-loading="sessionsLoading"
+      :subagent-children-by-parent-path="subagentChildrenByParentPath"
       :visible-projects="visibleProjects"
       :tracing-available="tracingAvailable"
       :traces-open="traceMode === 'explorer' || traceMode === 'workspace' && traceOrigin === 'explorer'"
@@ -4019,39 +4251,15 @@ function closePickerMenus() {
       @retry-pins="retryPinnedSessions"
       @retry-sessions="retrySessions"
       @select-backend="selectBackendTarget"
+      @select-child-session="navigateChildSession"
       @select-project="selectSidebarProject"
       @select-session="selectSessionTarget"
       @toggle-pin-session="togglePinSessionTarget"
       @update:navigator="setSidebarNavigator"
     />
 
-    <section class="main-pane" :inert="traceWorkbenchCovered || (!!systemPromptEntry || traceMode === 'inspector') && systemPromptMobile" :aria-hidden="traceWorkbenchCovered || undefined">
+    <section ref="mainPane" class="main-pane" :inert="workbenchDialogOpen || traceWorkbenchCovered || (!!systemPromptEntry || traceMode === 'inspector') && systemPromptMobile" :aria-hidden="traceWorkbenchCovered || undefined">
       <div v-if="runtimeChromeVisible" class="runtime-chrome">
-
-        <section v-if="activeGoal" class="goal-control-plane">
-          <div class="goal-control-main">
-            <span class="goal-control-kicker">Goal</span>
-            <strong>{{ activeGoal.objective }}</strong>
-            <span v-if="goalBudgetLabel">{{ goalBudgetLabel }}</span>
-          </div>
-          <div class="goal-control-actions">
-            <button
-              v-if="goalPrimaryAction"
-              type="button"
-              :disabled="!!goalCommandSubmitting"
-              @click="runGoalCommand(goalPrimaryAction.command)"
-            >
-              {{ goalCommandSubmitting === goalPrimaryAction.command
-                ? '…'
-                : goalPrimaryAction.label }}
-            </button>
-            <button
-              type="button"
-              :disabled="!!goalCommandSubmitting"
-              @click="runGoalCommand('clear')"
-            >{{ goalCommandSubmitting === 'clear' ? '…' : 'Clear' }}</button>
-          </div>
-        </section>
         <section
           v-if="isResearchSession"
           class="research-phase-bar"
@@ -4216,6 +4424,10 @@ function closePickerMenus() {
           class="start-panel"
         >
           <h2 class="start-headline-text">{{ startHeadline }}</h2>
+          <div v-if="systemPromptMobile && homeComposerVisible" class="mobile-home-context">
+            <button ref="mobileProjectTrigger" type="button" class="start-project-button" aria-haspopup="dialog" :aria-expanded="startProjectPickerOpen" @click="startProjectPickerOpen = !startProjectPickerOpen"><span class="start-project-icon">▱</span><span class="start-project-label">{{ startProjectLabel }}</span><span aria-hidden="true">›</span></button>
+            <span>{{ activeBackendConnection?.name || 'Local' }}</span>
+          </div>
           <div
             v-if="startupLoadingVisible"
             class="init-panel transcript-skeleton-panel startup-init-panel"
@@ -4296,34 +4508,79 @@ function closePickerMenus() {
           v-if="selectedSession
             && !startupRun
             && !inProjectNewSessionRun
-            && entries.length > 0"
+            && persistedTranscriptItems.length > 0"
         >
-          <TranscriptEntry
-            v-for="entry in entries"
-            :key="`${selectedSession.id}:${entry.id}`"
-            :data-entry-id="entry.id"
-            :class="{ 'message-enter': isEnteringEntry(entry) }"
-            :copied-entry-id="copiedEntryId"
-            :entry="entry"
-            :research-cwd="selectedSession?.cwd || ''"
-            :skill-expanded="isSkillExpanded(entry)"
-            :system-prompt-selected="systemPromptEntry?.id === entry.id"
-            :thinking-initially-expanded="thinkingInitiallyExpanded"
-            :tool-expanded="isToolExpanded(entry)"
-            @copy="copyEntry"
-            @edit="startEditingEntry"
-            @fork="forkSession"
-            @mark-feedback="markEntryFeedback"
-            @navigate-child-session="navigateChildSession"
-            @open-image="openImageFullscreen"
-            @open-research-source="openResearchSource"
-            @open-system-prompt="openSystemPrompt"
-            @reset="resetSessionToEntry"
-            @retry="retryEntry"
-            @open-tool-fullscreen="openToolFullscreen"
-            @toggle-skill="toggleSkill"
-            @toggle-tool="toggleTool"
-          />
+          <template
+            v-for="(item, itemIndex) in persistedTranscriptItems"
+            :key="`${selectedSession.id}:${item.id}`"
+          >
+            <CompactionBoundary
+              v-if="compactionBoundary?.index === itemIndex"
+              :reason="compaction?.reason || ''"
+              :started-at="compaction?.startedAt || 0"
+              :tokens="contextUsage?.tokens ?? null"
+            />
+
+            <MobileToolActivity
+              v-if="item.type === 'tool-activity'"
+              :class="{ 'is-frozen': compactionBoundary?.resolved && itemIndex < compactionBoundary.index }"
+              :group="item"
+              :expanded="isActivityExpanded(item)"
+              @toggle="toggleActivity"
+            >
+              <template #default="{ items }">
+                <TranscriptEntry
+                  v-for="call in items"
+                  :key="activityEntry(call).toolCallId || activityEntry(call).id"
+                  :data-entry-id="activityEntry(call).id"
+                  :copied-entry-id="copiedEntryId"
+                  :entry="activityEntry(call)"
+                  :research-cwd="selectedSession?.cwd || ''"
+                  :tool-expanded="isActivityExpanded(item) && isToolExpanded(activityEntry(call))"
+                  :tool-status="activityStatus(call)"
+                  :subagent-inspector-selected="subagentSelection === (activityEntry(call).toolCallId || activityEntry(call).id)"
+                  @copy="copyEntry"
+                  @fork="forkSession"
+                  @inspect-subagent="(entry, event) => inspectActivitySubagent(item, entry, event)"
+                  @open-image="openImageFullscreen"
+                  @open-research-source="openResearchSource"
+                  @reset="resetSessionToEntry"
+                  @open-tool-fullscreen="openToolFullscreen"
+                  @toggle-tool="toggleActivityTool(item, activityEntry(call))"
+                />
+              </template>
+            </MobileToolActivity>
+
+            <TranscriptEntry
+              v-else
+              :data-entry-id="item.id"
+              :class="{
+                'message-enter': isEnteringEntry(item),
+                'is-frozen': compactionBoundary?.resolved && itemIndex < compactionBoundary.index,
+              }"
+              :copied-entry-id="copiedEntryId"
+              :entry="activityEntry(item)"
+              :research-cwd="selectedSession?.cwd || ''"
+              :skill-expanded="isSkillExpanded(activityEntry(item))"
+              :system-prompt-selected="systemPromptEntry?.id === item.id"
+              :thinking-initially-expanded="thinkingInitiallyExpanded"
+              :tool-expanded="isToolExpanded(activityEntry(item))"
+              :tool-status="activityStatus(item)"
+              @copy="copyEntry"
+              @edit="startEditingEntry"
+              @fork="forkSession"
+              @mark-feedback="markEntryFeedback"
+              @inspect-subagent="openSubagentInspector"
+              @open-image="openImageFullscreen"
+              @open-research-source="openResearchSource"
+              @open-system-prompt="openSystemPrompt"
+              @reset="resetSessionToEntry"
+              @retry="retryEntry"
+              @open-tool-fullscreen="openToolFullscreen"
+              @toggle-skill="toggleSkill"
+              @toggle-tool="toggleTool"
+            />
+          </template>
         </template>
 
         <TransitionGroup
@@ -4334,14 +4591,53 @@ function closePickerMenus() {
           :class="{ 'is-active': liveTurnActive, 'is-running': agentRunning }"
         >
           <div
-            v-for="item in liveFlowItems"
+            v-for="(item, itemIndex) in liveTranscriptItems"
             :key="item.id"
             class="live-item"
             :data-entry-id="item.persistedEntry?.id || item.id"
-            :class="liveItemClass(item)"
+            :class="[liveItemClass(item), {
+              'is-frozen': compactionBoundary?.resolved
+                && persistedTranscriptItems.length + itemIndex < compactionBoundary.index,
+            }]"
           >
+            <CompactionBoundary
+              v-if="compactionBoundary?.index === persistedTranscriptItems.length + itemIndex"
+              :reason="compaction?.reason || ''"
+              :started-at="compaction?.startedAt || 0"
+              :tokens="contextUsage?.tokens ?? null"
+            />
+
+            <MobileToolActivity
+              v-if="item.type === 'tool-activity'"
+              :group="item"
+              :expanded="isActivityExpanded(item)"
+              @toggle="toggleActivity"
+            >
+              <template #default="{ items }">
+                <TranscriptEntry
+                  v-for="call in items"
+                  :key="activityEntry(call).toolCallId || activityEntry(call).id"
+                  :data-entry-id="activityEntry(call).id"
+                  :copied-entry-id="copiedEntryId"
+                  :entry="activityEntry(call)"
+                  :research-cwd="selectedSession?.cwd || ''"
+                  :tool-expanded="isActivityExpanded(item) && isToolExpanded(activityEntry(call))"
+                  :tool-status="activityStatus(call)"
+                  :subagent-inspector-selected="subagentSelection === (activityEntry(call).toolCallId || activityEntry(call).id)"
+                  @copy="copyEntry"
+                  @fork="forkSession"
+                  @inspect-subagent="(entry, event) => inspectActivitySubagent(item, entry, event)"
+                  @open-image="openImageFullscreen"
+                  @open-research-source="openResearchSource"
+                  @reset="resetSessionToEntry"
+                  @open-tool-fullscreen="openToolFullscreen"
+                  @toggle-tool="toggleActivityTool(item, activityEntry(call))"
+                />
+              </template>
+            </MobileToolActivity>
+
             <TranscriptEntry
-              v-if="item.type === 'system' || item.type === 'model-change'"
+              v-else-if="item.type === 'system' || item.type === 'model-change'"
               :copied-entry-id="copiedEntryId"
               :entry="item.persistedEntry || item"
               :system-prompt-selected="systemPromptEntry?.id === (item.persistedEntry || item).id"
@@ -4366,56 +4662,6 @@ function closePickerMenus() {
               @toggle-skill="toggleSkill"
             />
 
-            <TranscriptEntry
-              v-else-if="item.type === 'tool'
-                && (item.persistedEntry
-                  || (item.resultEntry && item.status !== 'reading'))"
-              :copied-entry-id="copiedEntryId"
-              :entry="item.persistedEntry || item.resultEntry"
-              :research-cwd="selectedSession?.cwd || ''"
-              :tool-expanded="isToolExpanded(item.persistedEntry || item.resultEntry)"
-              :tool-status="item.status"
-              @copy="copyEntry"
-              @fork="forkSession"
-              @mark-feedback="markEntryFeedback"
-              @navigate-child-session="navigateChildSession"
-              @open-image="openImageFullscreen"
-              @open-research-source="openResearchSource"
-              @reset="resetSessionToEntry"
-              @open-tool-fullscreen="openToolFullscreen"
-              @toggle-tool="toggleTool"
-            />
-
-            <article
-              v-else-if="item.type === 'tool'"
-              class="tool-card transcript-tool live-tool-card"
-              :class="{
-                'subagent-card': isLiveSubagentTool(item),
-                'is-running': item.status === 'running',
-                'is-completed': item.status === 'completed',
-                'error-card': item.status === 'error',
-              }"
-            >
-              <div v-if="isLiveSubagentTool(item)" class="subagent-header">
-                <span class="live-tool-spinner"></span>
-                <span class="subagent-icon" aria-hidden="true">
-                  <svg viewBox="0 0 16 16" fill="none">
-                    <path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" />
-                    <path d="m10 7 3 3-3 3" />
-                  </svg>
-                </span>
-                <span class="subagent-label">Subagent</span>
-                <code v-if="liveSubagentTarget(item)" :title="liveSubagentTarget(item)">{{ liveSubagentTarget(item) }}</code>
-                <em>{{ liveToolStatus(item) }}</em>
-              </div>
-              <div v-else class="tool-card-header">
-                <span class="live-tool-spinner"></span>
-                <span>{{ item.label }}</span>
-                <code v-if="item.code" :title="item.code">{{ item.code }}</code>
-                <em>{{ liveToolStatus(item) }}</em>
-              </div>
-            </article>
-
             <LiveAssistantMessage
               v-else-if="item.type === 'assistant'"
               :blocks="liveAssistantDisplayBlocks(item)"
@@ -4432,6 +4678,14 @@ function closePickerMenus() {
 
           </div>
         </TransitionGroup>
+
+        <CompactionBoundary
+          v-if="!startupRun && !inProjectNewSessionRun
+            && compactionBoundary?.index === persistedTranscriptItems.length + liveTranscriptItems.length"
+          :reason="compaction?.reason || ''"
+          :started-at="compaction?.startedAt || 0"
+          :tokens="contextUsage?.tokens ?? null"
+        />
       </div>
 
       <button
@@ -4452,6 +4706,7 @@ function closePickerMenus() {
         <section
           v-if="terminalOpen"
           class="terminal-panel"
+          :class="{ 'is-compact': terminalCompact }"
         >
           <div
             class="terminal-resize-handle"
@@ -4467,7 +4722,11 @@ function closePickerMenus() {
             <strong>Terminal</strong>
             <code>{{ terminalCwd || selectedSession?.cwd }}</code>
             <span>{{ terminalStatus }}</span>
-            <button type="button" @click="closeTerminalPanel">×</button>
+            <button class="terminal-keys-toggle" type="button" :aria-expanded="terminalKeysOpen" @click="terminalKeysOpen = !terminalKeysOpen">Keys</button>
+            <button type="button" aria-label="Close terminal" @click="closeTerminalPanel">×</button>
+          </div>
+          <div v-if="terminalKeysOpen" class="terminal-keys" role="group" aria-label="Terminal keys">
+            <button v-for="[key, label] in terminalKeys" :key="key" type="button" :disabled="terminalStatus !== 'connected'" @click="sendKey(key)">{{ label }}</button>
           </div>
           <div ref="terminalEl" class="terminal-frame"></div>
         </section>
@@ -4483,10 +4742,11 @@ function closePickerMenus() {
       ></div>
 
       <ExtensionConfirmations
-        v-if="selectedSession && extensionConfirmations.length"
+        v-if="selectedSession && (extensionConfirmations.length || extensionConfirmationNotices.length)"
         :key="`${activeBackendConnectionId}:${selectedSessionId}`"
         :session-id="selectedSessionId"
         :requests="extensionConfirmations"
+        :notices="extensionConfirmationNotices"
         :disabled="!eventStreamConnected"
         @resize="confirmationPanelHeight = $event"
       />
@@ -4516,12 +4776,14 @@ function closePickerMenus() {
       >
         <div
           class="composer-layer start-composer-layer"
-          :class="{ 'is-active': homeComposerVisible && !extensionConfirmations.length }"
-          :inert="!!composerMotionState || !homeComposerVisible || !!extensionConfirmations.length"
+          :class="{ 'is-active': homeComposerVisible && !extensionConfirmations.length && !confirmationPanelHeight }"
+          :inert="!!composerMotionState || !homeComposerVisible || !!extensionConfirmations.length || !!confirmationPanelHeight"
         >
           <StartComposer
             v-if="homeComposerVisible || composerMotionState?.kind === 'home'"
             ref="startComposerRef"
+            :mobile="systemPromptMobile"
+            :settings-error="sessionError"
             v-model:draft="startComposerDraft"
             :class="{ 'activity-scanning-composer': startupShellVisible }"
             v-model:start-project-query="startProjectQuery"
@@ -4547,6 +4809,7 @@ function closePickerMenus() {
             :start-project-label="startupDraftSnapshot?.cwd
               ? projectName(startupDraftSnapshot.cwd)
               : startProjectLabel"
+            :start-project-trigger="mobileProjectTrigger"
             :start-project-options="startProjectOptions"
             :start-project-picker-open="startProjectPickerOpen"
             :switching-model="switchingModel"
@@ -4560,6 +4823,10 @@ function closePickerMenus() {
             :tools-chip-label="toolsChipLabel"
             :tools-picker-open="toolsPickerOpen"
             @keydown="handleStartComposerKeydown"
+            @composition-start="handleComposerCompositionStart"
+            @composition-end="handleComposerCompositionEnd"
+            @input-blur="handleComposerInputBlur"
+            @pick-images="openComposerImagePicker"
             @open-image="openImageFullscreen"
             @open-project-browser="openProjectBrowser"
             @paste="handleComposerPaste"
@@ -4578,12 +4845,14 @@ function closePickerMenus() {
         </div>
         <div
           class="composer-layer session-composer-layer"
-          :class="{ 'is-active': !homeComposerVisible || extensionConfirmations.length }"
-          :inert="homeComposerVisible && !extensionConfirmations.length"
+          :class="{ 'is-active': !homeComposerVisible || extensionConfirmations.length || confirmationPanelHeight }"
+          :inert="homeComposerVisible && !extensionConfirmations.length && !confirmationPanelHeight"
         >
           <SessionComposer
             v-if="!initializing && (selectedSession || composerMotionState?.kind === 'home')"
             ref="composerRef"
+            :mobile="systemPromptMobile"
+            :settings-error="sessionError"
             v-model:draft="draft"
             :agent-running="agentRunning"
             :attached-images="attachedImages"
@@ -4643,6 +4912,10 @@ function closePickerMenus() {
             @cancel-edit="cancelEditingEntry"
             @interrupt="interruptAgent"
             @keydown="handleComposerKeydown"
+            @composition-start="handleComposerCompositionStart"
+            @composition-end="handleComposerCompositionEnd"
+            @input-blur="handleComposerInputBlur"
+            @pick-images="openComposerImagePicker"
             @open-image="openImageFullscreen"
             @paste="handleComposerPaste"
             @queue-snapshot="applyQueueSnapshot"
@@ -4661,28 +4934,32 @@ function closePickerMenus() {
       </div>
     </section>
 
-    <TracePanel
-      v-if="traceMode && traceClient && tracingAvailable"
-      ref="tracePane"
-      :mode="traceMode"
-      :client="traceClient"
-      :session-id="traceState.sessionId"
-      :selection="traceState.selection"
-      :list-state="traceState.listState"
-      :backend-name="activeBackendConnection?.name || 'Selected backend'"
-      :return-to="traceOrigin"
-      :projects="visibleProjects"
-      @update:selection="updateTraceState('selection', $event)"
-      @update:list-state="updateTraceState('listState', $event)"
-      @open-workspace="openTraceWorkspace"
-      @open-session="openTraceSession"
-      @close="closeTrace()"
-    />
+    <Transition name="event-drawer">
+      <TracePanel
+        v-if="traceMode && traceClient && tracingAvailable"
+        ref="tracePane"
+        :mode="traceMode"
+        :client="traceClient"
+        :session-id="traceState.sessionId"
+        :selection="traceState.selection"
+        :list-state="traceState.listState"
+        :backend-name="activeBackendConnection?.name || 'Selected backend'"
+        :return-to="traceOrigin"
+        :projects="visibleProjects"
+        @update:selection="updateTraceState('selection', $event)"
+        @update:list-state="updateTraceState('listState', $event)"
+        @open-workspace="openTraceWorkspace"
+        @open-session="openTraceSession"
+        @close="closeTrace()"
+      />
+    </Transition>
 
     <ReviewPane
       v-if="reviewAvailable && selectedSession"
       :cwd="selectedSession.cwd"
-      :expanded="reviewPaneExpanded"
+      ref="reviewPane"
+      :compact="!reviewDesktopAvailable"
+      :expanded="reviewDesktopAvailable && reviewPaneExpanded"
       :open="reviewOpen"
       :prepare="reviewOpenRequested"
       :refresh-token="reviewRefreshToken"
@@ -4702,6 +4979,7 @@ function closePickerMenus() {
       :open="researchSourcesOpen"
       :research="selectedResearch"
       @close="closeResearchSources"
+      @open-source="openResearchSource"
     />
 
     <Transition name="system-prompt">
@@ -4829,14 +5107,14 @@ function closePickerMenus() {
           :loading="memoryLoading"
           :memories="memoryData.memories"
           :saving="memorySaving"
+          :target="memoryTarget"
+          :save-memory="saveMemory"
           @archive="archiveMemories"
           @close="closeMemoryDrawer"
-          @create="createMemory"
           @delete="deleteMemories"
           @dirty-change="memoryDirty = $event"
           @refresh="loadVisibleMemory"
           @restore="restoreMemories"
-          @update="updateMemory"
         />
       </div>
     </Transition>
@@ -4853,6 +5131,7 @@ function closePickerMenus() {
       @close="closeGlobalSettings"
     >
       <template #connections>
+        <NetworkAccessSettings ref="piSettingsPane" :copied-id="copiedEntryId" @copy="copyTranscriptItem" />
         <section class="settings-group backend-settings-group">
           <div class="settings-group-heading">
             <h2>Backend</h2>
@@ -5011,7 +5290,14 @@ function closePickerMenus() {
         <p class="settings-note">This setting does not change the model’s thinking level.</p>
       </template>
       <template #files>
-        <FileLinkSettings :backend-name="activeBackendConnection.name" />
+        <FileLinkSettings ref="piSettingsPane" :backend-name="activeBackendConnection.name" />
+      </template>
+      <template #runtime>
+        <RuntimeSettings
+          :key="`${activeBackendConnectionId}:${activeBackendConnection.url}`"
+          ref="piSettingsPane"
+          :backend-name="activeBackendConnection.name"
+        />
       </template>
       <template #providers>
         <p v-if="piSettingsActionError" class="settings-error" role="alert">{{ piSettingsActionError }}</p>
@@ -5068,6 +5354,10 @@ function closePickerMenus() {
               <div><dt>Context</dt><dd>{{ contextUsageLabel || 'Unknown' }}</dd></div>
               <div><dt>Events</dt><dd>{{ eventStreamLabel }}</dd></div>
             </dl>
+            <div v-if="systemPromptMobile" class="mobile-session-tools">
+              <details><summary>Enabled tools · {{ activeToolNames.length }}</summary><ul><li v-for="tool in activeToolNames" :key="tool">{{ tool }}</li></ul></details>
+              <button type="button" @click="sessionDetailsOpen = false; toggleForegroundTerminal()">{{ terminalOpen ? 'Close terminal' : 'Open terminal' }}</button>
+            </div>
             <AgentSettings
               v-bind="agentSettingsProps"
               @set-model="saveSubagentModel"
@@ -5083,21 +5373,21 @@ function closePickerMenus() {
                 <dt>Session ID</dt>
                 <dd class="settings-copy-row">
                   <span>{{ settingsSessionId || '—' }}</span>
-                  <button v-if="settingsSessionId" type="button" class="copy-button" :title="copyTitle('settings-session-id')" aria-label="Copy session ID" @click="copyTranscriptItem('settings-session-id', settingsSessionId)">{{ copyGlyph('settings-session-id') }}</button>
+                  <button v-if="settingsSessionId" type="button" class="copy-button" :title="copyTitle('settings-session-id')" aria-label="Copy session ID" @click="copyTranscriptItem('settings-session-id', settingsSessionId)"><CopyIcon :copied="copiedEntryId === 'settings-session-id'" /></button>
                 </dd>
               </div>
               <div>
                 <dt>CWD</dt>
                 <dd class="settings-copy-row">
                   <span>{{ settingsCwd }}</span>
-                  <button type="button" class="copy-button" :title="copyTitle('settings-cwd')" aria-label="Copy CWD" @click="copyTranscriptItem('settings-cwd', settingsCwd)">{{ copyGlyph('settings-cwd') }}</button>
+                  <button type="button" class="copy-button" :title="copyTitle('settings-cwd')" aria-label="Copy CWD" @click="copyTranscriptItem('settings-cwd', settingsCwd)"><CopyIcon :copied="copiedEntryId === 'settings-cwd'" /></button>
                 </dd>
               </div>
               <div>
                 <dt>Path</dt>
                 <dd class="settings-copy-row">
                   <span>{{ settingsPath || '—' }}</span>
-                  <button v-if="settingsPath" type="button" class="copy-button" :title="copyTitle('settings-path')" aria-label="Copy path" @click="copyTranscriptItem('settings-path', settingsPath)">{{ copyGlyph('settings-path') }}</button>
+                  <button v-if="settingsPath" type="button" class="copy-button" :title="copyTitle('settings-path')" aria-label="Copy path" @click="copyTranscriptItem('settings-path', settingsPath)"><CopyIcon :copied="copiedEntryId === 'settings-path'" /></button>
                 </dd>
               </div>
               <div><dt>Messages</dt><dd>{{ selectedSession.messageCount ?? '—' }}</dd></div>
@@ -5121,16 +5411,41 @@ function closePickerMenus() {
           <div v-if="eventLog.length === 0" class="event-log-empty">
             No events yet
           </div>
-          <div
-            v-for="item in eventLog"
-            :key="item.loggedAt"
-            class="event-log-row"
-          >
-            <time>{{ eventTime(item) }}</time>
-            <code>{{ eventType(item) }}</code>
-            <span>{{ eventSummary(item) }}</span>
-          </div>
+          <details v-for="item in eventLog" :key="item.loggedAt" class="event-log-entry">
+            <summary class="event-log-row">
+              <time>{{ eventTime(item) }}</time>
+              <code>{{ eventType(item) }}</code>
+              <span>{{ eventSummary(item) }}</span>
+            </summary>
+            <div class="event-log-detail">
+              <strong>{{ eventType(item) }}</strong>
+              <p>{{ eventSummary(item) }}</p>
+              <button type="button" @click="copyTranscriptItem(`event-${item.loggedAt}`, `${eventType(item)}\n${eventSummary(item)}`)">{{ copiedEntryId === `event-${item.loggedAt}` ? 'Copied' : 'Copy event' }}</button>
+            </div>
+          </details>
         </aside>
+      </div>
+    </Transition>
+
+    <Transition name="subagent-inspector">
+      <div
+        v-if="inspectedSubagent"
+        class="subagent-inspector-backdrop"
+        :inert="activeFocusScope !== 'subagent'"
+        @click.self="closeSubagentInspector"
+      >
+        <SubagentInspector
+          :key="subagentSelection"
+          ref="subagentInspector"
+          :entry="activityEntry(inspectedSubagent)"
+          :tool-status="activityStatus(inspectedSubagent)"
+          :copied-entry-id="copiedEntryId"
+          @close="closeSubagentInspector"
+          @copy="copyTranscriptItem"
+          @copy-entry="copyEntry"
+          @navigate-child-session="navigateChildSession"
+          @open-image="openImageFullscreen"
+        />
       </div>
     </Transition>
 
@@ -5141,6 +5456,7 @@ function closePickerMenus() {
         @click="closeImageFullscreen"
       >
         <section
+          ref="imageDialog"
           class="tool-fullscreen"
           role="dialog"
           aria-modal="true"
@@ -5175,7 +5491,7 @@ function closePickerMenus() {
         class="tool-fullscreen-backdrop tool-preview-fullscreen-backdrop"
         @click="closeToolFullscreen"
       >
-        <section class="tool-fullscreen" @click.stop>
+        <section ref="toolDialog" class="tool-fullscreen" role="dialog" aria-modal="true" aria-label="Tool preview" tabindex="-1" @click.stop>
           <header class="tool-fullscreen-header">
             <div>
               <span>{{ fullscreenTool.label }}</span>
@@ -5211,9 +5527,9 @@ function closePickerMenus() {
                 :title="copyTitle(fullscreenTool.id)"
                 @click="copyTranscriptItem(fullscreenTool.id, entryCopyText(fullscreenTool))"
               >
-                {{ copyGlyph(fullscreenTool.id) }}
+                <CopyIcon :copied="copiedEntryId === fullscreenTool.id" />
               </button>
-              <button type="button" @click="closeToolFullscreen">×</button>
+              <button type="button" aria-label="Close tool preview" @click="closeToolFullscreen">×</button>
             </div>
           </header>
           <div class="tool-fullscreen-body">

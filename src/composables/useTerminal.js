@@ -1,13 +1,17 @@
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref, toValue, watch } from 'vue'
 import { backendWebSocketUrl } from '../lib/backend'
 
-export function useTerminal() {
+export function useTerminal({ maxHeight } = {}) {
   const terminalOpen = ref(false)
   const terminalEl = ref(null)
   const terminalStatus = ref('closed')
   const terminalCwd = ref('')
   const terminalShell = ref('')
-  const terminalDrawerHeight = ref(310)
+  const preferredHeight = ref(310)
+  const terminalDrawerHeight = computed(() => Math.min(
+    preferredHeight.value,
+    Math.max(0, Math.floor(toValue(maxHeight) ?? Infinity)),
+  ))
   let terminalInstance
   let terminalFitAddon
   let terminalSocket
@@ -16,6 +20,8 @@ export function useTerminal() {
   let terminalResizeStartY = 0
   let terminalResizeStartHeight = 0
   let terminalResizeFrame = 0
+
+  watch(terminalDrawerHeight, scheduleTerminalResize, { flush: 'post' })
 
   async function toggleTerminal(sessionId = '') {
     if (terminalOpen.value) {
@@ -52,6 +58,7 @@ export function useTerminal() {
     terminalStatus.value = 'closed'
     terminalCwd.value = ''
     terminalShell.value = ''
+    disposeTerminalResize()
     disposeTerminalConnection()
   }
 
@@ -106,6 +113,7 @@ export function useTerminal() {
     terminalSocket = socket
 
     terminalInputDisposable = term.onData((data) => {
+      if (runId !== terminalRunId) return
       if (!terminalReady) {
         if ([WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) {
           pendingInput.push(data)
@@ -137,7 +145,7 @@ export function useTerminal() {
         }
       }
       if (payload.type === 'data') {
-        term.write(payload.data, () => term.scrollToBottom())
+        term.write(payload.data)
       }
       if (payload.type === 'error') {
         terminalStatus.value = 'error'
@@ -164,10 +172,30 @@ export function useTerminal() {
     requestAnimationFrame(() => terminalInstance?.focus())
   }
 
+  function sendKey(name) {
+    if (!terminalOpen.value || !terminalInstance
+      || !['connecting', 'connected'].includes(terminalStatus.value)
+      || ![WebSocket.CONNECTING, WebSocket.OPEN].includes(terminalSocket?.readyState)) return false
+    const cursorPrefix = terminalInstance.modes.applicationCursorKeysMode ? '\x1bO' : '\x1b['
+    const data = {
+      interrupt: '\x03',
+      escape: '\x1b',
+      tab: '\t',
+      up: `${cursorPrefix}A`,
+      down: `${cursorPrefix}B`,
+      right: `${cursorPrefix}C`,
+      left: `${cursorPrefix}D`,
+    }[name]
+    if (typeof data !== 'string') return false
+    terminalInstance.input(data)
+    return true
+  }
+
   function resizeTerminal() {
-    if (!terminalInstance || !terminalEl.value || !terminalFitAddon) return
+    if (!terminalInstance || !terminalEl.value || !terminalFitAddon
+      || !terminalEl.value.clientWidth || !terminalEl.value.clientHeight
+      || !terminalInstance.element?.clientHeight) return
     terminalFitAddon.fit()
-    terminalInstance.scrollToBottom()
     if (terminalSocket?.readyState === WebSocket.OPEN
       && terminalStatus.value === 'connected') {
       terminalSocket.send(JSON.stringify({
@@ -178,11 +206,14 @@ export function useTerminal() {
     }
   }
 
-  function setTerminalDrawerHeight(height) {
-    const max = Math.max(220, Math.round(window.innerHeight * 0.72))
-    terminalDrawerHeight.value = Math.min(max, Math.max(180, Math.round(height)))
+  function scheduleTerminalResize() {
     cancelAnimationFrame(terminalResizeFrame)
     terminalResizeFrame = requestAnimationFrame(resizeTerminal)
+  }
+
+  function setTerminalDrawerHeight(height) {
+    if (!Number.isFinite(height)) return
+    preferredHeight.value = Math.max(36, Math.round(height))
   }
 
   function resizeTerminalDrawer(event) {
@@ -227,6 +258,7 @@ export function useTerminal() {
     terminalStatus,
     terminalDrawerHeight,
     resizeTerminal,
+    sendKey,
     toggleTerminal,
     startTerminalResize,
     stopTerminalResize,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { goalStateFromSession, isGoalStateEvent } from './goal-state.js'
+import { compactionCutEntryId } from './compaction-boundary.js'
 import { isResearchEntry } from '../../lib/research-state.js'
 
 export function emptyExtensionUiState() {
@@ -39,12 +39,10 @@ export async function bindRuntimeHandle(handle, events) {
     cleanupExtensionConfirmations(handle)
     throw error
   }
-  syncGoalStateFromSession(handle)
   handle.unsubscribe = handle.runtime.session.subscribe((event) => {
     const handoffId = promptHandoffId(handle, event)
     trackPendingToolResult(handle, event)
     trackRuntimeActivity(handle, event)
-    syncGoalStateFromSession(handle)
     if (event.type === 'agent_settled' || event.type === 'compaction_end') {
       const last = session.messages.findLast((message) => message.role === 'assistant')
       if (event.type === 'agent_settled'
@@ -57,7 +55,9 @@ export async function bindRuntimeHandle(handle, events) {
     }
     events.broadcastEvent('runtime_event', {
       activeSessionId: handle.sessionId,
-      event,
+      event: event.type === 'compaction_start'
+        ? { ...event, compactionCutEntryId: compactionCutEntryId(session) }
+        : event,
       handoffId,
     })
     if (event.type === 'message_end'
@@ -70,7 +70,6 @@ export async function bindRuntimeHandle(handle, events) {
     } else if (event.type === 'turn_end'
       || event.type === 'agent_settled'
       || event.type === 'session_info_changed'
-      || isGoalStateEvent(event)
       || isResearchStateEvent(event)) {
       events.broadcastActiveSession(handle)
     }
@@ -241,35 +240,52 @@ function requestExtensionConfirmation(handle, events, binding, title, message, o
   ].filter(Boolean))
   if (signal.aborted) return Promise.resolve(false)
 
+  const createdAt = Date.now()
   const request = {
     id: randomUUID(),
     title,
     message,
-    createdAt: Date.now(),
-    expiresAt: timeout === undefined ? null : Date.now() + timeout,
+    createdAt,
+    expiresAt: timeout === undefined ? null : createdAt + timeout,
   }
   return new Promise((resolve) => {
     let timer
-    const finish = (confirmed) => {
+    const finish = (confirmed, reason = 'reply') => {
       if (!binding.pending.has(request.id)) return false
-      const valid = isCurrent() && !signal.aborted
-        && (request.expiresAt === null || Date.now() < request.expiresAt)
+      const current = isCurrent()
+      const active = current && !binding.invalidated && !signal.aborted
+      const expired = request.expiresAt !== null && Date.now() >= request.expiresAt
+      const valid = active && !expired
       binding.pending.delete(request.id)
       clearTimeout(timer)
       signal.removeEventListener('abort', cancel)
-      handle.extensionUiState = {
-        ...handle.extensionUiState,
-        confirmations: (handle.extensionUiState.confirmations || [])
-          .filter((item) => item.id !== request.id),
+      if (current) {
+        const state = handle.extensionUiState
+        const notifications = active && expired && (reason === 'timeout' || reason === 'reply')
+          ? [...state.notifications.slice(-19), {
+            id: `confirmation-expired-${request.id}`,
+            requestId: request.id,
+            kind: 'confirmation-expired',
+            type: 'info',
+            message: `Confirmation "${String(request.title).slice(0, 200)}" expired. Nothing was approved.`,
+            timestamp: new Date().toISOString(),
+          }]
+          : state.notifications
+        handle.extensionUiState = {
+          ...state,
+          notifications,
+          confirmations: (state.confirmations || [])
+            .filter((item) => item.id !== request.id),
+        }
       }
       resolve(valid && confirmed === true)
-      if (isCurrent()) broadcastExtensionUi(handle, events)
+      if (current) broadcastExtensionUi(handle, events)
       return valid
     }
-    const cancel = () => finish(false)
+    const cancel = () => finish(false, 'cancel')
     const scheduleTimeout = () => {
       const remaining = request.expiresAt - Date.now()
-      if (remaining <= 0) cancel()
+      if (remaining <= 0) finish(false, 'timeout')
       else timer = setTimeout(scheduleTimeout, Math.min(remaining, 2147483647))
     }
     binding.pending.set(request.id, finish)
@@ -363,25 +379,6 @@ function broadcastExtensionUi(handle, events) {
   events.broadcastEvent('extension_ui', {
     activeSessionId: handle.sessionId,
     state: handle.extensionUiState,
-    goal: goalStateFromSession(handle.runtime.session),
   })
   events.broadcastActiveSession(handle)
-}
-
-function syncGoalStateFromSession(handle) {
-  if (!handle) return
-  const goal = goalStateFromSession(handle.runtime.session)
-  if (!goal) return
-  const status = goal.status === 'budget_limited'
-    ? 'limited by budget'
-    : goal.status === 'continuation_limited'
-      ? 'limited by continuations'
-      : goal.status
-  handle.extensionUiState = {
-    ...handle.extensionUiState,
-    statuses: {
-      ...handle.extensionUiState.statuses,
-      goal: `goal: ${status}`,
-    },
-  }
 }

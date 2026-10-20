@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import PierrePreview from './PierrePreview.vue'
-import { backendHttpUrl } from '../lib/backend'
+import { openEventSocket } from '../lib/event-socket'
 import { fetchGitReview, fetchGitReviewDiff } from '../lib/pi-api'
 
 const props = defineProps({
+  compact: Boolean,
   cwd: { type: String, default: '' },
   expanded: Boolean,
   open: Boolean,
@@ -38,6 +39,10 @@ const review = ref({
   totalFiles: 0,
 })
 const maximumPaneWidth = ref(720)
+const pane = ref(null)
+const fileList = ref(null)
+const diffPane = ref(null)
+const page = ref('files')
 const selectedPath = ref('')
 const diff = ref({ diffs: [], path: '' })
 const loading = ref(true)
@@ -53,11 +58,15 @@ let diffRenderGeneration = 0
 let diffDirty = false
 let pendingPreviewKeys = new Set()
 let resizeCleanup
-let reviewEventSource
+let reviewEventSocket
 let watchedRefreshQueued = false
 let watchedRefreshTimer
 
-const diffRequested = computed(() => props.open || props.prepare)
+const diffRequested = computed(() => {
+  return props.compact
+    ? props.open && page.value === 'diff'
+    : props.open || props.prepare
+})
 const files = computed(() => review.value.files || [])
 const filesTruncated = computed(() => review.value.filesTruncated === true)
 const totalFiles = computed(() => {
@@ -98,7 +107,7 @@ const panelSubtitle = computed(() => {
 })
 
 onMounted(() => {
-  emit('resize', constrainWidth(props.width))
+  constrainCurrentWidth()
   window.addEventListener('resize', constrainCurrentWidth)
   void loadReview()
 })
@@ -116,6 +125,7 @@ watch(() => props.cwd, () => {
   diffGeneration++
   diffRenderGeneration++
   pendingPreviewKeys = new Set()
+  page.value = 'files'
   selectedPath.value = ''
   diff.value = { diffs: [], path: '' }
   diffDirty = false
@@ -147,14 +157,23 @@ watch(() => props.refreshToken, () => {
 
 watch(() => props.sidebarHidden, constrainCurrentWidth)
 
-watch(diffRequested, (requested) => {
+watch(() => props.compact, () => {
+  resizeCleanup?.()
+  constrainCurrentWidth()
+})
+
+watch(() => props.open, (open) => {
+  if (!open) page.value = 'files'
+})
+
+watch([diffRequested, () => props.prepare, () => props.compact], ([requested]) => {
   if (!requested) {
     if (diffLoading.value) {
       diffGeneration++
       diffLoading.value = false
       diffDirty = true
-      announcePrepared()
     }
+    announcePrepared()
     return
   }
   if (!hasLoaded.value || refreshing.value) return
@@ -167,32 +186,21 @@ function openReviewEventStream() {
     || !review.value.available) return false
   closeReviewEventStream()
   const params = new URLSearchParams({ cwd: props.cwd })
-  const source = new EventSource(
-    backendHttpUrl(`/api/pi/review/events?${params}`),
-  )
-  reviewEventSource = source
-  source.addEventListener('open', () => {
-    if (reviewEventSource === source) requestWatchedRefresh()
-  })
-  source.addEventListener('review_change', () => {
-    if (reviewEventSource === source) requestWatchedRefresh()
-  })
-  source.addEventListener('review_unavailable', () => {
-    if (reviewEventSource !== source) return
-    closeReviewEventStream()
-    void loadReview()
-  })
-  source.addEventListener('error', () => {
-    if (reviewEventSource === source && source.readyState === EventSource.CLOSED) {
-      closeReviewEventStream()
-    }
+  reviewEventSocket = openEventSocket(`/api/pi/review/events?${params}`, {
+    onEvent(type) {
+      if (type === 'review_ready' || type === 'review_change') requestWatchedRefresh()
+      if (type === 'review_unavailable') {
+        closeReviewEventStream()
+        void loadReview()
+      }
+    },
   })
   return true
 }
 
 function closeReviewEventStream() {
-  reviewEventSource?.close()
-  reviewEventSource = undefined
+  reviewEventSocket?.close()
+  reviewEventSocket = undefined
   clearTimeout(watchedRefreshTimer)
   watchedRefreshTimer = undefined
   watchedRefreshQueued = false
@@ -234,7 +242,7 @@ async function loadReview({ preserveSelection = false } = {}) {
     selectedPath.value = nextPath
     hasLoaded.value = true
     if (!data.available) closeReviewEventStream()
-    else if (!reviewEventSource) openReviewEventStream()
+    else if (!reviewEventSocket) openReviewEventStream()
     if (nextPath) {
       diffDirty = true
       if (diffRequested.value) void loadDiff(nextPath)
@@ -296,9 +304,16 @@ async function loadDiff(path) {
 }
 
 function selectFile(file) {
-  if (selectedPath.value === file.path && !diffError.value) return
+  page.value = 'diff'
+  if (props.compact) nextTick(() => diffPane.value?.focus({ preventScroll: true }))
+  if (selectedPath.value === file.path && !diffError.value && !diffDirty) return
   selectedPath.value = file.path
   void loadDiff(file.path)
+}
+
+function showFiles() {
+  page.value = 'files'
+  nextTick(() => fileList.value?.querySelector('[aria-current="true"]')?.focus({ preventScroll: true }))
 }
 
 function clearDiff() {
@@ -313,10 +328,13 @@ function clearDiff() {
 }
 
 function announcePrepared() {
+  if (loading.value || refreshing.value) return
+  if (props.compact && !diffRequested.value) {
+    emit('prepared', props.open || props.prepare)
+    return
+  }
   if (
-    loading.value
-    || refreshing.value
-    || diffLoading.value
+    diffLoading.value
     || diffRendering.value
     || pendingPreviewKeys.size
   ) return
@@ -380,7 +398,7 @@ function resizeFromKeyboard(event) {
 }
 
 function constrainCurrentWidth() {
-  emit('resize', constrainWidth(props.width))
+  if (!props.compact) emit('resize', constrainWidth(props.width))
 }
 
 function constrainWidth(width) {
@@ -444,18 +462,24 @@ function changeScope(file) {
 function plural(count, word) {
   return count === 1 ? word : `${word}s`
 }
+
+defineExpose({ element: pane })
 </script>
 
 <template>
   <aside
+    ref="pane"
     class="review-pane"
-    :class="{ expanded, open }"
+    :class="{ compact, expanded, open }"
+    :role="compact ? 'dialog' : undefined"
+    :aria-modal="compact && open ? true : undefined"
     :aria-hidden="!open"
+    tabindex="-1"
     :inert="!open"
     aria-label="Review project changes"
   >
     <div
-      v-if="!expanded"
+      v-if="!compact && !expanded"
       class="review-pane-resize-handle"
       role="separator"
       aria-label="Resize review pane"
@@ -488,6 +512,7 @@ function plural(count, word) {
           </svg>
         </button>
         <button
+          v-if="!compact"
           type="button"
           :title="expanded ? 'Collapse review' : 'Expand review'"
           :aria-label="expanded ? 'Collapse review' : 'Expand review'"
@@ -537,7 +562,7 @@ function plural(count, word) {
       </div>
 
       <template v-else-if="files.length">
-        <section class="review-files">
+        <section v-show="!compact || page === 'files'" class="review-files">
           <div class="review-files-heading">
             <span v-if="filesTruncated" title="More changed files are not shown">
               {{ files.length }}+ changed files
@@ -548,7 +573,7 @@ function plural(count, word) {
             <span v-if="!filesTruncated && stagedCount">{{ stagedCount }} staged</span>
             <span v-if="!filesTruncated && workingCount">{{ workingCount }} working</span>
           </div>
-          <ul class="review-file-list" aria-label="Changed files">
+          <ul ref="fileList" class="review-file-list" aria-label="Changed files">
             <li v-for="file in files" :key="file.path">
               <button
                 type="button"
@@ -572,7 +597,18 @@ function plural(count, word) {
           </ul>
         </section>
 
-        <section v-if="selectedFile" class="review-diff">
+        <section
+          v-if="selectedFile"
+          v-show="!compact || page === 'diff'"
+          ref="diffPane"
+          class="review-diff"
+          :aria-label="selectedFile.path"
+          tabindex="-1"
+        >
+          <div v-if="compact" class="review-diff-navigation">
+            <button type="button" @click="showFiles">Back to files</button>
+            <strong>{{ selectedFile.path }}</strong>
+          </div>
           <div class="review-diff-scroll">
             <div v-if="diffLoading" class="review-diff-state">
               <span class="review-loading-mark"></span>

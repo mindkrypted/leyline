@@ -31,7 +31,7 @@ Captured manual compaction can appear as a separate `pi-compaction` run. Automat
 
 Select **Open workspace** from the inspector or explorer.
 
-![Tracing workspace with a timeline beside the selected observation output](../assets/screenshots/trace-workspace.png)
+![Tracing workspace with a timeline beside the selected observation details](../assets/screenshots/trace-workspace.png)
 
 *The workspace uses the area after the sidebar for the timeline and details.*
 
@@ -112,6 +112,6 @@ Deleting a session or trashing a project does not delete its traces. **Reset to 
 
 Leyline has no automatic retention limit or expiry. It has no trace deletion or export control, and no trace deletion or export API. [HTML transcript export](./export) does not include Elune traces. Turning capture off prevents future capture only.
 
-The **Events** drawer holds recent events for the current page connection. Reloading clears that list. Traces are separate durable records. See [Goals and events](./goals-and-events#open-runtime-events).
+The **Events** drawer holds recent events for the current page connection. Reloading clears that list. Traces are separate durable records. See [Runtime events](./runtime-events#open-runtime-events).
 
 For storage, capture internals, and backend routes, see [Elune integration](../integrations/elune).

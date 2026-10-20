@@ -10,8 +10,9 @@ session.
 Like the subagent extension, this extension calls Leyline's local API at
 `/api/pi/vision/resolve` and `/api/pi/vision`. It takes a path to an image file,
 reads it, and hands the image bytes to a child session whose model supports
-image input. The child session is hidden from the sidebar with the same
-`leyline-subagent-session` marker Leyline uses for subagent children.
+image input. The child session uses the same `leyline-subagent-session` marker
+as subagent children. This marker identifies the child for sidebar nesting
+under its parent.
 
 ## Tool
 

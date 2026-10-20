@@ -35,7 +35,11 @@ export function useSessionWorkspace({
   scrollToLatest,
   shouldFollowOutput,
   markNewOutput,
+  beforeRouteChange = () => true,
 } = {}) {
+  let routePosition = Number.isInteger(window.history.state?.leylineRoutePosition) ? window.history.state.leylineRoutePosition : 0
+  let restoringRoute = false
+  window.history.replaceState({ ...window.history.state, leylineRoutePosition: routePosition }, '')
   const sessions = ref([])
   const projectSummaries = ref([])
   const sessionsError = ref('')
@@ -92,6 +96,30 @@ export function useSessionWorkspace({
   const initPhase = ref('sessions')
   const selectedSession = computed(() => {
     return sessionDetail.value?.session || sessions.value.find((s) => s.id === selectedSessionId.value)
+  })
+  const subagentChildrenByParentPath = computed(() => {
+    const metadata = new Map()
+    for (const session of sessions.value) {
+      for (const child of session.subagentChildren || []) {
+        if (child.id) metadata.set(child.id, child)
+      }
+    }
+    const children = new Map()
+    for (const session of sessions.value) {
+      if (!session.isSubagentSession || !session.parentSessionPath) continue
+      const meta = metadata.get(session.id)
+      const list = children.get(session.parentSessionPath) || []
+      list.push({
+        ...session,
+        agent: meta?.agent || '',
+        label: meta?.task || '',
+      })
+      children.set(session.parentSessionPath, list)
+    }
+    for (const list of children.values()) {
+      list.sort((a, b) => sessionCreatedTimestamp(a) - sessionCreatedTimestamp(b))
+    }
+    return children
   })
   const visibleProjects = computed(() => visibleProjectList())
   const sessionsById = computed(() => {
@@ -171,9 +199,6 @@ export function useSessionWorkspace({
     return composerRuntime.value?.state?.contextUsage
       || selectedSession.value?.contextUsage
       || null
-  })
-  const activeGoal = computed(() => {
-    return activeRuntimeSession.value?.state?.goal || null
   })
   const sidebarRuntimeSummary = computed(() => {
     const states = Object.values(runtimeSessionsById.value)
@@ -527,8 +552,29 @@ export function useSessionWorkspace({
     setTimeout(() => { sessionSwitching.value = false }, 150)
   }
 
-  async function handleRouteChange() {
+  async function handleRouteChange(event) {
+    if (restoringRoute) {
+      restoringRoute = false
+      return
+    }
+    const position = window.history.state?.leylineRoutePosition
     const id = sessionIdFromRoute()
+    if (id === selectedSessionId.value) {
+      if (Number.isInteger(position)) routePosition = position
+      else {
+        routePosition += 1
+        window.history.replaceState({ ...window.history.state, leylineRoutePosition: routePosition }, '')
+      }
+      return
+    }
+    if (!beforeRouteChange()) {
+      if (Number.isInteger(position) && position !== routePosition) {
+        restoringRoute = true
+        window.history.go(routePosition - position)
+      }
+      return
+    }
+    if (Number.isInteger(position)) routePosition = position
     if (!id) {
       clearSelectedSession()
       return
@@ -563,7 +609,8 @@ export function useSessionWorkspace({
       + window.location.hash
     if (next === current) return
     const method = replaceRoute ? 'replaceState' : 'pushState'
-    window.history[method]({}, '', next)
+    if (!replaceRoute) routePosition += 1
+    window.history[method]({ ...window.history.state, leylineRoutePosition: routePosition }, '', next)
   }
 
   function scheduleSessionRefresh(activeSessionId, event) {
@@ -654,6 +701,7 @@ export function useSessionWorkspace({
         : [],
       isStreaming: state.isStreaming === true,
       isCompacting: state.isCompacting === true,
+      compactionCutEntryId: state.compactionCutEntryId || '',
       snapshotRevision: runtimeSession.snapshotRevision,
       queuedCount: queuedCount(state.queuedMessages)
         + (state.promptQueue?.items?.length || state.promptQueue?.count || 0),
@@ -701,6 +749,7 @@ export function useSessionWorkspace({
       ...session,
       isSubagentSession: next[index].isSubagentSession === true
         || session.isSubagentSession === true,
+      subagentChildren: session.subagentChildren ?? next[index].subagentChildren,
     }
     sessions.value = next
   }
@@ -873,6 +922,7 @@ export function useSessionWorkspace({
       return {
         isStreaming: previous.isStreaming === true,
         isCompacting: false,
+        compactionCutEntryId: '',
         error: '',
         pendingTools: [],
         pendingToolCount: 0,
@@ -881,6 +931,7 @@ export function useSessionWorkspace({
     if (event.type === 'compaction_start') {
       return {
         isCompacting: true,
+        compactionCutEntryId: event.compactionCutEntryId || '',
         error: '',
         pendingTools: [],
         pendingToolCount: 0,
@@ -889,6 +940,7 @@ export function useSessionWorkspace({
     if (event.type === 'compaction_end') {
       return {
         isCompacting: false,
+        compactionCutEntryId: '',
         error: event.willRetry ? '' : runtimeErrorMessage(event, ''),
       }
     }
@@ -955,38 +1007,14 @@ export function useSessionWorkspace({
     return Number.isFinite(value) ? Math.max(0, Number(value)) : 0
   }
 
-  function patchRuntimeExtensionUi(extensionUi, goal) {
+  function patchRuntimeExtensionUi(extensionUi) {
     if (!activeRuntimeSession.value) return
     activeRuntimeSession.value = {
       ...activeRuntimeSession.value,
       state: {
         ...activeRuntimeSession.value.state,
         extensionUi,
-        goal,
       },
-    }
-    if (goal?.objective) patchGoalSessionTitle(goal.objective)
-  }
-
-  function patchGoalSessionTitle(objective) {
-    const id = selectedSessionId.value
-    if (!id) return
-
-    sessions.value = sessions.value.map((session) => {
-      if (session.id !== id) return session
-      if (session.firstMessage && session.firstMessage !== '(no messages)') {
-        return session
-      }
-      return { ...session, firstMessage: objective }
-    })
-
-    const detail = sessionDetail.value
-    if (!detail || detail.session.id !== id) return
-    const firstMessage = detail.session.firstMessage
-    if (firstMessage && firstMessage !== '(no messages)') return
-    sessionDetail.value = {
-      ...detail,
-      session: { ...detail.session, firstMessage: objective },
     }
   }
 
@@ -1536,7 +1564,7 @@ export function useSessionWorkspace({
     if (summary?.messageCount === 0
       || summary?.firstMessage === '(no messages)') {
       const liveTitle = summary?.id === selectedSessionId.value
-        ? activeGoal.value?.objective || liveTurn?.liveFirstUserText?.value
+        ? liveTurn?.liveFirstUserText?.value
         : ''
       if (liveTitle) {
         return liveTitle.length > 140
@@ -1772,6 +1800,13 @@ export function useSessionWorkspace({
     return Number.isNaN(time) ? 0 : time
   }
 
+  function sessionCreatedTimestamp(session) {
+    const time = new Date(
+      session?.timestamp || session?.created || 0,
+    ).getTime()
+    return Number.isNaN(time) ? 0 : time
+  }
+
   async function reconnectTerminalIfOpen() {
     if (!terminal?.isOpen?.()) return
     await terminal.reconnect?.(selectedSessionId.value)
@@ -1803,6 +1838,7 @@ export function useSessionWorkspace({
   }
 
   function dispose() {
+    sessionSelectionToken += 1
     sessionListRequestToken += 1
     startRuntimeRequests.clear()
     clearInterval(projectAgeTimer)
@@ -1811,7 +1847,6 @@ export function useSessionWorkspace({
   }
 
   return {
-    activeGoal,
     activeRuntimeSession,
     availableModels,
     availableThinkingLevels,
@@ -1900,6 +1935,7 @@ export function useSessionWorkspace({
     sessionsLoading,
     sessionSwitching,
     sessionTitle,
+    subagentChildrenByParentPath,
     sidebarActivitySessions,
     sidebarRuntimeSummary,
     setActiveRuntimeSession: (value) => { activeRuntimeSession.value = value },

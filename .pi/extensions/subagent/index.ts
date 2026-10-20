@@ -35,8 +35,9 @@ interface ChildSession {
 interface SingleResult {
   agent: string;
   agentSource: "user" | "project" | "bundled" | "unknown";
+  title: string;
   task: string;
-  status?: "queued" | "running" | "done" | "error";
+  status?: "queued" | "running" | "done" | "error" | "stopped" | "not-started" | "unknown";
   research?: {
     threadId?: string;
     title?: string;
@@ -213,6 +214,7 @@ async function resolveSubagentConfig(params: {
 }
 
 async function runSubagentViaApi(params: {
+  title: string;
   task: string;
   cwd: string;
   parentSessionPath: string | null;
@@ -224,6 +226,7 @@ async function runSubagentViaApi(params: {
   excludeTools?: string[];
   systemPrompt: string;
   signal?: AbortSignal;
+  onDispatch?: () => void;
   onStart?: (childSession: ChildSession) => void;
 }): Promise<{
   childSession: ChildSession;
@@ -233,10 +236,13 @@ async function runSubagentViaApi(params: {
   thinkingLevel?: ThinkingLevel;
   stopReason?: string;
 }> {
+  params.signal?.throwIfAborted();
+  params.onDispatch?.();
   const response = await fetch(`${leylineApiBaseUrl()}/api/pi/subagent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      title: params.title,
       task: params.task,
       cwd: params.cwd,
       parentSessionPath: params.parentSessionPath,
@@ -259,7 +265,9 @@ async function runSubagentViaApi(params: {
 
   const data = await response.json() as any;
   if (!response.ok || data?.error) {
-    throw new Error(data?.error || `API error: ${response.status}`);
+    const error = new Error(data?.error || `API error: ${response.status}`);
+    if (data?.stopReason === "aborted") error.name = "AbortError";
+    throw error;
   }
   return data;
 }
@@ -326,9 +334,10 @@ function selectedAgentThinking(
 const SUBAGENT_TOOL_DESCRIPTION =
   "Delegate tasks to specialized child agents with isolated context.\n" +
   "Modes:\n" +
-  "- single (default): { agent, task, model?, thinking? }\n" +
-  "- parallel: { tasks: [{ agent, task, model?, thinking? }] } — runs concurrently\n" +
-  "- chain: { chain: [{ agent, task, model?, thinking? }] } — sequential, {previous} replaced by prior output";
+  "- single (default): { agent, title, task, model?, thinking? }\n" +
+  "- parallel: { tasks: [{ agent, title, task, model?, thinking? }] } — runs concurrently\n" +
+  "- chain: { chain: [{ agent, title, task, model?, thinking? }] } — sequential, {previous} replaced by prior output\n" +
+  "Every child requires a short, descriptive session title, separate from its full task prompt.";
 
 function subagentDescription(agents: AgentDef[]) {
   if (!agents.length) return SUBAGENT_TOOL_DESCRIPTION;
@@ -339,6 +348,11 @@ function subagentDescription(agents: AgentDef[]) {
 }
 
 function subagentParameters(agentNames: string[]) {
+  const title = Type.String({
+    description: "Required short session title for this child. Keep the full instructions in task.",
+    minLength: 1,
+    pattern: "\\S",
+  });
   const agentName = (description: string) => agentNames.length
     ? StringEnum(agentNames, { description })
     : Type.String({ description });
@@ -347,6 +361,7 @@ function subagentParameters(agentNames: string[]) {
     agent: Type.Optional(agentName(
       "Agent name. From .md files in ~/.pi/agent/agents/ and .pi/agents/",
     )),
+    title: Type.Optional(title),
     task: Type.Optional(Type.String({
       description: "The task to delegate to the subagent",
     })),
@@ -368,6 +383,7 @@ function subagentParameters(agentNames: string[]) {
       Type.Array(
         Type.Object({
           agent: agentName("Agent name"),
+          title,
           task: Type.String({ description: "Task for this agent" }),
           model: Type.Optional(Type.String({ description: "Optional model override for this child agent" })),
           thinking: Type.Optional(StringEnum(THINKING_SETTINGS, { description: "Optional thinking-level override for this child agent" })),
@@ -380,6 +396,7 @@ function subagentParameters(agentNames: string[]) {
       Type.Array(
         Type.Object({
           agent: agentName("Agent name"),
+          title,
           task: Type.String({
             description: "Task with {previous} replaced by prior step output",
           }),
@@ -465,13 +482,22 @@ export default function subagentExtension(pi: ExtensionAPI) {
           .join("; ");
         throw new Error(`Unknown agent: "${params.agent}". Available: ${available}`);
       }
+      const requests = mode === "parallel" ? params.tasks : mode === "chain" ? params.chain : [params];
+      const childTasks = (requests || []).map((child: any, index: number) => {
+        const title = typeof child.title === "string" ? child.title.replace(/\s+/g, " ").trim() : "";
+        if (!title) {
+          const location = mode === "single" ? "Single mode" : `${mode} task ${index + 1}`;
+          throw new Error(`${location} requires a nonblank 'title'`);
+        }
+        return { ...child, title };
+      });
       const parentPath = getParentSessionPath(ctx);
       const parentThinkingLevel = pi.getThinkingLevel();
       const baseCwd = params.cwd || ctx.cwd;
 
       if (mode === "single") {
         const result = await executeSingle(
-          agent!, params.task, baseCwd, parentPath, params.model, params.thinking,
+          agent!, childTasks[0].title, params.task, baseCwd, parentPath, params.model, params.thinking,
           parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
             onUpdate?.({
               content: [{ type: "text", text: `${started.agent} subagent running` }],
@@ -496,20 +522,19 @@ export default function subagentExtension(pi: ExtensionAPI) {
       }
 
       if (mode === "parallel") {
-        const tasks = params.tasks;
-        if (!tasks?.length) {
+        const tasks = childTasks;
+        if (!tasks.length) {
           throw new Error("Parallel mode requires 'tasks' array");
         }
 
         const maxConcurrency = 4;
-        const results = new Array<SingleResult>(tasks.length);
         const progress = tasks.map((task: any, index: number) => pendingResult(
           task,
           index < maxConcurrency ? "running" : "queued",
         ));
         const publishProgress = () => {
           const completed = progress.filter((result) => {
-            return result.status === "done" || result.status === "error";
+            return ["done", "error", "stopped", "not-started"].includes(result.status || "");
           }).length;
           onUpdate?.({
             content: [{
@@ -526,6 +551,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
         publishProgress();
 
         for (let i = 0; i < tasks.length; i += maxConcurrency) {
+          if (signal?.aborted) break;
           const batch = tasks.slice(i, i + maxConcurrency);
           if (i > 0) {
             batch.forEach((_task: any, batchIndex: number) => {
@@ -538,7 +564,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
             const childAgent = knownAgents.get(task.agent);
             const result = childAgent
               ? await executeSingle(
-                childAgent, task.task, task.cwd || baseCwd, parentPath,
+                childAgent, task.title, task.task, task.cwd || baseCwd, parentPath,
                 task.model ?? params.model, task.thinking ?? params.thinking,
                 parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
                   progress[resultIndex] = started;
@@ -548,6 +574,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
               : {
                   agent: task.agent,
                   agentSource: "unknown" as const,
+                  title: task.title,
                   task: task.task,
                   status: "error" as const,
                   childSession: null,
@@ -556,13 +583,16 @@ export default function subagentExtension(pi: ExtensionAPI) {
                   usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, turns: 0 },
                   error: `Unknown agent: ${task.agent}`,
                 };
-            results[resultIndex] = result;
             progress[resultIndex] = result;
             publishProgress();
           }));
         }
 
-        const finalResults = results.filter(Boolean);
+        const finalResults = progress.map((result: SingleResult) => {
+          return result.status === "queued" || result.status === "running"
+            ? { ...result, status: "not-started" as const, exitCode: 1, error: "Task did not start" }
+            : result;
+        });
         const output = finalResults.map((result, index) => {
           return `### Agent ${index + 1}: ${result.agent}\n${resultOutput(result)}`;
         }).join("\n\n");
@@ -575,12 +605,21 @@ export default function subagentExtension(pi: ExtensionAPI) {
       }
 
       if (mode === "chain") {
-        const chain = params.chain;
-        if (!chain?.length) {
+        const chain = childTasks;
+        if (!chain.length) {
           throw new Error("Chain mode requires 'chain' array");
         }
 
         const results: SingleResult[] = [];
+        const chainResults = () => [
+          ...results,
+          ...chain.slice(results.length).map((step: any) => ({
+            ...pendingResult(step, "queued"),
+            status: "not-started" as const,
+            exitCode: 1,
+            error: "Task did not start",
+          })),
+        ];
         let previousOutput = "";
 
         for (const step of chain) {
@@ -589,6 +628,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
             const result = {
               agent: step.agent,
               agentSource: "unknown",
+              title: step.title,
               task: step.task,
               childSession: null,
               exitCode: 1,
@@ -599,31 +639,31 @@ export default function subagentExtension(pi: ExtensionAPI) {
             results.push(result);
             return {
               content: [{ type: "text", text: `Chain stopped at step ${results.length} (${step.agent}): ${resultOutput(result)}` }],
-              details: { mode: "chain", results, background: false } as SubagentDetails,
+              details: { mode: "chain", results: chainResults(), background: false } as SubagentDetails,
               isError: true,
             };
           }
 
           const taskWithPrev = step.task.replace(/\{previous\}/g, previousOutput);
           const result = await executeSingle(
-            a, taskWithPrev, step.cwd || baseCwd, parentPath,
+            a, step.title, taskWithPrev, step.cwd || baseCwd, parentPath,
             step.model ?? params.model, step.thinking ?? params.thinking,
             parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
               onUpdate?.({
                 content: [{ type: "text", text: `${started.agent} chain step running` }],
                 details: {
                   mode: "chain",
-                  results: [...results, started],
+                  results: [...results, started, ...chain.slice(results.length + 1).map((step: any) => pendingResult(step, "queued"))],
                   background: true,
                 } as SubagentDetails,
               });
             },
           );
           results.push(result);
-          if (result.error || result.exitCode !== 0) {
+          if (resultFailed(result)) {
             return {
               content: [{ type: "text", text: `Chain stopped at step ${results.length} (${step.agent}): ${resultOutput(result)}` }],
-              details: { mode: "chain", results, background: false } as SubagentDetails,
+              details: { mode: "chain", results: chainResults(), background: false } as SubagentDetails,
               isError: true,
             };
           }
@@ -660,6 +700,7 @@ function pendingResult(
   return {
     agent: String(task.agent || "subagent"),
     agentSource: task.agent === "researcher" ? "bundled" : "unknown",
+    title: task.title,
     task: String(task.task || ""),
     status,
     childSession: null,
@@ -719,11 +760,12 @@ function failedResult(result: any): boolean {
 }
 
 function resultFailed(result: SingleResult): boolean {
-  return Boolean(result.error || result.exitCode !== 0);
+  return Boolean(result.error || result.exitCode !== 0 || result.status === "not-started");
 }
 
 async function executeSingle(
   agent: AgentDef,
+  title: string,
   task: string,
   cwd: string,
   parentSessionPath: string | null,
@@ -737,12 +779,14 @@ async function executeSingle(
 ): Promise<SingleResult> {
   const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, turns: 0 };
   let childSession: ChildSession | null = null;
+  let dispatched = false;
 
   try {
     const configured = await resolveSubagentConfig({ agent, cwd: ctx.cwd, parentSessionPath, signal });
     const selectedModel = modelOverride?.trim() || configured.model;
     const selectedThinking = thinkingOverride?.trim() || configured.thinking;
     const result = await runSubagentViaApi({
+      title,
       task,
       cwd,
       parentSessionPath,
@@ -754,11 +798,13 @@ async function executeSingle(
       excludeTools: agent.excludeTools,
       systemPrompt: agent.systemPrompt,
       signal,
+      onDispatch: () => { dispatched = true; },
       onStart: (session) => {
         childSession = session;
         onStart?.({
           agent: agent.name,
           agentSource: agent.source,
+          title,
           task,
           status: "running",
           requestedModel: modelOverride,
@@ -777,8 +823,9 @@ async function executeSingle(
     return {
       agent: agent.name,
       agentSource: agent.source,
+      title,
       task,
-      status: failed ? "error" : "done",
+      status: data.stopReason === "aborted" ? "stopped" : failed ? "error" : "done",
       research: agent.name === BUNDLED_RESEARCHER.name
         ? researchResultFromMessages(messages)
         : undefined,
@@ -794,12 +841,14 @@ async function executeSingle(
       error: data.error,
     };
   } catch (error: any) {
-    if (signal?.aborted) throw error;
+    const stopped = signal?.aborted || error?.name === "AbortError";
     return {
       agent: agent.name,
       agentSource: agent.source,
+      title,
       task,
-      status: "error",
+      status: stopped ? (childSession ? "stopped" : dispatched ? "unknown" : "not-started") : "error",
+      stopReason: stopped ? "aborted" : "error",
       requestedModel: modelOverride,
       requestedThinking: thinkingOverride,
       childSession,

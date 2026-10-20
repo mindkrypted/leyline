@@ -1,3 +1,7 @@
+---
+description: Find Leyline's frontend, backend, shared modules, Electron shell, extensions, styles, and development scripts.
+---
+
 # Project layout
 
 ## Frontend
@@ -8,9 +12,12 @@
 - `src/components/TracePanel.vue`: Lazily mounts one embedded Elune surface and adds selected-backend capture controls.
 - `src/components/ReviewPane.vue`: Renders changed files and prepared Pierre diffs for the selected project.
 - `src/components/SystemPromptInspector.vue`: Renders prompt sections, tool changes, raw text, and actions for a selected System event.
+- `src/components/MobileToolActivity.vue`: Renders shared Activity cards on desktop and mobile, including direct inspector access for a single subagent call.
+- `src/components/SubagentInspector.vue`: Renders ordered tasks, prompts, Markdown results, outcomes, copy actions, and child-session navigation in a bounded reader.
 - `src/components/ResearchSourcesPane.vue`: Renders cited sources and the complete research ledger.
 - `src/components/ResearchCitationPreview.vue`: Renders the anchored citation preview and mobile bottom sheet.
 - `src/components/GlobalSettingsModal.vue`: Owns global category navigation, capability gates, focus containment, and owner labels.
+- `src/components/NetworkAccessSettings.vue`: Controls native-backend sharing and its proxy port, with copyable URLs and access warnings.
 - `src/components/AgentSettings.vue`: Renders fixed-scope subagent and vision overrides in global, project, and session surfaces.
 - `src/components/ProjectDetailDrawer.vue`: Renders Project settings and its Sessions tab. Session details lives in `App.vue`.
 - `src/components/ProviderSettings.vue`: Manages provider/model inventories, edits, authentication, catalog refresh, and saved/draft connection tests with feedback beside draft actions.
@@ -24,18 +31,20 @@
 - `src/composables/useTranscriptPreferences.js`: Owns app-wide transcript display settings.
 - `src/composables/useSettingsOperation.js`: Owns backend-bound operation polling, answers, and cancellation.
 - `src/composables/useLiveTurnProjection.js`: Owns optimistic and live transcript state.
-- `src/composables/useRuntimeEvents.js`: Adapts SSE to frontend callbacks and the event log.
+- `src/composables/useRuntimeEvents.js`: Adapts runtime WebSocket events to frontend callbacks, trace subscribers, and the event log.
 - `src/composables/useMemoryInspector.js`: Owns Memory Inspector requests and optimistic state.
 - `src/composables/useProjectBrowser.js`: Owns project picker and folder-browser visibility.
 - `src/composables/useToolExpansion.js`: Owns transcript expansion, copy, and fullscreen state.
+- `src/composables/useFileLinks.js`: Resolves file actions, including child-result origins from `data-file-session-id`.
 - `src/composables/useWorkbenchScroll.js`: Owns transcript following and Jump to latest.
 - `src/composables/useTerminal.js`: Owns xterm and terminal WebSocket state.
 - `src/composables/useDictation.js`: Wraps browser speech recognition.
 - `src/composables/useSmoothStreamingText.js`: Controls incremental live text display.
 - `src/lib/backend.js`: Builds runtime HTTP and WebSocket URLs for the active backend.
+- `src/lib/event-socket.js`: Supplies the shared runtime/review WebSocket client with reconnect backoff, timeouts, heartbeat replies, stale-socket guards, and cleanup.
 - `src/lib/leyline-api.js`: Manages the native connection registry, app settings, pinned sessions, and backend identity checks.
 - `src/lib/pi-api.js`: Contains frontend runtime API functions.
-- `src/lib/trace-client.js`: Supplies selected-backend trace requests, cancellation, and subscriptions through runtime SSE.
+- `src/lib/trace-client.js`: Supplies selected-backend trace requests, cancellation, and subscriptions through the runtime WebSocket.
 - `src/lib/pi-settings-api.js`: Contains selected-backend provider/model/MCP requests and private operation transport.
 - `src/lib/transcript.js`: Configures Markdown and syntax highlighting, then re-exports shared projection helpers.
 - `src/lib/format.js`: Contains UI labels and value formatting.
@@ -47,6 +56,9 @@
 - `lib/research-state.js`: Folds branch-local research events and normalizes threads and sources.
 - `lib/research-citations.js`: Validates numbered report links against the research source ledger.
 - `lib/transcript-projection.js`: Projects pi branch entries, including System events, into shared transcript DTOs.
+- `lib/tool-activity.js`: Groups top-level tools, excludes nested child tools, counts outcomes, and identifies direct inspector access through `singleSubagentEntry()`.
+- `lib/subagent-view.js`: Supplies shared task, title, output, and fallback presentation helpers.
+- `lib/subagent-status.js`: Defines subagent status semantics and task outcome counts.
 - `lib/ultrafast.js`: Defines Ultrafast model and authentication eligibility and shared control identifiers.
 
 These files are outside `src/` because Node.js backend code and browser code import them.
@@ -62,11 +74,11 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `src/styles/topbar.css`: Defines runtime chrome and workbench header controls.
 - `src/styles/workbench.css`: Defines scrolling, start state, empty state, and loading state.
 - `src/styles/transcript.css`: Defines messages, Markdown, thinking, feedback, and transcript actions.
-- `src/styles/tools.css`: Defines tool rows, skills, subagents, and previews.
+- `src/styles/tools.css`: Defines Activity cards, compact subagent rows, prompt and subagent inspectors, skills, and previews.
 - `src/styles/composer.css`: Defines composer layout, menus, attachments, and submission states.
 - `src/styles/memory.css`: Defines the Memory Inspector.
 - `src/styles/review.css`: Defines the resizable and expanded Git review pane.
-- `src/styles/research.css`: Defines research progress, reports, thread cards, source navigation, and sidebar markers.
+- `src/styles/research.css`: Defines research progress, reports, source navigation, and sidebar markers. Subagent inspector styles belong to `tools.css`.
 - `src/styles/settings.css`: Defines global Settings, contextual settings drawers, agent controls, provider/MCP workspaces, and Runtime events.
 - `src/styles/modals.css`: Defines the project browser and confirmation dialogs.
 - `src/styles/terminal.css`: Defines the terminal drawer.
@@ -74,7 +86,8 @@ These files are outside `src/` because Node.js backend code and browser code imp
 
 ## Backend
 
-- `server/backend-connections.js`: Stores named backend connections, the default, native app settings, and pinned session IDs.
+- `server/backend-connections.js`: Stores named backend connections, the default, native app settings, and pinned session IDs. Exposes live network-access routes.
+- `server/network-access.js`: Forwards TCP connections from an independent network listener to the existing origin without restarting it.
 - `server/pi-api/index.js`: Creates the shared runtime and exports server adapters.
 - `server/pi-api/router.js`: Routes runtime HTTP requests.
 - `server/pi-api/pi-settings-routes.js`: Routes provider/model/MCP configuration and private operations.
@@ -91,19 +104,19 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/runtime.js`: Owns runtime handles and pi operations.
 - `server/pi-api/sessions.js`: Discovers session JSONL files and session metadata.
 - `server/pi-api/dtos.js`: Builds runtime and session DTOs.
-- `server/pi-api/events.js`: Broadcasts SSE events, including small trace commit and configuration notices.
+- `server/pi-api/events.js`: Projects runtime events and sends WebSocket frames through bounded queues, including small trace commit and configuration notices.
+- `server/pi-api/event-sockets.js`: Installs runtime and Git review WebSocket upgrades, origin checks, heartbeats, and shutdown cleanup.
 - `server/pi-api/tracing.js`: Owns the lazy Elune store, inline capture bindings, backend configuration, and child usage reconciliation.
 - `server/pi-api/tracing-routes.js`: Routes trace summaries, paged detail, bookmarks, and capture configuration.
 - `server/pi-api/extension-ui.js`: Adapts extension UI state for the browser.
-- `server/pi-api/goal-state.js`: Projects goal extension state.
 - `server/pi-api/fs-browser.js`: Browses local directories.
 - `server/pi-api/git-review.js`: Reads Git status, bounded per-file diffs, and watcher Git state.
-- `server/pi-api/git-review-watch.js`: Shares recursive review watchers and sends review-change SSE events.
+- `server/pi-api/git-review-watch.js`: Shares recursive review watchers and sends review-change WebSocket events.
 - `server/pi-api/memories.js`: Implements Memory Inspector storage.
 - `server/pi-api/rollout-feedback.js`: Implements rollout feedback storage.
 - `server/pi-api/subagents.js`: Implements subagent discovery and overrides.
 - `server/pi-api/vision.js`: Implements vision overrides and persisted parent-context replacement.
-- `server/pi-api/export-renderer.js`: Renders HTML transcript exports.
+- `server/pi-api/export-renderer.js`: Renders HTML transcript exports, including shared Activity groups, subagent templates, a lazy native dialog, and export-specific styles.
 - `server/pi-api/terminal.js`: Runs PTYs over WebSocket.
 - `server/pi-api/http.js`: Contains HTTP response helpers.
 - `server/leyline-server.js`: Serves the packaged frontend and native backend.
@@ -122,13 +135,12 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `.pi/LEYLINE_SYSTEM.md`: Adds Leyline operating context to normal runtimes.
 - `.pi/extensions/output-budget/`: Implements one bounded retry for explicit OpenAI-compatible completion-budget errors.
 - `.pi/extensions/ultrafast/`: Owns runtime-local tier controls, provider hooks, connection cleanup, and cost adjustment.
-- `.pi/extensions/goal/`: Implements goal commands, state, and controls.
 - `.pi/extensions/memory/`: Implements memory injection, commands, and tools.
 - `.pi/extensions/subagent/`: Implements single, parallel, and chain subagent tools, including the reserved researcher.
 - `.pi/extensions/research/`: Implements research-session binding, state updates, orchestration protocol, and report checks.
 - `.pi/extensions/vision-agent/`: Implements image-file inspection through an isolated vision child.
 
-Normal runtimes load all seven bundled extensions plus inline Elune capture. Isolated custom-prompt children retain output-budget and inline capture. Native MCP and tool search use SDK factories in `runtime.js`. Leyline does not load Codemode.
+Normal runtimes load all six bundled extensions plus inline Elune capture. Isolated custom-prompt children retain output-budget and inline capture. Native MCP and tool search use SDK factories in `runtime.js`. Leyline does not load Codemode.
 
 ## Embedded Elune dependency
 

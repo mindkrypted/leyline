@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { fetchFileSettings, saveFileSettings } from '../lib/pi-api'
 
 const props = defineProps({ backendName: { type: String, required: true } })
@@ -11,8 +11,11 @@ const terminalEditor = ref(false)
 const busy = ref(true)
 const error = ref('')
 const saved = ref(false)
+const baseline = ref({ editor: '', editorMode: 'auto' })
+const dirty = computed(() => editor.value !== baseline.value.editor || editorMode.value !== baseline.value.editorMode)
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', beforeUnload)
   try {
     apply(await fetchFileSettings())
   } catch (failure) {
@@ -22,7 +25,26 @@ onMounted(async () => {
   }
 })
 
+onUnmounted(() => window.removeEventListener('beforeunload', beforeUnload))
+
+function beforeUnload(event) {
+  if (!dirty.value && !busy.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+function confirmLeave() {
+  if (busy.value) return false
+  if (dirty.value && !window.confirm('Discard your unsaved file settings?')) return false
+  editor.value = baseline.value.editor
+  editorMode.value = baseline.value.editorMode
+  return true
+}
+
+defineExpose({ confirmLeave })
+
 function apply(data) {
+  baseline.value = { editor: data.editor, editorMode: data.editorMode }
   editor.value = data.editor
   editorMode.value = data.editorMode
   environmentEditor.value = data.environmentEditor
@@ -32,6 +54,7 @@ function apply(data) {
 }
 
 async function save() {
+  if (busy.value) return
   busy.value = true
   error.value = ''
   saved.value = false

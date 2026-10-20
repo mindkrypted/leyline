@@ -1,6 +1,6 @@
 # Manage subagents
 
-Subagents run delegated tasks in child sessions with separate context.
+Subagents run delegated tasks in child sessions with separate context. Open [child transcripts from the sidebar](./sessions#open-a-subagent-session), or inspect task results from an Activity card.
 
 ![Agent defaults with global subagent model choices](../assets/screenshots/subagents.png)
 
@@ -63,23 +63,49 @@ The agent can use three subagent modes:
 
 A model or thinking value on one task takes priority over the mode-level value.
 
+## Session titles
+
+The parent agent must supply a short, nonblank title for every child session. This includes each parallel task and chain step. If any title is missing or blank, the call stops before any children start.
+
+Leyline saves the title as the child's session name. The sidebar shows the current session name. The inspector and HTML export show the supplied title, with full instructions under **Full task prompt**.
+
+Older sessions without titles keep their existing label fallbacks.
+
 ## Read a subagent card
 
-A subagent tool call appears as a card in the parent transcript. It shows the agent name, task results, and status.
+Each subagent call stays in one compact row inside an Activity card. Task details open in the subagent inspector instead of expanding the transcript.
 
-Select the card to expand final output. Select **→ view session** to open a
-child session. Use Command-click, Ctrl-click, or middle-click to open the child
-in a new tab or window.
+If the card contains only one subagent call, select its header or row to open the inspector directly. This also applies to a call with several parallel tasks. If the card contains several tool calls, expand it first, then select the subagent row.
+
+![Subagent inspector with four completed tasks, one stopped task, and a selected Markdown result](../assets/screenshots/subagent-outcomes.png)
+
+*The Activity card keeps its outcome counts while the inspector shows one task at a time.*
+
+The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
+
+1. Select a task to read its status and result.
+2. Expand **Full task prompt** to read the original instructions.
+3. Select **Open child session** to open the child transcript, when available.
+
+Use Command-click, Ctrl-click, or middle-click on **Open child session** to open the child in a new tab or window. Selecting a task row only changes the inspector's selected task.
+
+**Copy result** copies the selected task's text result. **Copy tool output** in the inspector header copies the parent tool output. Press Escape, select the close button, or select the backdrop to close the inspector. Closing it does not stop the child run.
+
+The task list stays in its original order. Live updates and saved results preserve the selected task and reading position.
+
+**Stopped** means cancellation. **Failed** means a task error. **Not started** means the task did not run. Missing final outcomes show **Unknown**. Completed results remain available when another task stops or fails. If task results are unavailable, **Call output** preserves the original tool response or error.
+
+Resolve pending extension confirmations before opening the inspector. A new confirmation closes it so the **Confirm** and **Cancel** controls remain accessible.
 
 ## Inspect delegated runs
 
-Open **Session traces** in the parent header to inspect the subagent tool observation. Available **Child sessions** links open child transcripts. Captured child runs also appear in the selected backend's trace explorer, even though children stay hidden from the session sidebar.
+Open **Session traces** in the parent header to inspect the subagent tool observation. Available **Child sessions** links open child transcripts. Captured child runs also appear in the selected backend's trace explorer.
 
 Trace capture starts on for new runs and can retain delegated prompts and results. See [Tracing](./tracing) for capture controls and privacy.
 
 ## Return to the parent session
 
-Child sessions are hidden from the sidebar. Their header shows **← parent session**.
+Child sessions also open from [nested sidebar rows](./sessions#open-a-subagent-session). Their header shows **← parent session**.
 
 Select **← parent session** to return to the parent transcript. Use a modified
 click to open the parent in a new tab or window.

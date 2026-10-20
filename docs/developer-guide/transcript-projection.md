@@ -40,6 +40,20 @@ A valid report citation emits a source-open event only when its numeric label an
 
 The live controller matches new persisted entries to visible live rows. It removes duplicate persisted rows until the handoff settles.
 
+## Tool Activity and subagent inspector
+
+`lib/tool-activity.js` owns consecutive tool grouping and status counts for the app and export. All top-level tools stay in shared Activity cards, regardless of count, status, or live versus saved state. Nested child tools do not create separate rows. Non-tool entries separate groups.
+
+`MobileToolActivity.vue` renders Activity on desktop and mobile. Collapsed cards show the newest call in a fixed-height row and keep outcome counts visible. `singleSubagentEntry()` identifies a group whose only top-level tool call is `subagent`. Its header and row open the subagent inspector directly, without expansion or a height change, regardless of parallel task count. Multi-call Activity cards still expand to show call history.
+
+For subagent calls, `TranscriptEntry.vue` renders only a compact row and emits `inspect-subagent`. `SubagentInspector.vue` keeps tasks in their original order, with a bounded task list and reader. It shows full prompts, Markdown output, per-task errors, and explicit unknown outcomes. It retains call output when `resultsUnavailable` is true. **Open child session**, **Copy result**, and **Copy tool output** are separate actions.
+
+`lib/subagent-view.js` supplies shared task, title, output, and fallback helpers. `lib/subagent-status.js` supplies status semantics and task counts, including separate stopped, failed, not-started, and unknown outcomes. `useFileLinks.js` reads `data-file-session-id` from the selected task reader to resolve child-result files against the child session. Without that attribute, it uses the selected session.
+
+HTML export uses the same grouping and presentation helpers. `renderExportSubagent()` pre-renders templates. `subagentInspectorJs()` creates a native dialog only when opened and handles Activity expansion, task selection, copy, close, and focus restoration. These controls work without network access or Pierre. Offline export has no navigation to live child sessions.
+
+See [Subagent inspector state](./frontend-state#subagent-inspector-state) for selection and lifecycle ownership. This surface is separate from the System prompt inspector and trace Inspector.
+
 ## Model changes
 
 `projectModelChanges()` reads native `model_change` records from the active branch. It does not infer selections from assistant response metadata, which can name a physical model behind a virtual selection.

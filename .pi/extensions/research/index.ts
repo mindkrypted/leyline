@@ -40,7 +40,7 @@ Run the research automatically. Do not wait for plan approval unless the user as
 Use this protocol:
 1. Turn the objective into 2 to 5 independent research threads. Scale the number of threads to the question.
 2. State the short plan for the user, then call research_update with action "plan" before you delegate. Give each thread a stable ID such as T1, a short title, and a precise task.
-3. Call the subagent tool in parallel mode. Use the "researcher" agent for every thread. Keep tasks in the same order as the plan and start each task with its thread ID in square brackets.
+3. Call the subagent tool in parallel mode. Use the "researcher" agent for every thread. Set each item's title to its planned thread title. Keep tasks in the same order as the plan and start each task with its thread ID in square brackets.
 4. Read every thread result. If a thread did not return structured sources, call research_update with action "sources" and register the useful sources yourself.
 5. Call research_update with phase "synthesize" before you compare findings. The tool response returns the canonical citation ledger.
 6. Prefer primary sources, official documentation, direct datasets, and reproducible benchmarks. Keep contrary evidence and exclusion reasons visible.
@@ -284,7 +284,7 @@ export default function researchExtension(pi: ExtensionAPI) {
       const current = state?.threads.find((thread) => thread.id === threadId);
       persistThread({
         id: threadId,
-        title: current?.title || String(research.title || result.task || threadId),
+        title: current?.title || String(result.title || research.title || result.task || threadId),
         task: current?.task || String(result.task || ""),
         status,
         summary: String(research.summary || current?.summary || ""),
@@ -423,7 +423,7 @@ export default function researchExtension(pi: ExtensionAPI) {
       persistThread({
         ...planned,
         id,
-        title: planned?.title || String(task?.task || id),
+        title: planned?.title || String(task?.title || task?.task || id),
         task: planned?.task || String(task?.task || ""),
         status: index < 4 ? "running" : "queued",
         startedAt: index < 4 ? Date.now() : 0,

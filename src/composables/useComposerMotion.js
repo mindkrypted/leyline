@@ -2,7 +2,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 
 export function useComposerMotion({
   frame, homeAnchor, dockAnchor, startComposer, sessionComposer,
-  workbench, homeVisible, isSessionVisible, onReveal, onFinish,
+  workbench, homeVisible, isSessionVisible, onReveal, onFinish, mobile = () => false,
 }) {
   const state = ref(null)
   const homeHeight = ref(164)
@@ -70,6 +70,10 @@ export function useComposerMotion({
     if (homeHeight.value !== height) {
       homeHeight.value = height
       scheduleMeasure()
+      return
+    }
+    if (mobile() && dockAnchor.value) {
+      homeStyle.value = position(dockAnchor.value.getBoundingClientRect())
       return
     }
     const rect = anchor.getBoundingClientRect()
@@ -180,7 +184,7 @@ export function useComposerMotion({
     const elements = new Set([
       frame.value?.parentElement, homeAnchor.value,
       workbench.value, startComposer.value?.form,
-      state.value && dockAnchor.value,
+      (state.value || mobile()) && dockAnchor.value,
       state.value && sessionComposer.value?.form,
     ])
     for (const element of elements) {
@@ -230,7 +234,7 @@ export function useComposerMotion({
   }
 
   watch([
-    frame, homeAnchor, dockAnchor, workbench, homeVisible,
+    frame, homeAnchor, dockAnchor, workbench, homeVisible, mobile,
     () => startComposer.value?.form,
     () => sessionComposer.value?.form,
     () => state.value && isSessionVisible(),

@@ -11,10 +11,11 @@ The server creates each child with `SessionManager.newSession()` and sets the
 parent session path. It also appends a `leyline-subagent-session` custom marker
 to the child session.
 
-Leyline uses the explicit marker to hide child sessions from the sidebar. For
-older compatible sessions, it also matches child paths stored in subagent tool
-results. A session without either form of metadata can appear as a normal
-session.
+Leyline uses the explicit marker to identify children for nested sidebar rows.
+For older compatible sessions, it also matches child paths stored in subagent
+tool results. A parent session path alone does not identify a subagent.
+Normal forks remain regular sessions. A session without either form of
+metadata can appear as a normal session.
 
 ## Modes
 
@@ -25,6 +26,16 @@ session.
 
 A chain stops when a step fails. Parallel mode returns all results, including
 individual failures.
+
+Every child requires a short, nonblank `title`, separate from its full `task`.
+Single mode uses a top-level `title`. Each parallel task and chain step requires
+its own `title`. If any title is missing or blank, the call fails before any
+children start.
+
+The server saves the title as the child's native pi session name before runtime
+startup. The sidebar shows the current session name. The inspector and HTML
+export show the supplied title and keep the full task prompt separate.
+Older sessions retain their existing label fallbacks.
 
 ## Agent definitions
 
@@ -101,6 +112,7 @@ Single mode:
 ```json
 {
   "agent": "reviewer",
+  "title": "Review current changes",
   "task": "Review the current diff",
   "model": "inherit",
   "thinking": "high"
@@ -114,8 +126,8 @@ Parallel mode:
   "mode": "parallel",
   "model": "inherit",
   "tasks": [
-    { "agent": "reviewer", "task": "Review correctness" },
-    { "agent": "researcher", "task": "Check the API contract" }
+    { "agent": "reviewer", "title": "Correctness review", "task": "Review correctness" },
+    { "agent": "researcher", "title": "API contract", "task": "Check the API contract" }
   ]
 }
 ```
@@ -126,8 +138,8 @@ Chain mode:
 {
   "mode": "chain",
   "chain": [
-    { "agent": "researcher", "task": "Find the relevant source" },
-    { "agent": "reviewer", "task": "Review this evidence:\n{previous}" }
+    { "agent": "researcher", "title": "Find source evidence", "task": "Find the relevant source" },
+    { "agent": "reviewer", "title": "Review source evidence", "task": "Review this evidence:\n{previous}" }
   ]
 }
 ```
@@ -137,6 +149,7 @@ supply its own `cwd`, `model`, and `thinking` value.
 
 ## Leyline rendering
 
-Subagent tool calls appear as cards in the transcript. Select a child card to
-open that child session. A child workbench with a valid parent path shows the
-**parent session** control.
+Subagent tool calls appear in compact Activity rows. Select a subagent row to
+open the inspector. Select a task. Select **Open child session** to open its
+transcript. Children also open directly from nested sidebar rows. A child
+workbench with a valid parent path shows the **parent session** control.

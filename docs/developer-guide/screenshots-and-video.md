@@ -34,14 +34,14 @@ npm run docs:screenshots
 
 This command intercepts Leyline API calls and supplies sanitized fixtures. Mock coverage includes:
 
-- Backend connections, backend information and capabilities, file editor settings, the thought display setting, and pinned session IDs
+- Backend connections, live network-access state, switch and port changes, backend information and capabilities, file editor settings, the thought display setting, and pinned session IDs
 - Provider/model and MCP inventories with the `piSettings` capability; saved secret values are absent
 - Catalog search results for three Qwen3.8-27B provider variants, with model details, thinking maps, and compatibility metadata
 - Projects, folder browsing, session lists, detail, activation, and runtime state
 - Git status and selected-file diffs
 - Memory records, subagent configuration, and vision configuration
-- Queue, goal, research, shell, and image-delegation transcript states
-- SSE runtime snapshots and events, terminal WebSocket traffic, and exported HTML
+- Queue, research, shell, and image-delegation transcript states
+- Runtime snapshots and events, Git review notices, and terminal traffic through mock WebSockets, plus exported HTML
 - Trace summaries, paged detail, bookmarks, capture configuration, and trace capability data
 
 Unrecognized API requests fail the capture instead of reaching live data.
@@ -64,13 +64,72 @@ Refresh selected assets with `DOCS_SCREENSHOT_FILTER`, a comma-separated list of
 DOCS_SCREENSHOT_FILTER=composer-queue.png,composer-queue-held.png,activity.png,activity-mobile.png npm run docs:screenshots
 ```
 
+For expanded tool previews:
+
+```bash
+DOCS_SCREENSHOT_FILTER=tool-activity.png,vision-tool-call.png,preview-fullscreen.png npm run docs:screenshots
+```
+
+`tool-activity.png` shows a short skill-file preview and **Open full screen** above a collapsed shell call. The helper checks their alignment with the tool label, keeps the action above the composer, and rejects a duplicate desktop path line.
+
 For the settings overview and connection-test captures:
 
 ```bash
 DOCS_SCREENSHOT_FILTER=backend-connections.png,models-providers.png,provider-models.png,provider-connection-test.png,model-connection-test.png,mcp-servers.png,subagents.png,vision-agent.png,project-details.png,session-details.png,settings-mobile.png npm run docs:screenshots
 ```
 
-These images show Connections, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
+These images show Connections with network access off, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
+
+For subagent inspection and the affected research views:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagent-outcomes.png,subagent-inspector-mobile.png,subagent-inspector-export.png,deep-research.png,deep-research-mobile.png npm run docs:screenshots
+```
+
+| Asset | Captured state |
+| --- | --- |
+| `docs/assets/screenshots/subagent-outcomes.png` | Desktop subagent inspector with four completed tasks, one stopped task, and a selected Markdown result. |
+| `docs/assets/screenshots/subagent-inspector-mobile.png` | Mobile bottom sheet with two completed tasks, one stopped task, and the child-session control. |
+| `docs/assets/screenshots/subagent-inspector-export.png` | Offline HTML inspector with the five-task fixture and no live child-session navigation. |
+| `docs/assets/screenshots/deep-research.png` | Completed report with the compact Research threads row in Activity. |
+| `docs/assets/screenshots/deep-research-mobile.png` | The same report with a mobile citation preview. |
+| `assets/readme/deep-research.png` | The research view in the README frame. |
+
+The fixtures give every child an explicit `title`, separate from its full `task` prompt. Research children use their planned thread titles.
+
+The inspector helper opens the single-call Activity card from its header, checks task titles, selection, and the full prompt, then reopens it from its row. Both entry points must keep the card collapsed and preserve its height and position. The export capture blocks the external preview renderer to verify that the inspector works offline.
+
+For sidebar child sessions:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagent-sidebar.png,mobile-sidebar.png,workbench.png,subagent-outcomes.png,deep-research.png npm run docs:screenshots
+```
+
+| Asset | Captured state |
+| --- | --- |
+| `docs/assets/screenshots/subagent-sidebar.png` | Expanded parent with one completed child and two running children, beside the live subagent Activity card. |
+| `docs/assets/screenshots/mobile-sidebar.png` | The same child branch in the mobile sidebar. |
+| `workbench.png` in both output directories | Two settled children under the selected parent. |
+| `docs/assets/screenshots/subagent-outcomes.png` | Five settled children beside the desktop task inspector. |
+| `deep-research.png` in both output directories | Three research workers under their parent, beside the completed report and sources. |
+
+The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper checks the inset nodes and chevron spacing, then waits for folding to finish. General captures retain `local/minimax-m2.7`; workbench captures keep the approved Ultrafast model.
+
+Use local visual checks for fold motion, rapid reversals, and reduced-motion behavior. PNG captures show only the settled layout.
+
+For network access:
+
+```bash
+DOCS_SCREENSHOT_FILTER=backend-connections.png,network-access.png,network-access-mobile.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `backend-connections.png` | Connections with sharing off, **Proxy port** set to **Automatic**, and saved backends. |
+| `network-access.png` | Desktop Connections with sharing on, saved proxy port `52342`, and copyable fixture URLs. |
+| `network-access-mobile.png` | The same fixed-port state at 390 by 844 CSS pixels. |
+
+The helper enters `52342`, selects **Apply**, checks that sharing remains off, and then uses the real switch to enable it. Capture waits for the saved field, enabled state, and both URL rows. Intercepted requests change only browser fixture state. They never open a real listener or change local settings. The example IPv4 addresses use documentation ranges. The port is a capture example, not a product default.
 
 For the model editor and catalog workflow:
 
@@ -109,14 +168,18 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Git review captures: `release-safety` with four sanitized changed files
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
+- Subagent captures: compact Activity rows and separate task inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group
+- Sidebar child captures: an inset guide with hollow nodes, a parent-only chevron column, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
-- Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, goals, events, terminal, export, and mobile navigation
+- Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
 
 Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. The pinned-session capture pins two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
 
 These models and settings exist only in the capture fixtures. The command does not change local model configuration.
 
-Each state uses a new browser context. The script uses a fixed date with increasing millisecond ticks, replaces SSE and terminal transports, and waits for a state selector. The tick prevents Vue's event timestamp guard from dropping interactions. The capture disables remaining motion.
+Each state uses a new browser context. The script uses a fixed date with increasing millisecond ticks and waits for a state selector. `MockWebSocket` replaces the runtime, Git review, and terminal transports. Only the `vite-hmr` protocol uses the native WebSocket. No session, model, or terminal traffic reaches a live backend. The tick prevents Vue's event timestamp guard from dropping interactions.
+
+The capture disables remaining motion.
 
 The script blocks unrecognized `/api/` requests instead of sending them to a live backend. Before capture, it checks visible text and form values for home paths, usernames, repository paths, email addresses, and common credential prefixes.
 
@@ -156,7 +219,9 @@ Open every changed image. Check these items:
 5. General model selectors show `local/minimax-m2.7`. Ultrafast captures use an eligible OpenAI model and authentication path.
 6. The vision selector shows `local/qwen3.6-27b` and excludes text-only models.
 7. System captures show the intended prompt and tool deltas without clipping.
-8. Each Markdown image reference resolves in both documentation base paths.
+8. Subagent inspectors show the selected task, its outcome, and the result without inline task bodies in Activity.
+9. Sidebar children sit inside the parent, use hollow nodes, and leave plain rows without an empty chevron column.
+10. Each Markdown image reference resolves in both documentation base paths.
 
 Run the PNG structure audit from the documentation screenshot skill when it is available. Check whitespace and both documentation base paths:
 

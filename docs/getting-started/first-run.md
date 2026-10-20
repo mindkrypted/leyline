@@ -1,3 +1,7 @@
+---
+description: Create your first Leyline session, select a project and model, check trace capture, and send a prompt.
+---
+
 # First run
 
 Trace capture starts on for new runs. Before submitting private data, check
@@ -5,9 +9,11 @@ Trace capture starts on for new runs. Before submitting private data, check
 
 ## Start Leyline
 
-If you followed [Linux installation](./linux-installation), open **Leyline**
-from your application menu and continue at step 3. The packaged app does not
-need a development server.
+If you installed the [macOS desktop release](./installation#macos-desktop-release)
+or followed [Linux installation](./linux-installation), open **Leyline** and
+continue at step 3. On macOS, complete the
+[security approval steps](./installation#macos-security-warning) first. The
+packaged app does not need a development server.
 
 1. Run the development server:
 

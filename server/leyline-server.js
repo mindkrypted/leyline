@@ -3,7 +3,8 @@ import { stat } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { backendConnectionsHandler } from './backend-connections.js'
+import { backendConnectionsHandler, readNetworkAccessSettings } from './backend-connections.js'
+import { configureNetworkAccess } from './network-access.js'
 import {
   configurePiWebSocketServer,
   piApiHandler,
@@ -35,6 +36,8 @@ export async function startLeylineServer(options = {}) {
   })
 
   configurePiWebSocketServer(server)
+  const owner = options.networkAccessOwner || JSON.stringify(['server', root, host, port])
+  const closeNetworkAccess = configureNetworkAccess(server, readNetworkAccessSettings(owner))
 
   await new Promise((resolveServer, reject) => {
     server.once('error', reject)
@@ -54,7 +57,7 @@ export async function startLeylineServer(options = {}) {
     url,
     close: async () => {
       try {
-        await shutdownPiRuntime()
+        await Promise.all([closeNetworkAccess(), shutdownPiRuntime()])
       } finally {
         await new Promise((resolveClose) => server.close(resolveClose))
       }

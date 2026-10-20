@@ -3,6 +3,17 @@ export function modelChip(model) {
   return [model.provider, model.id].filter(Boolean).join('/')
 }
 
+export function compactNumber(value) {
+  const number = Number(value || 0)
+  if (number >= 1_000_000) return `${trimNumber(number / 1_000_000)}M`
+  if (number >= 1_000) return `${trimNumber(number / 1_000)}K`
+  return String(number)
+}
+
+function trimNumber(value) {
+  return value.toFixed(1).replace(/\.0$/, '')
+}
+
 export function formatMode(value) {
   return String(value).replace(/[-_]/g, ' ').toLowerCase()
 }

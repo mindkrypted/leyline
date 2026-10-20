@@ -1,4 +1,4 @@
-# <img src="assets/icon.png" width="96" height="96" alt="Leyline icon" align="center"> Leyline
+# [![Leyline: Run concurrent pi sessions in your browser, desktop, or mobile.](assets/readme/header.png)](https://leyline.sh/)
 
 Leyline is a web UI for pi coding-agent sessions. It uses Vue 3 and Vite for
 the frontend. Its native backend uses the pi SDK for sessions, prompts, model
@@ -10,10 +10,10 @@ connections to other Leyline backends.
 <table>
   <tr>
     <td width="50%"><a href="assets/readme/home.png"><img alt="Leyline start screen with project, research, and runtime controls" src="assets/readme/home.png" /></a><br /><strong>Start screen</strong></td>
-    <td width="50%"><a href="assets/readme/workbench.png"><img alt="Leyline workbench with a sanitized agent session" src="assets/readme/workbench.png" /></a><br /><strong>Workbench</strong></td>
+    <td width="50%"><a href="assets/readme/workbench.png"><img alt="Leyline workbench with tool activity and nested subagent sessions" src="assets/readme/workbench.png" /></a><br /><strong>Workbench</strong></td>
   </tr>
   <tr>
-    <td><a href="assets/readme/deep-research.png"><img alt="Leyline deep research report with phase progress and cited sources" src="assets/readme/deep-research.png" /></a><br /><strong>Deep research</strong></td>
+    <td><a href="assets/readme/deep-research.png"><img alt="Leyline research report with cited sources and nested research workers" src="assets/readme/deep-research.png" /></a><br /><strong>Deep research</strong></td>
     <td><a href="assets/readme/tracing.png"><img alt="Leyline tracing workspace with a run timeline and selected observation details" src="assets/readme/tracing.png" /></a><br /><strong>Tracing workspace</strong></td>
   </tr>
 </table>
@@ -34,7 +34,7 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - [Settings, providers, and MCP](docs/user-guide/settings.md)
 - [Tracing](docs/user-guide/tracing.md)
 - [Elune integration](docs/integrations/elune.md)
-- [Goals and events](docs/user-guide/goals-and-events.md)
+- [Runtime events](docs/user-guide/runtime-events.md)
 - [Terminal](docs/user-guide/terminal.md)
 - [Electron](docs/electron/index.md)
 - [Commands](docs/reference/commands.md)
@@ -42,55 +42,39 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 
 ## Features
 
-You can browse and run pi sessions in one workspace. You can pin sessions to keep them at the top of a project list. You can search across
-projects with **Go to** and monitor work through **Activity**. You can read
-live transcripts, use steering or **Up next** tasks, and examine tools, System
-changes, and local files. Pi's native MCP integration supplies configured
-tools, and extension confirmation cards let you accept or cancel requests.
+- Browse, search, pin, and run pi sessions across projects. Read live
+  transcripts and monitor work in **Activity**.
+- Steer active work or queue **Up next** tasks. Examine tools, System
+  changes, local files, and Git changes. Use configured MCP tools and
+  respond to extension requests in the workspace.
+- Open subagent child sessions under their parents in the sidebar.
+  Use memory, HTML export, an embedded terminal, and deep research
+  with validated citations. A configured vision model can
+  describe images for models that cannot receive images.
+- Connect each window to the native backend or a saved backend
+  connection. Configure provider sign-in, custom endpoints, model
+  overrides, and MCP servers in [Model settings](docs/user-guide/settings.md#find-a-configuration-in-the-catalog).
+- Embedded Elune tracing records new runs by default. Examine one
+  session or traces across projects on the selected backend. Traces can
+  contain private prompts and tool results. See
+  [Tracing](docs/user-guide/tracing.md).
 
-Model controls include the optional `ultrafast` chip for supported OpenAI
-Responses models. It is off by default. OpenAI charges more for `ultrafast`. See
-[Runtime controls](docs/user-guide/runtime-controls.md#use-ultrafast).
-Memory, subagents, HTML export, and an embedded terminal help you complete
-session work.
-Each window can use the native backend or a saved backend connection.
+Read [Motivations](docs/motivations.md) for the project direction.
 
-Embedded Elune tracing records new runs by default. **Session traces** opens the
-selected session's inspector. **Open workspace** shows its timeline, and the
-**Trace explorer** button in the sidebar shows all projects on the selected
-backend. Capture controls are in the trace footer.
+## Desktop downloads
 
-Traces can contain private prompts and tool results. Leyline keeps existing
-traces if you stop capture, delete a session, or reset the history. See
-[Tracing](docs/user-guide/tracing.md).
+Download the Apple silicon macOS DMG or Linux x64 archive from
+[GitHub Releases](https://github.com/spmurrayzzz/leyline/releases).
 
-Settings includes provider sign-in, custom endpoints, model definitions and
-overrides, and MCP server configuration. Select a configuration from the
-backend catalog. Examine the fields to use. Adjust the model limits, thinking
-maps, and developer-role compatibility.
-
-Provider costs are different from connection settings. Changes use pi's files
-on the selected backend. See
-[Model settings](docs/user-guide/settings.md#find-a-configuration-in-the-catalog).
-Project and session details hold their own agent overrides.
-
-Deep research sessions divide a question into parallel, source-backed threads.
-You can examine the plan and the worker sessions. Leyline validates numbered
-report citations. Each citation opens a source preview. The research ledger
-keeps records for sources that Leyline cited, used, or excluded.
-
-On desktop, Git Review updates its header summary when the pane is closed.
-Git Review prepares the selected diff before you open the pane. Git Review
-separates staged and working-tree changes. Git Review can expand across the
-workspace.
-
-When the parent model cannot receive images, Leyline can send each attachment
-to a configured vision model in a hidden child session. The parent model
-receives the descriptions while the transcript keeps the original images.
-
-Read [Motivations](docs/motivations.md) for more information about the project.
+macOS builds use ad-hoc signing and are **not notarized by Apple**. macOS can
+block the first launch. Follow the [macOS installation and security approval
+steps](docs/getting-started/installation.md#macos-desktop-release), including
+the app-specific quarantine fallback if necessary.
 
 ## Requirements
+
+The Node.js, npm, and dependency-installation requirements below apply to
+source builds. The downloaded desktop app includes its backend and runtime.
 
 - macOS or Linux (see the tested setup below)
 - Node.js 22.19.0, as specified in `.nvmrc`
@@ -138,18 +122,31 @@ Connections**. You can add, test, edit, remove, or select a named connection
 there. The **Native backend** is the server that supplied the current Leyline
 app.
 
+To share the native backend with other devices, enable **Allow network access**
+in **Settings → Connections**. Copy a sharing URL and open it on the other
+device. For a fixed port, set **Proxy port** and select **Apply**. Leave it blank
+for automatic selection. Changes apply immediately. Local clients and agents
+stay connected, but a port change or disabling sharing disconnects remote
+clients. The API has no authentication, so use trusted networks only. See
+[Network access](docs/user-guide/settings.md#share-the-native-backend).
+
 Saved connections and the configured default are app-wide. Each browser or
 Electron window keeps its active connection independently. A new window uses
 the default. A new Electron window inherits the source window's active
 connection.
 
-Leyline sends runtime HTTP commands, runtime events, terminal WebSocket traffic,
-trace requests, and exports to the active backend. Leyline does not combine
+Runtime HTTP commands, runtime and Git review events, terminal traffic, trace
+requests, and exports use the active backend. Events and terminal traffic use
+separate WebSockets. Leyline does not combine
 traces or capture settings across connections. Traces and capture settings stay
 on the active backend. Connection management stays on the native backend. See
 [Settings](docs/user-guide/settings.md) for
 connection setup and [Environment variables](docs/reference/environment.md) for
 packaged server and origin settings.
+
+The frontend and backend must both use API v2. Runtime and Git review events
+require WebSockets, with no SSE fallback. See
+[Realtime events](docs/developer-guide/realtime-events.md).
 
 ## Optional Electron app
 

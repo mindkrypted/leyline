@@ -32,6 +32,7 @@ const props = defineProps({
 const emit = defineEmits(['select', 'toggle'])
 const query = ref('')
 const input = ref(null)
+let focusSearchOnOpen = null
 
 const filteredModels = computed(() => {
   const rawQuery = query.value.trim().toLowerCase()
@@ -49,14 +50,26 @@ const filteredModels = computed(() => {
     .map((item) => item.model)
 })
 
-watch(() => props.open, async (open) => {
+watch(() => props.open, async (open, previous, onCleanup) => {
+  let cancelled = false
+  onCleanup(() => { cancelled = true })
   if (!open) {
     query.value = ''
+    focusSearchOnOpen = null
     return
   }
+  const focusSearch = focusSearchOnOpen
+    ?? !window.matchMedia('(hover: none), (pointer: coarse)').matches
+  focusSearchOnOpen = null
   await nextTick()
-  input.value?.focus()
+  if (!cancelled && focusSearch) input.value?.focus({ preventScroll: true })
 })
+
+function toggle(event) {
+  focusSearchOnOpen = event.detail === 0 || (event.pointerType !== 'touch'
+    && !window.matchMedia('(hover: none), (pointer: coarse)').matches)
+  emit('toggle')
+}
 
 function modelScore(model, terms, rawQuery) {
   const fields = [
@@ -107,7 +120,8 @@ function selectModel(model) {
       :class="{ 'start-composer-chip': start }"
       type="button"
       :disabled="disabled"
-      @click="emit('toggle')"
+      :aria-expanded="open"
+      @click="toggle"
     >
       <span
         class="model-label"
@@ -128,6 +142,7 @@ function selectModel(model) {
             ref="input"
             v-model="query"
             placeholder="Filter models"
+            aria-label="Filter models"
             @keydown.enter.prevent
           />
         </label>
@@ -148,3 +163,11 @@ function selectModel(model) {
     </Transition>
   </div>
 </template>
+
+<style scoped>
+@media (hover: none), (pointer: coarse) {
+  .model-search-field input {
+    font-size: 16px;
+  }
+}
+</style>

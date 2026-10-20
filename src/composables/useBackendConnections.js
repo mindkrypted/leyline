@@ -217,7 +217,7 @@ function clearInitialConnectionId(id) {
 
   url.searchParams.delete('leylineBackendConnectionId')
   const next = `${url.pathname}${url.search}${url.hash}`
-  window.history.replaceState({}, '', next)
+  window.history.replaceState(window.history.state, '', next)
 }
 
 function backendReloadPath() {

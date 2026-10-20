@@ -4,9 +4,9 @@ import {
   skillPromptDisplayText,
 } from '../../lib/transcript-projection.js'
 import { SessionManager } from '@earendil-works/pi-coding-agent'
+import { compactionCutEntryId } from './compaction-boundary.js'
 import { emptyExtensionUiState } from './extension-ui.js'
 import { supportsUltrafastWithAuth, ULTRAFAST_COMMAND } from '../../lib/ultrafast.js'
-import { goalStateFromEntries, goalStateFromSession } from './goal-state.js'
 import { applyRolloutFeedback } from './rollout-feedback.js'
 import {
   compactResearchState,
@@ -121,6 +121,9 @@ export function sessionStateDto(
     availableThinkingLevels: session.getAvailableThinkingLevels(),
     isStreaming: session.isStreaming,
     isCompacting: session.isCompacting,
+    compactionCutEntryId: session.isCompacting
+      ? compactionCutEntryId(session)
+      : '',
     pendingToolCalls,
     pendingTools: pendingToolsDto(
       session,
@@ -139,7 +142,6 @@ export function sessionStateDto(
     },
     extensionUi: extensionUiState,
     pendingConfirmationCount: extensionUiState.confirmations?.length || 0,
-    goal: goalStateFromSession(session),
     research: researchStateFromSession(session),
   }
 }
@@ -244,13 +246,12 @@ export function toActiveSessionDetailDto(handle) {
   )
 }
 
-function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime) {
+export function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime) {
   const header = manager.getHeader()
   const entries = manager.getBranch()
   let messageCount = 0
   let firstMessage = ''
   let name = session.name
-  const goal = goalStateFromEntries(entries)
   const research = researchStateFromEntries(entries, manager.getSessionId())
 
   for (const entry of entries) {
@@ -278,7 +279,7 @@ function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime
     isSubagentSession: session.isSubagentSession === true
       || hasSubagentSessionMarker(entries, manager.getSessionId()),
     research,
-    firstMessage: firstMessage || research?.objective || goal?.objective || '(no messages)',
+    firstMessage: firstMessage || research?.objective || '(no messages)',
     created: session.created || new Date(header.timestamp),
     modified: session.modified
       || sessionModifiedDate(entries, header, new Date()),
@@ -331,7 +332,6 @@ export function sessionInfo(handle) {
   const created = new Date(header.timestamp)
   let messageCount = 0
   let firstMessage = ''
-  const goal = goalStateFromEntries(entries)
   const research = researchStateFromEntries(entries, manager.getSessionId())
 
   for (const entry of entries) {
@@ -351,7 +351,7 @@ export function sessionInfo(handle) {
     parentSessionPath: header.parentSession,
     isSubagentSession: hasSubagentSessionMarker(entries, manager.getSessionId()),
     research,
-    firstMessage: firstMessage || research?.objective || goal?.objective || '(no messages)',
+    firstMessage: firstMessage || research?.objective || '(no messages)',
     created,
     modified: sessionModifiedDate(entries, header, created),
     messageCount,
@@ -366,15 +366,31 @@ export function toSessionDto(session) {
     name: session.name,
     parentSessionPath: session.parentSessionPath,
     isSubagentSession: session.isSubagentSession === true,
+    ...(Array.isArray(session.subagentChildren) ? {
+      subagentChildren: session.subagentChildren.slice(0, 50).map((child) => ({
+        id: child.id,
+        agent: child.agent || '',
+        task: truncate(child.task || '', 120),
+      })),
+    } : {}),
     research: compactResearchState(session.research),
     firstMessage: truncate(
-      skillPromptDisplayText(session.firstMessage || ''),
+      session.isSubagentSession
+        ? subagentTaskText(session.firstMessage)
+        : skillPromptDisplayText(session.firstMessage || ''),
       140,
     ),
     messageCount: session.messageCount ?? 0,
     modified: session.modified || session.created || timestampFromPath(session.path),
     timestamp: session.created || timestampFromPath(session.path),
   }
+}
+
+function subagentTaskText(firstMessage) {
+  const text = skillPromptDisplayText(firstMessage || '')
+  const marker = '\n\nTask: '
+  const index = text.lastIndexOf(marker)
+  return index === -1 ? text : text.slice(index + marker.length)
 }
 
 function contextTokensFromEntries(entries) {

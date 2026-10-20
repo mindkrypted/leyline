@@ -20,7 +20,11 @@ Saved assistant text appears as rendered Markdown. Raw HTML is disabled.
 
 ## Expand a tool row
 
-Tool rows are collapsed by default. Select a row to show its output or preview.
+![Activity card with an expanded skill-file preview, Open full screen, and a collapsed shell call](../assets/screenshots/tool-activity.png)
+
+Tool calls appear in Activity cards. A collapsed card shows its outcome summary and newest call. Select the card header to show the call list, then select a tool row to show its output or preview.
+
+Subagent calls open a separate inspector, as described [below](#read-a-subagent-card).
 
 Each row shows a tool label, target when available, and status. Common labels include file paths for file tools and commands for shell tools.
 
@@ -76,21 +80,25 @@ Select **×** or the backdrop to close the fullscreen view.
 
 ## Expand a skill row
 
+A call that reads a `SKILL.md` file appears as **Skill · name** in an Activity card. Expand it to read the file preview, or select **Open full screen** for the full content.
+
 A loaded skill prompt appears as a compact row with `[skill]`, the skill name, and **expand**. Select it to show the skill prompt payload.
 
 Select the row again when it shows **hide**.
 
 ## Read a subagent card
 
-A subagent tool call appears as a subagent card. The card shows the agent name and **running**, **completed**, or **error**.
+A subagent call stays compact inside Activity. If it is the card's only tool call, select either the header or row to open its inspector directly. This includes parallel calls with several child tasks. For cards with several tool calls, expand the card first.
 
-Select the card to expand its result. Select **→ view session** on a result to open that child session.
+Select a task inside the inspector to read its prompt, status, and Markdown result. **Open child session** opens its transcript. The inspector uses a side sheet on desktop and a bottom sheet on mobile; it does not expand the transcript.
+
+**Stopped** means cancellation. **Failed** means a task error. Missing outcomes show **Unknown**, and unavailable task results retain the original response under **Call output**. See [Subagents](./subagents#read-a-subagent-card) for details.
 
 ## Copy transcript content
 
 Select **Copy** in a message or tool header. Leyline copies the message text or available tool output.
 
-The action changes to **Copied** for a short time. The fullscreen tool view also has a **Copy** action.
+The action changes to **Copied** for a short time. The fullscreen tool view also has a **Copy** action. For subagents, use **Copy tool output** or **Copy result** inside the inspector.
 
 ## Add rollout feedback
 

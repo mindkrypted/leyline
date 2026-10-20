@@ -107,10 +107,6 @@ export function useToolExpansion() {
     return copiedEntryId.value === id ? 'Copied' : 'Copy to clipboard'
   }
 
-  function copyGlyph(id) {
-    return copiedEntryId.value === id ? '✓' : '⧉'
-  }
-
   function dispose() {
     clearTimeout(copiedTimer)
   }
@@ -135,7 +131,6 @@ export function useToolExpansion() {
     copyEntry,
     copyTranscriptItem,
     copyTitle,
-    copyGlyph,
     dispose,
   }
 }

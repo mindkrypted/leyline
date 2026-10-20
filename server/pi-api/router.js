@@ -29,8 +29,6 @@ export function createPiApiHandler(api) {
     listSubagentConfigs,
     listVisibleMemories,
     listVisionConfig,
-    openEventStream,
-    openGitReviewEventStream,
     promptSession,
     readDirectory,
     readGitReview,
@@ -77,6 +75,7 @@ async function piApiHandler(req, res) {
     }
 
     const url = new URL(req.url, 'http://localhost')
+    let retainedHandle
   
     try {
       if (url.pathname === '/info') {
@@ -86,7 +85,7 @@ async function piApiHandler(req, res) {
         return json(res, {
           name: 'Leyline',
           version: process.env.npm_package_version || '0.0.0',
-          apiVersion: 1,
+          apiVersion: 2,
           capabilities: {
             events: true,
             exports: true,
@@ -212,7 +211,7 @@ async function piApiHandler(req, res) {
         }
         const cwd = url.searchParams.get('cwd')
         if (!cwd) return json(res, { error: 'Project path is required' }, 400)
-        return openGitReviewEventStream(cwd, req, res)
+        return json(res, { error: 'WebSocket connection required' }, 426)
       }
 
       if (url.pathname === '/review/diff') {
@@ -381,7 +380,7 @@ async function piApiHandler(req, res) {
           return json(res, { error: 'Method not allowed' }, 405)
         }
   
-        return openEventStream(req, res)
+        return json(res, { error: 'WebSocket connection required' }, 426)
       }
 
       if (url.pathname === '/memories') {
@@ -527,6 +526,7 @@ async function piApiHandler(req, res) {
         }
         try {
           const result = await runSubagent({
+            title: body.title,
             task: body.task,
             cwd: body.cwd,
             parentSessionPath: body.parentSessionPath,
@@ -552,7 +552,10 @@ async function piApiHandler(req, res) {
           })
           return finish(result)
         } catch (error) {
-          return finish({ error: error.message }, 500)
+          return finish({
+            error: error.message,
+            ...(error.name === 'AbortError' ? { stopReason: 'aborted' } : {}),
+          }, 500)
         }
       }
 
@@ -674,6 +677,8 @@ async function piApiHandler(req, res) {
           decodeURIComponent(scopedActionMatch[1]),
         )
         if (!handle) return json(res, { error: 'Session not found' }, 404)
+        retainedHandle = handle
+        handle.pendingApiRequests = (handle.pendingApiRequests || 0) + 1
   
         const body = await readJson(req)
         const action = scopedActionMatch[2]
@@ -836,6 +841,8 @@ async function piApiHandler(req, res) {
       return json(res, { error: 'Not found' }, 404)
     } catch (error) {
       return json(res, { error: error.message }, 500)
+    } finally {
+      if (retainedHandle) retainedHandle.pendingApiRequests -= 1
     }
   }
 

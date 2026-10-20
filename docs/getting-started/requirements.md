@@ -14,6 +14,13 @@ repository's CLI launcher remain Apple silicon macOS-specific; do not use
 
 ## Required software
 
+The [macOS desktop release](./installation#macos-desktop-release) includes its
+backend and Node.js runtime. A separate Node.js or npm installation is not
+necessary to run it. Downloaded builds need
+[macOS security approval](./installation#macos-security-warning).
+
+For source builds and browser development:
+
 - Node.js 22.19.0, as specified in `.nvmrc`
 - npm and Git, with GitHub access during dependency installation
 - A modern local browser

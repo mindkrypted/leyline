@@ -18,12 +18,14 @@ A research session also shows its compact state and source control. The source c
 
 ## Open the mobile sidebar
 
-![Mobile session sidebar open above the workbench](../assets/screenshots/mobile-sidebar.png)
+![Mobile sidebar with subagent child sessions and running status](../assets/screenshots/mobile-sidebar.png)
 
 *The session navigator opens above the mobile workbench.*
 
 1. Select **Open sessions** in the header.
 2. Select a session in the current project.
+
+Subagent children appear as nested rows under their parent. Use the parent's left chevron to show or hide them. Select a child row to open its transcript. See [Sessions](./sessions#open-a-subagent-session) for expansion and search behavior.
 
 Select **Go to** to open a session from another project.
 
@@ -42,6 +44,16 @@ The sidebar can use up to 86 percent of the viewport width, with a maximum width
 Settings fills the mobile viewport. **Models & providers** and **MCP servers** use a **Provider** or **Server** selector instead of the desktop list. Detail content scrolls within the modal.
 
 Use **Close Leyline settings** to return to the workspace. See [Settings](./settings) for scope, authentication, and reload behavior.
+
+### Share the backend with another device
+
+Select **Connections** in **Category**, then turn on **Allow network access**. Copy an address that the other device can reach.
+
+For a fixed port, enter **Proxy port** and select **Apply**. Leave the field blank for automatic selection. The port stays saved across restarts, and **Apply** does not change the sharing switch.
+
+![Mobile Connections settings with a saved proxy port and copyable sharing URLs](../assets/screenshots/network-access-mobile.png)
+
+Changing the active port or turning access off disconnects remote clients and their terminals. Local clients and running agents continue. Use trusted networks only because the API has no authentication. See [Network access](./settings#share-the-native-backend) for scope and connection details.
 
 ### Edit a model or copy catalog fields
 
@@ -70,6 +82,16 @@ The mobile view uses the same attention, running, queued, held, and shared-worki
 Message and tool actions remain in their row headers. Use them to copy, edit, retry, fork, reset, or open tool output.
 
 Tool targets can shorten to fit the row. User messages and tool cards use the full transcript width.
+
+## Inspect subagent tasks
+
+![Mobile subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-mobile.png)
+
+Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
+
+Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and result area scroll separately. The session link and **Copy result** stay in the footer.
+
+Select the close button or backdrop to return to the transcript. See [Subagents](./subagents#read-a-subagent-card) for outcome labels and confirmation behavior.
 
 ## Use the mobile composer
 

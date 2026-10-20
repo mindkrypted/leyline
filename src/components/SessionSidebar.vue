@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { backendDisplayAddress } from '../lib/backend'
 import { sessionTime } from '../lib/format'
+import { useModalFocus } from '../composables/useModalFocus'
 
 const isWindows = /Win/i.test(navigator.platform || navigator.userAgent || '')
 const quickSwitchShortcutLabel = isWindows ? 'Ctrl+K' : '⌘K'
@@ -53,6 +54,10 @@ const props = defineProps({
   navigator: {
     type: String,
     default: '',
+  },
+  navigatorFocusActive: {
+    type: Boolean,
+    default: true,
   },
   newSessionCwd: {
     type: String,
@@ -123,6 +128,10 @@ const props = defineProps({
     default: '',
   },
   sessionsLoading: Boolean,
+  subagentChildrenByParentPath: {
+    type: Object,
+    default: () => new Map(),
+  },
   visibleProjects: {
     type: Array,
     default: () => [],
@@ -145,6 +154,7 @@ const emit = defineEmits([
   'retry-pins',
   'retry-sessions',
   'select-backend',
+  'select-child-session',
   'select-project',
   'select-session',
   'toggle-pin-session',
@@ -156,15 +166,28 @@ const backendMenu = ref(null)
 const backendMenuOpen = ref(false)
 const projectControl = ref(null)
 const navigatorSearch = ref(null)
+const navigatorDialog = ref(null)
+const navigatorOpener = ref(null)
+const navigatorSearchFocus = ref(null)
+const sessionActionTarget = ref(null)
+const sessionActionOpener = ref(null)
+const sessionActionDialog = ref(null)
+const sessionActionsOpen = computed(() => Boolean(sessionActionTarget.value))
 const navigatorQuery = ref('')
 const sessionQuery = ref('')
 const navigationProjectCwd = ref('')
 const projectOrder = ref([])
+const sessionOrder = ref([])
+const expandedParentOverrides = ref(new Map())
+const sessionFolds = ref(new Map())
+const sessionOrdersByProject = new Map()
 const sessionScroll = ref(null)
 const sessionScrollTop = ref(0)
 const sessionViewportHeight = ref(520)
 const lastSessionByProject = new Map()
 const SESSION_ROW_HEIGHT = 36
+const SESSION_CHILD_ROW_HEIGHT = 30
+const SESSION_FOLD_DURATION = 180
 const SESSION_GROUP_HEIGHT = 26
 const SESSION_OVERSCAN_PX = SESSION_ROW_HEIGHT * 4
 const SKELETON_GROUP_ROWS = [5, 7, 6]
@@ -193,9 +216,28 @@ const sessionFullFormat = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
 })
-let navigatorOpener = null
+useModalFocus({
+  dialog: navigatorDialog,
+  active: () => props.navigatorFocusActive
+    && (props.navigator === 'quick' || props.navigator === 'activity'),
+  opener: navigatorOpener,
+  fallbackSelector: '[aria-label="Open sessions"]',
+  initialFocus: () => (navigatorSearchFocus.value
+    ?? !window.matchMedia('(hover: none), (pointer: coarse)').matches)
+    ? navigatorSearch.value : navigatorDialog.value,
+})
+
+useModalFocus({
+  dialog: sessionActionDialog,
+  active: () => props.navigatorFocusActive && sessionActionsOpen.value && !props.navigator,
+  opener: sessionActionOpener,
+  fallbackSelector: '[aria-label="Open sessions"]',
+})
+
 let pendingPinFocusId = null
 let sessionResizeObserver
+let sessionFoldFrame = 0
+let sessionFoldMedia
 
 const sessionSkeletonItems = computed(() => {
   const lastSessionItem = sessionListItems.value.at(-1)
@@ -295,16 +337,12 @@ watch(
 
 watch(
   () => props.navigator,
-  async (navigator, previous) => {
+  (navigator, previous) => {
     if (navigator !== previous) navigatorQuery.value = ''
-    if (navigator === 'quick' || navigator === 'activity') {
-      await nextTick()
-      navigatorSearch.value?.focus()
-      return
-    }
-    if (!navigator && previous && navigatorOpener?.isConnected) {
-      await nextTick()
-      navigatorOpener.focus()
+    if (navigator) closeSessionActions()
+    else {
+      navigatorOpener.value = null
+      navigatorSearchFocus.value = null
     }
   },
 )
@@ -330,16 +368,81 @@ const currentProjectSessions = computed(() => {
   const projectSessions = [...project.sessions]
   const selected = props.selectedSession
   if (selected?.cwd === project.cwd
+    && !selected.isSubagentSession
     && !projectSessions.some((session) => session.id === selected.id)) {
     projectSessions.unshift(selected)
   }
   return projectSessions
 })
 
-const matchingProjectSessions = computed(() => {
+watch(
+  [
+    () => props.visibleProjects,
+    currentProjectSessions,
+    () => props.sessionsHydrated,
+    () => props.activeBackendConnection,
+  ],
+  ([projects, currentSessions, hydrated, connection]) => {
+    const currentCwd = currentProject.value?.cwd
+    const today = calendarDay(new Date())
+    if (!projects.length) sessionOrder.value = []
+    for (const project of projects) {
+      const isCurrent = project.cwd === currentCwd
+      const key = JSON.stringify([connection?.id, connection?.url, project.cwd])
+      const previous = sessionOrdersByProject.get(key)
+      if (!isCurrent && !previous) continue
+      const sessions = isCurrent ? currentSessions : project.sessions
+      const knownDays = previous?.hydrated ? previous.days : new Map()
+      const days = new Map(sessions.map((session) => [
+        session.id,
+        Math.max(sessionActivityDay(session), knownDays.get(session.id) ?? -Infinity),
+      ]))
+      const promoted = sessions.filter((session) => {
+        return !knownDays.has(session.id)
+          || (!props.pinnedSessionIds.has(session.id)
+            && sessionActivityDay(session) >= today
+            && knownDays.get(session.id) < today)
+      }).sort((a, b) => sessionTimestamp(b) - sessionTimestamp(a))
+      const promotedIds = new Set(promoted.map((session) => session.id))
+      const order = [
+        ...promotedIds,
+        ...(previous?.order || []).filter((id) => {
+          return days.has(id) && !promotedIds.has(id)
+        }),
+      ]
+      sessionOrdersByProject.set(key, { order, days, hydrated })
+      if (isCurrent) sessionOrder.value = order
+    }
+  },
+  { immediate: true },
+)
+
+const searchedChildren = computed(() => {
+  const matches = new Map()
   const query = sessionQuery.value.trim()
-  if (!query) return currentProjectSessions.value
-  return currentProjectSessions.value
+  if (!query) return matches
+  for (const session of currentProjectSessions.value) {
+    const children = childrenForSession(session)
+    if (!children.length) continue
+    matches.set(session.path, children.filter((child) => {
+      return navigationScore([
+        childTitle(child),
+        child.agent,
+        child.id,
+      ], query) > 0
+    }))
+  }
+  return matches
+})
+
+const matchingProjectSessions = computed(() => {
+  const byId = new Map(
+    currentProjectSessions.value.map((session) => [session.id, session]),
+  )
+  const sessions = sessionOrder.value.map((id) => byId.get(id)).filter(Boolean)
+  const query = sessionQuery.value.trim()
+  if (!query) return sessions
+  return sessions
     .map((session) => ({
       session,
       score: navigationScore([
@@ -347,25 +450,22 @@ const matchingProjectSessions = computed(() => {
         session.id,
       ], query),
     }))
-    .filter((item) => item.score > 0)
-    .sort((a, b) => {
-      return b.score - a.score || sessionTimestamp(b.session)
-        - sessionTimestamp(a.session)
-    })
+    .filter((item) => item.score > 0
+      || (searchedChildren.value.get(item.session.path)?.length || 0) > 0)
+    .sort((a, b) => b.score - a.score)
     .map((item) => item.session)
 })
 
 const orderedProjectSessions = computed(() => {
   const sessions = matchingProjectSessions.value
-  if (sessionQuery.value.trim() || !props.pinnedSessionIds.size) return sessions
-  const pinned = []
-  const unpinned = []
-  for (const session of sessions) {
-    if (props.pinnedSessionIds.has(session.id)) pinned.push(session)
-    else unpinned.push(session)
-  }
-  if (!pinned.length) return sessions
-  return [...pinned, ...unpinned]
+  if (sessionQuery.value.trim()) return sessions
+  return [...sessions].sort((a, b) => {
+    const aPinned = props.pinnedSessionIds.has(a.id)
+    const bPinned = props.pinnedSessionIds.has(b.id)
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+    if (aPinned) return 0
+    return sessionActivityDay(b) - sessionActivityDay(a) || 0
+  })
 })
 
 const sessionListItems = computed(() => {
@@ -406,6 +506,28 @@ const sessionListItems = computed(() => {
       session,
       sessionIndex,
       height: SESSION_ROW_HEIGHT,
+    })
+    const fold = sessionFolds.value.get(session.path)
+    if (!parentIsExpanded(session) && !fold) return
+    const children = visibleChildrenFor(session)
+    const visibleHeight = children.length * SESSION_CHILD_ROW_HEIGHT
+      * (fold?.progress ?? 1)
+    children.forEach((child, index) => {
+      const height = Math.max(0, Math.min(
+        SESSION_CHILD_ROW_HEIGHT,
+        visibleHeight - index * SESSION_CHILD_ROW_HEIGHT,
+      ))
+      if (!height) return
+      items.push({
+        key: `child:${child.path || child.id}`,
+        type: 'session-child',
+        session: child,
+        parentSession: session,
+        height,
+        foldProgress: fold?.progress,
+        collapsing: fold?.to === 0,
+        lastChild: index === children.length - 1,
+      })
     })
   })
 
@@ -598,9 +720,16 @@ const navigatorSubtitle = computed(() => {
 })
 
 watch(
-  () => [currentProject.value?.cwd || '', sessionQuery.value],
+  () => [
+    currentProject.value?.cwd || '',
+    sessionQuery.value,
+    props.activeBackendConnection?.id || '',
+    props.activeBackendConnection?.url || '',
+  ],
   async ([cwd], [previousCwd] = []) => {
+    finishSessionFolds()
     pendingPinFocusId = null
+    closeSessionActions()
     if (cwd !== previousCwd) sessionQuery.value = ''
     sessionScrollTop.value = 0
     await nextTick()
@@ -620,6 +749,11 @@ watch(
     scrollSelectedSessionIntoView()
   },
 )
+
+watch(() => props.selectedSessionId, () => {
+  finishSessionFolds()
+  closeSessionActions()
+})
 
 watch(
   () => props.pinnedVersion,
@@ -645,7 +779,9 @@ watch(
       `[data-session-id="${CSS.escape(id)}"]`,
     )
     if (!row) return
-    const pinButton = row.querySelector('.session-pin-button')
+    const actionButton = row.querySelector('.session-row-actions-button')
+    const pinButton = actionButton?.getClientRects().length
+      ? actionButton : row.querySelector('.session-pin-button')
     pinButton?.focus({ preventScroll: true })
     if (document.activeElement !== pinButton) {
       row.querySelector('.session-link')?.focus({ preventScroll: true })
@@ -667,6 +803,8 @@ watch(sessionScroll, (element, previous) => {
 })
 
 onMounted(() => {
+  sessionFoldMedia = window.matchMedia('(prefers-reduced-motion: reduce)')
+  sessionFoldMedia.addEventListener('change', finishSessionFolds)
   document.addEventListener('click', closeMenusOnOutsideClick)
   sessionResizeObserver = new ResizeObserver(updateSessionViewport)
   if (sessionScroll.value) sessionResizeObserver.observe(sessionScroll.value)
@@ -674,6 +812,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  finishSessionFolds()
+  sessionFoldMedia?.removeEventListener('change', finishSessionFolds)
   document.removeEventListener('click', closeMenusOnOutsideClick)
   sessionResizeObserver?.disconnect()
 })
@@ -695,16 +835,28 @@ function scrollSelectedSessionIntoView() {
   const index = orderedProjectSessions.value.findIndex((session) => {
     return session.id === props.selectedSessionId
   })
-  scrollSessionIntoView(index)
+  if (index >= 0) {
+    scrollSessionIntoView(index)
+    return
+  }
+  const child = sessionListItems.value.find((item) => {
+    return item.type === 'session-child'
+      && item.session.id === props.selectedSessionId
+  })
+  scrollItemIntoView(child)
 }
 
 function scrollSessionIntoView(index) {
-  const element = sessionScroll.value
-  if (!element || index < 0) return
+  if (index < 0) return
   const item = sessionListItems.value.find((candidate) => {
     return candidate.type === 'session' && candidate.sessionIndex === index
   })
-  if (!item) return
+  scrollItemIntoView(item)
+}
+
+function scrollItemIntoView(item) {
+  const element = sessionScroll.value
+  if (!element || !item) return
   const top = item.top
   const bottom = top + item.height
   if (top < element.scrollTop) element.scrollTop = top
@@ -714,14 +866,20 @@ function scrollSessionIntoView(index) {
   sessionScrollTop.value = element.scrollTop
 }
 
-async function focusSession(index) {
-  const last = orderedProjectSessions.value.length - 1
-  const target = Math.max(0, Math.min(index, last))
-  scrollSessionIntoView(target)
+async function moveSessionFocus(item, direction) {
+  const rows = sessionListItems.value.filter((row) => {
+    return row.type === 'session' || (row.type === 'session-child'
+      && !row.collapsing && row.height >= SESSION_CHILD_ROW_HEIGHT)
+  })
+  const index = rows.findIndex((row) => row.key === item.key)
+  const target = rows[index + direction]
+  if (!target) return
+  scrollItemIntoView(target)
   await nextTick()
-  sessionScroll.value?.querySelector(
-    `[aria-posinset="${target + 1}"]`,
-  )?.focus()
+  const row = sessionScroll.value?.querySelector(
+    `[data-session-id="${CSS.escape(target.session.id)}"]`,
+  )
+  row?.querySelector('.session-link, .session-child-link')?.focus()
 }
 
 function closeMenusOnOutsideClick(event) {
@@ -733,15 +891,34 @@ function closeMenusOnOutsideClick(event) {
 }
 
 function openNavigator(navigator, event) {
-  navigatorOpener = event?.currentTarget || null
+  navigatorOpener.value = event?.currentTarget instanceof HTMLElement
+    ? event.currentTarget : document.activeElement
+  navigatorSearchFocus.value = event
+    ? event.type === 'keydown' || event.detail === 0 || (event.pointerType !== 'touch'
+      && !window.matchMedia('(hover: none), (pointer: coarse)').matches)
+    : null
   navigatorQuery.value = ''
   backendMenuOpen.value = false
+  closeSessionActions()
   emit('update:navigator', navigator)
 }
 
 function closeNavigator() {
+  if (props.navigator === 'actions') navigatorOpener.value?.focus({ preventScroll: true })
   emit('update:navigator', '')
 }
+
+function openSessionActions(session, event) {
+  sessionActionOpener.value = event.currentTarget
+  sessionActionTarget.value = session
+  backendMenuOpen.value = false
+}
+
+function closeSessionActions() {
+  sessionActionTarget.value = null
+}
+
+defineExpose({ openNavigator, closeSessionActions, sessionActionsOpen })
 
 function isNewWindowClick(event) {
   return Boolean(
@@ -847,6 +1024,11 @@ function daysBefore(date, now = new Date()) {
   return Math.floor(calendarDay(now) - calendarDay(date))
 }
 
+function sessionActivityDay(session) {
+  const date = sessionDate(session)
+  return date ? calendarDay(date) : -Infinity
+}
+
 function sessionTimeGroup(session, now) {
   const date = sessionDate(session)
   if (!date) return { key: 'earlier', label: 'Earlier' }
@@ -906,6 +1088,88 @@ function projectResultMeta(project) {
 
 function statusFor(session) {
   return props.sessionStatus(session.id) || { label: '', tone: '' }
+}
+
+function childrenForSession(session) {
+  if (!session?.path || session.isSubagentSession) return []
+  return props.subagentChildrenByParentPath.get(session.path) || []
+}
+
+function childTitle(child) {
+  return child.name || child.label || props.sessionTitle(child)
+}
+
+function childIsLive(child) {
+  return ['running', 'compacting', 'queued'].includes(statusFor(child).tone)
+}
+
+function visibleChildrenFor(session) {
+  const searched = searchedChildren.value.get(session.path)
+  if (searched) return searched
+  return sessionQuery.value.trim() ? [] : childrenForSession(session)
+}
+
+function parentIsExpanded(session) {
+  if (!childrenForSession(session).length) return false
+  if (sessionQuery.value.trim()) return visibleChildrenFor(session).length > 0
+  const override = expandedParentOverrides.value.get(session.path)
+  if (override !== undefined) return override
+  return childrenForSession(session).some((child) => {
+    return child.id === props.selectedSessionId || childIsLive(child)
+  })
+}
+
+function childrenToggleLabel(session) {
+  const count = childrenForSession(session).length
+  const action = parentIsExpanded(session) ? 'Hide' : 'Show'
+  return `${action} ${count} subagent ${count === 1 ? 'session' : 'sessions'} for ${props.sessionTitle(session)}`
+}
+
+function toggleSessionChildren(session) {
+  const expanded = parentIsExpanded(session)
+  const from = sessionFolds.value.get(session.path)?.progress ?? Number(expanded)
+  const to = Number(!expanded)
+  const next = new Map(expandedParentOverrides.value)
+  next.set(session.path, !expanded)
+  expandedParentOverrides.value = next
+  if (sessionFoldMedia?.matches) {
+    finishSessionFolds()
+    return
+  }
+  const folds = new Map(sessionFolds.value)
+  if (from === to) folds.delete(session.path)
+  else folds.set(session.path, {
+    from,
+    to,
+    progress: from,
+    startedAt: performance.now(),
+    duration: SESSION_FOLD_DURATION * Math.abs(to - from),
+  })
+  sessionFolds.value = folds
+  if (!sessionFoldFrame && folds.size) {
+    sessionFoldFrame = requestAnimationFrame(animateSessionFolds)
+  }
+}
+
+function animateSessionFolds(now) {
+  const next = new Map()
+  for (const [path, fold] of sessionFolds.value) {
+    const progress = Math.max(0, Math.min(1, (now - fold.startedAt) / fold.duration))
+    if (progress >= 1) continue
+    const eased = 1 - Math.pow(1 - progress, 3)
+    next.set(path, {
+      ...fold,
+      progress: fold.from + (fold.to - fold.from) * eased,
+    })
+  }
+  sessionFolds.value = next
+  sessionFoldFrame = next.size ? requestAnimationFrame(animateSessionFolds) : 0
+}
+
+function finishSessionFolds() {
+  cancelAnimationFrame(sessionFoldFrame)
+  sessionFoldFrame = 0
+  sessionFolds.value = new Map()
 }
 
 function countLabel(count, label) {
@@ -1137,7 +1401,7 @@ const vFocusSelect = {
                 {{ item.label }}
               </div>
               <div
-                v-else
+                v-else-if="item.type === 'session'"
                 class="session project-session-row"
                 :data-session-id="item.session.id"
                 :class="{
@@ -1164,25 +1428,35 @@ const vFocusSelect = {
                 />
                 <template v-else>
                   <button
+                    v-if="childrenForSession(item.session).length
+                      && !sessionQuery.trim()"
+                    class="session-children-toggle"
+                    type="button"
+                    :aria-expanded="parentIsExpanded(item.session)"
+                    :aria-label="childrenToggleLabel(item.session)"
+                    :title="parentIsExpanded(item.session)
+                      ? 'Hide subagents'
+                      : 'Show subagents'"
+                    @click.stop="toggleSessionChildren(item.session)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <path d="m6 4 4 4-4 4"></path>
+                    </svg>
+                  </button>
+                  <button
                     class="session-link"
                     type="button"
                     :aria-current="item.session.id === selectedSessionId
                       ? 'page'
                       : undefined"
-                    :aria-posinset="item.sessionIndex + 1"
-                    :aria-setsize="orderedProjectSessions.length"
                     @click="emit('select-session', item.session, $event)"
                     @auxclick.middle.prevent="emit(
                       'select-session',
                       item.session,
                       $event,
                     )"
-                    @keydown.down.prevent="focusSession(
-                      item.sessionIndex + 1,
-                    )"
-                    @keydown.up.prevent="focusSession(
-                      item.sessionIndex - 1,
-                    )"
+                    @keydown.down.prevent="moveSessionFocus(item, 1)"
+                    @keydown.up.prevent="moveSessionFocus(item, -1)"
                   >
                     <span class="session-title-with-kind">
                       <svg
@@ -1224,6 +1498,20 @@ const vFocusSelect = {
                       :title="sessionFullTime(item.session)"
                     >{{ sessionListTime(item.session) }}</time>
                   </button>
+                  <button
+                    class="session-row-actions-button"
+                    type="button"
+                    :aria-label="`Actions for ${sessionTitle(item.session)}`"
+                    aria-haspopup="dialog"
+                    :aria-expanded="sessionActionTarget?.id === item.session.id"
+                    @click.stop="openSessionActions(item.session, $event)"
+                  >
+                    <svg viewBox="0 0 16 16" aria-hidden="true">
+                      <circle cx="3.5" cy="8" r="1"></circle>
+                      <circle cx="8" cy="8" r="1"></circle>
+                      <circle cx="12.5" cy="8" r="1"></circle>
+                    </svg>
+                  </button>
                   <div class="session-actions">
                     <button
                       class="session-pin-button"
@@ -1240,8 +1528,7 @@ const vFocusSelect = {
                     >
                       <span v-if="isPinPending(item.session)">…</span>
                       <svg v-else viewBox="0 0 16 16" aria-hidden="true">
-                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
-                        <path d="m6.5 9.5-4 4"></path>
+                        <path d="M10.667 8V2.667h.667V1.333H4.667v1.333h.667V8l-1.333 1.333v1.333h3.467v4h1.067v-4H12V9.333z"></path>
                       </svg>
                     </button>
                     <button
@@ -1282,6 +1569,76 @@ const vFocusSelect = {
                     </button>
                   </div>
                 </template>
+              </div>
+              <div
+                v-else
+                class="session-child-row"
+                :data-session-id="item.session.id"
+                :class="{
+                  active: item.session.id === selectedSessionId,
+                  'is-folding': item.foldProgress !== undefined,
+                  'is-last-child': item.lastChild,
+                }"
+                :style="item.foldProgress === undefined ? undefined : {
+                  height: `${item.height}px`,
+                  opacity: item.foldProgress,
+                }"
+                :inert="item.collapsing || item.height < SESSION_CHILD_ROW_HEIGHT"
+                :aria-hidden="item.collapsing || item.height < SESSION_CHILD_ROW_HEIGHT
+                  ? true
+                  : undefined"
+              >
+                <button
+                  class="session-child-link"
+                  type="button"
+                  :aria-current="item.session.id === selectedSessionId
+                    ? 'page'
+                    : undefined"
+                  :title="item.session.agent
+                    ? `${item.session.agent} subagent: ${childTitle(item.session)}`
+                    : childTitle(item.session)"
+                  @keydown.down.prevent="moveSessionFocus(item, 1)"
+                  @keydown.up.prevent="moveSessionFocus(item, -1)"
+                  @click="emit('select-child-session', item.session, $event)"
+                  @auxclick.middle.prevent="emit(
+                    'select-child-session',
+                    item.session,
+                    $event,
+                  )"
+                >
+                  <span class="session-child-node" aria-hidden="true"></span>
+                  <span
+                    class="session-child-title"
+                  >{{ childTitle(item.session) }}</span>
+                  <span
+                    v-if="statusFor(item.session).label"
+                    class="session-status"
+                    :class="`status-${statusFor(item.session).tone}`"
+                  >{{ statusFor(item.session).label }}</span>
+                  <time
+                    v-else
+                    class="session-time"
+                    :datetime="sessionDateTime(item.session)"
+                    :title="sessionFullTime(item.session)"
+                  >{{ sessionListTime(item.session) }}</time>
+                </button>
+                <button
+                  class="session-child-delete"
+                  type="button"
+                  title="Delete subagent session"
+                  :aria-label="`Delete ${sessionTitle(item.session)}`"
+                  :disabled="deletingSessionId === item.session.id"
+                  @click.stop="emit('request-delete-session', item.session)"
+                >
+                  <span v-if="deletingSessionId === item.session.id">…</span>
+                  <svg v-else viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3.5 4.5h9"></path>
+                    <path d="M6.5 4.5v-2h3v2"></path>
+                    <path d="M5 6.5l.5 6h5l.5-6"></path>
+                    <path d="M7 7.5v4"></path>
+                    <path d="M9 7.5v4"></path>
+                  </svg>
+                </button>
               </div>
             </template>
             <div
@@ -1480,15 +1837,53 @@ const vFocusSelect = {
 
     <Teleport to="body">
       <div
+        v-if="sessionActionTarget"
+        class="session-actions-backdrop"
+        @click.self="closeSessionActions"
+      >
+        <section
+          ref="sessionActionDialog"
+          class="session-actions-menu"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="session-actions-title"
+          tabindex="-1"
+          @keydown.esc.stop.prevent="closeSessionActions"
+        >
+          <header>
+            <strong id="session-actions-title">{{ sessionTitle(sessionActionTarget) }}</strong>
+            <button type="button" aria-label="Close session actions" @click="closeSessionActions">×</button>
+          </header>
+          <button
+            type="button"
+            :disabled="!pinsReady || isPinPending(sessionActionTarget)"
+            @click="togglePin(sessionActionTarget); closeSessionActions()"
+          >{{ isPinned(sessionActionTarget) ? 'Unpin session' : 'Pin session' }}</button>
+          <button
+            type="button"
+            :disabled="renamingSessionSavingId === sessionActionTarget.id"
+            @click="beginRename(sessionActionTarget); closeSessionActions()"
+          >Rename session</button>
+          <button
+            class="destructive"
+            type="button"
+            :disabled="deletingSessionId === sessionActionTarget.id"
+            @click="emit('request-delete-session', sessionActionTarget); closeSessionActions()"
+          >Delete session</button>
+        </section>
+      </div>
+      <div
         v-if="navigator === 'quick' || navigator === 'activity'"
         class="sidebar-navigator-backdrop"
         @mousedown.self="closeNavigator"
       >
         <section
+          ref="navigatorDialog"
           class="sidebar-navigator-dialog"
           role="dialog"
           aria-modal="true"
           aria-labelledby="sidebar-navigator-title"
+          tabindex="-1"
         >
           <header class="sidebar-navigator-header">
             <div>
@@ -1519,6 +1914,7 @@ const vFocusSelect = {
             <input
               ref="navigatorSearch"
               v-model="navigatorQuery"
+              :aria-label="navigator === 'activity' ? 'Search active sessions' : 'Search sessions or projects'"
               :placeholder="navigator === 'activity'
                 ? 'Search active sessions'
                 : 'Search sessions or projects'"
@@ -1682,3 +2078,118 @@ const vFocusSelect = {
     </Teleport>
   </aside>
 </template>
+
+<style scoped>
+.session-row-actions-button {
+  display: none;
+}
+
+.session-actions-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 38;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 45%);
+}
+
+.session-actions-menu {
+  display: grid;
+  width: min(320px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 8px;
+}
+
+.session-actions-menu header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 12px;
+}
+
+.session-actions-menu strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.session-actions-menu button {
+  min-width: 44px;
+  min-height: 44px;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.session-actions-menu button:hover,
+.session-actions-menu button:focus-visible {
+  background: var(--panel-soft);
+}
+
+.session-actions-menu button:disabled {
+  opacity: 0.45;
+}
+
+.session-actions-menu .destructive {
+  color: #fca5a5;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .project-session-row .session-actions {
+    display: none;
+  }
+
+  .project-session-row.session .session-link {
+    width: calc(100% - 36px);
+    padding-right: 7px;
+  }
+
+  .project-session-row.session .session-time,
+  .project-session-row.session .session-status {
+    display: block;
+  }
+
+  .session-row-actions-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted-strong);
+  }
+
+  .session-row-actions-button svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+
+  .session-row-actions-button:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: -2px;
+  }
+
+  .sidebar-session-search input,
+  .sidebar-navigator-search input,
+  .project-session-row .session-title-input {
+    font-size: 16px;
+  }
+}
+</style>

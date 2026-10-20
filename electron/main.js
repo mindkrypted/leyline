@@ -419,7 +419,8 @@ async function packagedAppUrl() {
 }
 
 async function startPackagedAppServer() {
-  const child = utilityProcess.fork(packagedServerProcessPath, [], {
+  const owner = JSON.stringify(['electron', app.getAppPath(), app.getPath('userData')])
+  const child = utilityProcess.fork(packagedServerProcessPath, [owner], {
     cwd: process.cwd(),
     serviceName: 'Leyline Backend',
   })

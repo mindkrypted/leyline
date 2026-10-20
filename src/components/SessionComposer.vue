@@ -2,6 +2,8 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useDictation } from '../composables/useDictation'
 import ModelPicker from './ModelPicker.vue'
+import MobileComposerControls from './MobileComposerControls.vue'
+import { useMobileComposerInput } from '../composables/useMobileComposerInput'
 import UltrafastToggle from './UltrafastToggle.vue'
 import PromptQueue from './PromptQueue.vue'
 import { formatMode } from '../lib/format'
@@ -11,6 +13,8 @@ const steerShortcutLabel = isWindows ? 'Alt+Enter' : 'Option+Enter'
 
 const props = defineProps({
   agentRunning: Boolean,
+  mobile: Boolean,
+  settingsError: { type: String, default: '' },
   attachedImages: {
     type: Array,
     default: () => [],
@@ -154,10 +158,14 @@ const props = defineProps({
 
 const emit = defineEmits([
   'cancel-edit',
+  'composition-start',
+  'composition-end',
+  'input-blur',
   'interrupt',
   'keydown',
   'open-image',
   'paste',
+  'pick-images',
   'queue-snapshot',
   'remove-image',
   'select-model',
@@ -175,6 +183,9 @@ const emit = defineEmits([
 const form = ref(null)
 const textarea = ref(null)
 const queue = ref(null)
+const mobileControls = ref(null)
+const mobileSheetOpen = ref(false)
+useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
 const sendActions = ref(null)
 const sendMenu = ref(null)
 const sendMenuOpen = ref(false)
@@ -206,7 +217,10 @@ const {
   setDraft: (value) => emit('update:draft', value),
 })
 
-watch(() => props.sessionId, () => { sendMenuOpen.value = false })
+watch(() => props.sessionId, () => {
+  sendMenuOpen.value = false
+  mobileControls.value?.dismiss()
+})
 watch([queueMode, () => props.promptSubmitting], ([queueing, submitting]) => {
   if (!queueing || submitting) sendMenuOpen.value = false
 })
@@ -247,11 +261,33 @@ function hasQueueDrafts() {
   return queue.value?.hasDrafts() || false
 }
 
-defineExpose({ focus, form, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen })
+function dismissMobileSheet() {
+  return mobileControls.value?.dismiss() || false
+}
+
+const mobileStop = computed(() => props.mobile && !props.editingLabel
+  && (props.agentRunning || props.compacting || props.shellRunning)
+  && !props.draft.trim() && !props.attachedImages.length)
+
+defineExpose({ focus, form, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet })
 
 function updateDraft(event) {
   emit('update:draft', event.target.value)
   emit('show-slash-picker')
+}
+
+async function insertNewline() {
+  const input = textarea.value
+  if (!input) return
+  const sessionId = props.sessionId
+  input.setRangeText('\n', input.selectionStart, input.selectionEnd, 'end')
+  const value = input.value
+  const caret = input.selectionStart
+  updateDraft({ target: input })
+  await nextTick()
+  if (textarea.value !== input || props.sessionId !== sessionId || props.draft !== value) return
+  input.focus({ preventScroll: true })
+  input.setSelectionRange(caret, caret)
 }
 </script>
 
@@ -289,6 +325,9 @@ function updateDraft(event) {
         :value="draft"
         :placeholder="placeholder"
         @keydown="emit('keydown', $event)"
+        @compositionstart="emit('composition-start', $event)"
+        @compositionend="emit('composition-end', $event)"
+        @blur="emit('input-blur', $event)"
         @input="updateDraft"
         @paste="emit('paste', $event)"
       ></textarea>
@@ -300,7 +339,8 @@ function updateDraft(event) {
           :key="`${command.source}-${command.name}`"
           type="button"
           :class="{ active: index === slashActiveIndex }"
-          @mousedown.prevent="emit('select-slash-command', command)"
+          @mousedown.prevent
+          @click="emit('select-slash-command', command)"
         >
           <span class="slash-command-name">/{{ command.name }}</span>
           <span class="slash-command-description">
@@ -323,7 +363,7 @@ function updateDraft(event) {
           class="attachment-preview-button"
           type="button"
           :aria-label="`Open attached image ${index + 1}`"
-          @click="emit('open-image', image.preview, `Attached image ${index + 1}`)"
+          @click="emit('open-image', image.preview, `Attached image ${index + 1}`, $event)"
         >
           <img :src="image.preview" alt="Pasted image" />
         </button>
@@ -346,6 +386,34 @@ function updateDraft(event) {
       <div class="composer-primary-row">
         <div class="composer-row-spacer"></div>
         <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
+          <MobileComposerControls
+            v-if="mobile"
+            ref="mobileControls"
+            :available-models="availableModels"
+            :available-thinking-levels="availableThinkingLevels"
+            :current-model-label="currentModelLabel"
+            :selected-model-key="selectedModelKey"
+            :model-key="modelKey"
+            :thinking-level="thinkingLevel"
+            :settings-disabled="reloadingSession || switchingModel || switchingThinking || switchingUltrafast"
+            :settings-error="settingsError"
+            :image-disabled="shellMode"
+            :ultrafast-available="ultrafastAvailable"
+            :ultrafast-enabled="ultrafastEnabled"
+            :research-enabled="researchToggleEnabled"
+            :research-disabled="promptSubmitting"
+            :research="research"
+            :running="agentRunning || compacting || shellRunning"
+            :interrupting="interrupting"
+            @open="mobileSheetOpen = $event"
+            @select-model="emit('select-model', $event)"
+            @select-thinking="emit('select-thinking', $event)"
+            @toggle-ultrafast="emit('toggle-ultrafast')"
+            @toggle-research="emit('toggle-research')"
+            @pick-images="emit('pick-images', $event)"
+            @interrupt="emit('interrupt')"
+            @newline="insertNewline"
+          />
           <ModelPicker
             :available-models="availableModels"
             :current-mobile-model-label="currentMobileModelLabel"
@@ -432,13 +500,14 @@ function updateDraft(event) {
             <button
               class="send-button"
               :class="{ 'shell-run-button': shellMode }"
-              type="submit"
-              :disabled="submitDisabled"
-              :title="queueMode
+              :type="mobileStop ? 'button' : 'submit'"
+              :disabled="mobileStop ? interrupting : submitDisabled"
+              @click="mobileStop && emit('interrupt')"
+              :title="mobileStop ? 'Stop the current run and hold queued messages' : queueMode
                 ? 'Queue next task (Enter)'
                 : shellMode ? 'Run shell command' : 'Send message'"
-              :aria-label="queueMode ? 'Queue message' : shellMode ? 'Run shell command' : 'Send message'"
-            >{{ queueMode || editingLabel ? '↑' : sendButtonLabel }}</button>
+              :aria-label="mobileStop ? 'Stop generation' : queueMode ? 'Queue message' : shellMode ? 'Run shell command' : 'Send message'"
+            >{{ mobileStop ? '■' : queueMode || editingLabel ? '↑' : sendButtonLabel }}</button>
             <button
               v-if="queueMode"
               class="composer-send-menu-toggle"
@@ -461,6 +530,18 @@ function updateDraft(event) {
         </div>
       </div>
       <div class="composer-context-row">
+        <button
+          class="composer-chip composer-input-action"
+          type="button"
+          :disabled="shellMode"
+          @click="emit('pick-images', $event)"
+        >Add image</button>
+        <button
+          class="composer-chip composer-input-action composer-newline-button"
+          type="button"
+          @mousedown.prevent
+          @click="insertNewline"
+        >New line</button>
         <span
           v-if="compacting || agentRunning"
           class="composer-status"
@@ -569,3 +650,33 @@ function updateDraft(event) {
     </div>
   </form>
 </template>
+
+<style scoped>
+.composer-context-row {
+  flex-wrap: wrap;
+}
+
+.composer-input-action {
+  flex: none;
+  min-height: 28px;
+}
+
+.composer-newline-button {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .composer textarea {
+    font-size: 16px;
+  }
+
+  .composer-input-action {
+    min-height: 44px;
+  }
+
+  .composer .composer-context-row > .composer-chip.composer-input-action {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+</style>

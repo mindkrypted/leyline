@@ -1,6 +1,6 @@
 {
   "name": "leyline",
-  "version": "0.0.0",
+  "version": "0.1.1",
   "private": true,
   "bin": {
     "leyline": "bin/leyline"
@@ -21,7 +21,10 @@
     "docs:screenshots": "node scripts/docs-screenshots.js",
     "video": "node scripts/video.js",
     "video:mp4": "node scripts/video-mp4.js",
-    "mock-backend": "node scripts/mock-backend.js"
+    "mock-backend": "node scripts/mock-backend.js",
+    "version:patch": "npm version patch --no-package-lock --message \"chore: release v%s\"",
+    "version:minor": "npm version minor --no-package-lock --message \"chore: release v%s\"",
+    "version:major": "npm version major --no-package-lock --message \"chore: release v%s\""
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.3.0",

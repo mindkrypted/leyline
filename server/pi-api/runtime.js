@@ -18,6 +18,7 @@ import {
 import { createEventHub } from './events.js'
 import { createTracing, TRACING_EXTENSION_PATH } from './tracing.js'
 import { createPromptQueue } from './prompt-queue.js'
+import { createIdleRuntimeCleanup } from './idle-runtimes.js'
 import { shutdownSettingsOperations, waitForSettings, withProviderSettingsLock } from './settings-operations.js'
 import { settingsError } from './pi-config.js'
 import { refreshCustomProviders, wrapModelRuntime } from './custom-providers.js'
@@ -37,6 +38,7 @@ import {
   toActiveSessionDetailDto as handleSessionDetailDto,
   toSessionDetailDto,
   toSessionDetailFromPath,
+  toSessionDetailFromManager,
   toSessionDto,
 } from './dtos.js'
 import { html, json, readJson } from './http.js'
@@ -89,6 +91,7 @@ import {
 import {
   RESEARCH_CUSTOM_TYPE,
   RESEARCH_VERSION,
+  compactResearchState,
   researchStateFromEntries,
 } from '../../lib/research-state.js'
 import { auditResearchReportCitations } from '../../lib/research-citations.js'
@@ -113,15 +116,6 @@ const BUNDLED_ULTRAFAST_EXTENSION = resolve(
   'extensions',
   'ultrafast',
   'index.js',
-)
-const BUNDLED_GOAL_EXTENSION = resolve(
-  __dirname,
-  '..',
-  '..',
-  '.pi',
-  'extensions',
-  'goal',
-  'index.ts',
 )
 const BUNDLED_MEMORY_EXTENSION = resolve(
   __dirname,
@@ -173,6 +167,7 @@ let activeSessionId
 let runtimeShuttingDown = false
 let runtimeShutdownPromise
 const runtimeHandles = new Map()
+const idleSessions = new Map()
 const hiddenRuntimeHandles = new Set()
 const runtimeHandlePromises = new Map()
 const pendingRuntimeCreations = new Set()
@@ -226,12 +221,32 @@ const events = createEventHub({
   getRuntimeHandles: () => runtimeHandles.values(),
   activeSessionDto,
   getActiveSessionId: () => activeSessionId,
+  onSessionAccess: id => idleRuntimeCleanup.touch(runtimeHandles.get(id)),
 })
 
 
 const tracing = createTracing({
   broadcastEvent: events.broadcastEvent,
   getChildMarker: manager => manager ? childSessionMarker(manager) : undefined,
+})
+
+const idleRuntimeCleanup = createIdleRuntimeCleanup({
+  getHandles: () => runtimeHandles.values(),
+  isProtected: handle => {
+    const session = handle.runtime.session
+    return runtimeShuttingDown || events.isSessionObserved(handle.sessionId)
+      || handle.pendingApiRequests > 0
+      || handle.disposalPromise || handle.initializing || handle.bindingExtensions
+      || handle.reloading || handle.changingBranch || handle.settingModel || handle.settingUltrafast
+      || handle.interruptPromise || handle.compactionPromise || handle.bashPromise
+      || handle.promptSubmissionLock || handle.pendingPromptHandoff || handle.pendingPromptControllers?.size
+      || handle.subagentController || handle.subagentSignal
+      || handle.promptQueue?.snapshot().items.length
+      || handle.extensionConfirmations?.pending.size || handle.extensionUiState?.confirmations?.length
+      || !session.isIdle || session.isRetrying || session.isBashRunning || session.hasPendingBashMessages
+      || session.agent.hasQueuedMessages() || session.agent.state.pendingToolCalls?.size
+  },
+  dispose: suspendIdleRuntime,
 })
 
 process.env.PI_CODING_AGENT ??= 'true'
@@ -307,7 +322,6 @@ function preferBundledExtensions(result) {
     { path: TRACING_EXTENSION_PATH, name: 'pi-elune' },
     { path: BUNDLED_OUTPUT_BUDGET_EXTENSION, name: 'output-budget' },
     { path: BUNDLED_ULTRAFAST_EXTENSION, name: 'ultrafast', command: ULTRAFAST_COMMAND },
-    { path: BUNDLED_GOAL_EXTENSION, name: 'goal', command: 'goal' },
     { path: BUNDLED_MEMORY_EXTENSION, name: 'memory', command: 'memory' },
     { path: BUNDLED_SUBAGENT_EXTENSION, name: 'subagent', tool: 'subagent' },
     { path: BUNDLED_RESEARCH_EXTENSION, name: 'research' },
@@ -363,6 +377,7 @@ async function createRuntimeResult(...args) {
   const options = args[0]
   requireSessionAvailable({ id: options.sessionManager.getSessionId(), cwd: options.cwd })
   runtimeInitializations.add(options)
+  idleRuntimeCleanup.start()
   try {
     return await withProviderSettingsLock(async (signal) => {
       const result = await buildRuntimeResult(...args)
@@ -457,7 +472,6 @@ async function buildRuntimeResult(
         additionalExtensionPaths: systemPrompt ? [BUNDLED_OUTPUT_BUDGET_EXTENSION] : [
           BUNDLED_OUTPUT_BUDGET_EXTENSION,
           BUNDLED_ULTRAFAST_EXTENSION,
-          BUNDLED_GOAL_EXTENSION,
           BUNDLED_MEMORY_EXTENSION,
           BUNDLED_SUBAGENT_EXTENSION,
           BUNDLED_RESEARCH_EXTENSION,
@@ -502,12 +516,14 @@ async function buildRuntimeResult(
     if (child?.allowImages) {
       services.settingsManager.applyOverrides({ images: { blockImages: false } })
     }
-    const selectedModel = resolveSubagentModel(services.modelRuntime, model)
+    const restored = idleSessions.get(sessionManager.getSessionId())
+    let selectedModel = resolveSubagentModel(services.modelRuntime, model || restored?.model)
     if (modelRequested(model) && !selectedModel) {
       throw new Error(`Unknown subagent model: ${formatSubagentModel(model)}`)
     }
     if (selectedModel && !services.modelRuntime.hasConfiguredAuth(selectedModel.provider)) {
-      throw new Error(`No API key for ${selectedModel.provider}/${selectedModel.id}`)
+      if (modelRequested(model)) throw new Error(`No API key for ${selectedModel.provider}/${selectedModel.id}`)
+      selectedModel = undefined
     }
     runtime = {
       ...(await createAgentSessionFromServices({
@@ -515,7 +531,7 @@ async function buildRuntimeResult(
         sessionManager,
         sessionStartEvent,
         model: selectedModel,
-        thinkingLevel,
+        thinkingLevel: thinkingLevel ?? restored?.thinkingLevel,
         tools,
         excludeTools,
       })),
@@ -577,6 +593,13 @@ async function listProjects() {
       modified: active ? now : current?.modified || now,
     })
   }
+  for (const { info } of idleSessions.values()) {
+    if (!projects.has(info.cwd)) projects.set(info.cwd, {
+      cwd: info.cwd,
+      name: basename(info.cwd) || info.cwd,
+      modified: Number(info.modified),
+    })
+  }
   return [...projects.values()].sort((a, b) => {
     return b.modified - a.modified || a.name.localeCompare(b.name)
   })
@@ -584,16 +607,16 @@ async function listProjects() {
 
 async function listSessions() {
   const sessions = await listPersistedSessions()
-  const missing = [...runtimeHandles.values()]
-    .map((handle) => sessionInfo(handle))
-    .filter((session) => !sessions.some((item) => item.id === session.id))
+  const loaded = new Map([...idleSessions].map(([id, state]) => [id, state.info]))
+  for (const handle of runtimeHandles.values()) loaded.set(handle.sessionId, sessionInfo(handle))
+  const missing = [...loaded.values()].filter(session => !sessions.some(item => item.id === session.id))
   return [...missing, ...sessions]
 }
 
 async function findSession(id) {
   const handle = runtimeHandles.get(id)
   if (handle) return sessionInfo(handle)
-  return findPersistedSessionRecord(id)
+  return idleSessions.get(id)?.info || findPersistedSessionRecord(id)
 }
 
 async function resolveSession(id, path, cwd) {
@@ -611,7 +634,10 @@ const switchActiveSession = trackRuntimeCreation(async (session) => {
 
 const runtimeHandleForId = trackRuntimeCreation(async (id) => {
   const existing = runtimeHandles.get(id)
-  if (existing) return existing
+  if (existing && !existing.disposalPromise && !runtimeHandlePromises.has(id)) {
+    idleRuntimeCleanup.touch(existing)
+    return existing
+  }
   const session = await findSession(id)
   if (!session) return null
   return ensureRuntimeForSession(session)
@@ -634,6 +660,7 @@ function requireInitializedSession(handle) {
   if (handle.initializing || handle.bindingExtensions || handle.reloading) {
     throw new Error('Wait for session initialization to finish.')
   }
+  idleRuntimeCleanup.touch(handle)
 }
 
 function requireSessionMutation(handle) {
@@ -644,18 +671,39 @@ function requireSessionMutation(handle) {
 }
 
 const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
+  let pathManager
+  if (!session.id) {
+    const loaded = [...runtimeHandles.values()].find(handle => handle.runtime.session.sessionFile === session.path)
+    const saved = [...idleSessions.values()].find(state => state.info.path === session.path)
+    if (loaded) session = sessionInfo(loaded)
+    else if (saved) session = saved.info
+    else {
+      pathManager = SessionManager.open(session.path)
+      session = { ...session, id: pathManager.getSessionId(), cwd: pathManager.getCwd() }
+    }
+  }
   requireSessionAvailable(session)
   const key = session.id || session.path
-  const existing = runtimeHandles.get(session.id)
-  if (existing) return existing
   const pending = runtimeHandlePromises.get(key)
   if (pending) return pending
+  const existing = runtimeHandles.get(session.id)
+  if (existing?.disposalPromise) {
+    await existing.disposalPromise.catch(() => {})
+    return ensureRuntimeForSession(session)
+  }
+  if (existing) {
+    idleRuntimeCleanup.touch(existing)
+    return existing
+  }
 
   const promise = (async () => {
+    const saved = idleSessions.get(session.id)
+    const manager = saved ? idleSessionManager(saved) : pathManager || SessionManager.open(session.path)
+    const suspended = idleSessions.get(session.id)
     const runtime = await createAgentSessionRuntime(createRuntime, {
       cwd: session.cwd,
       agentDir: getAgentDir(),
-      sessionManager: SessionManager.open(session.path),
+      sessionManager: manager,
     })
     const sessionId = runtime.session.sessionManager.getSessionId()
     if (session.id && sessionId !== session.id) {
@@ -672,8 +720,16 @@ const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
     try {
       requireSessionAvailable({ id: sessionId, cwd: runtime.cwd })
       runtimeHandles.set(sessionId, handle)
+      handle.activityState = suspended?.activityState
       forceOneAtATime(runtime.session)
       await bindRuntimeHandle(handle)
+      if (suspended?.ultrafast && runtime.session.model?.provider === suspended.model?.provider
+        && runtime.session.model?.id === suspended.model?.id
+        && runtime.session.extensionRunner.getCommand(ULTRAFAST_COMMAND)
+        && supportsUltrafastWithAuth(runtime.session.model, runtime.session.modelRuntime.isUsingSubscription(runtime.session.model.provider))) {
+        await setSessionUltrafast(handle, true)
+      }
+      idleSessions.delete(sessionId)
       return handle
     } catch (error) {
       await discardRuntimeHandle(handle)
@@ -1531,6 +1587,10 @@ function researchReportEntry(branch, requestedAt) {
 async function renameSession(id, name) {
   const nextName = normalizeSessionName(name)
   const handle = runtimeHandles.get(id)
+  if (handle?.disposalPromise) {
+    await handle.disposalPromise.catch(() => {})
+    return renameSession(id, name)
+  }
   if (handle) {
     requireInitializedSession(handle)
     if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
@@ -1542,12 +1602,18 @@ async function renameSession(id, name) {
   if (!session) throw new Error('Session not found')
 
   requireSessionAvailable(session)
-  const manager = SessionManager.open(session.path)
+  const suspended = idleSessions.get(id)
+  const manager = suspended ? idleSessionManager(suspended) : SessionManager.open(session.path)
   if (manager.getSessionId() !== id) {
     throw new Error('Session path does not match session id')
   }
   manager.appendSessionInfo(nextName)
-  return toSessionDetailDto({ ...session, name: manager.getSessionName() })
+  if (suspended) {
+    suspended.leafId = manager.getLeafId()
+    suspended.lastEntryId = manager.getEntries().at(-1)?.id
+    suspended.info = { ...session, name: manager.getSessionName(), modified: new Date() }
+  }
+  return toSessionDetailFromManager(manager, { ...session, name: manager.getSessionName() })
 }
 
 function normalizeSessionName(name) {
@@ -1572,6 +1638,10 @@ async function trashSession(id) {
   }
   const handle = runtimeHandles.get(id)
     || [...hiddenRuntimeHandles].find((item) => item.sessionId === id)
+  if (handle?.disposalPromise) {
+    await handle.disposalPromise.catch(() => {})
+    return trashSession(id)
+  }
   if (handle) requireSessionMutation(handle)
   trashingSessionIds.add(id)
   try {
@@ -1579,7 +1649,9 @@ async function trashSession(id) {
     if (!session) throw new Error('Session not found')
     if (trashingProjectCwds.has(session.cwd)) throw new Error('Session deletion is in progress.')
     if (handle) await discardRuntimeHandle(handle)
-    return await moveSessionToTrash(session, trashStamp(), Boolean(handle))
+    const result = await moveSessionToTrash(session, trashStamp(), Boolean(handle) || idleSessions.has(id))
+    idleSessions.delete(id)
+    return result
   } finally {
     trashingSessionIds.delete(id)
   }
@@ -1593,6 +1665,10 @@ async function trashProject(cwd) {
   }
   const handles = [...runtimeHandles.values(), ...hiddenRuntimeHandles]
     .filter((handle) => handle.runtime.cwd === cwd)
+  if (handles.some(handle => handle.disposalPromise)) {
+    await Promise.allSettled(handles.map(handle => handle.disposalPromise))
+    return trashProject(cwd)
+  }
   for (const handle of handles) requireSessionMutation(handle)
   trashingProjectCwds.add(cwd)
   try {
@@ -1600,6 +1676,9 @@ async function trashProject(cwd) {
     const persisted = await listSessionsForProject(cwd)
     const sessions = new Map(persisted.map((session) => [session.id, session]))
     for (const handle of handles) sessions.set(handle.sessionId, sessionInfo(handle))
+    for (const { info } of idleSessions.values()) {
+      if (info.cwd === cwd) sessions.set(info.id, info)
+    }
     if ([...sessions.keys()].some((id) => trashingSessionIds.has(id))) {
       throw new Error('Session deletion is in progress.')
     }
@@ -1617,6 +1696,7 @@ async function trashProject(cwd) {
     const moved = []
     for (const session of sessions.values()) {
       const result = await moveSessionToTrash(session, stamp, true)
+      idleSessions.delete(session.id)
       if (result.path) moved.push(result.path)
     }
     return { count: moved.length, path: moved[0] || '' }
@@ -1648,10 +1728,10 @@ function disposeRuntime(runtime) {
   if (runtimeDisposals.has(session)) return runtimeDisposals.get(session)
   const disposal = (async () => {
     try {
-      await waitForSettings(session.abort(), AbortSignal.timeout(3000))
+      await session.abort()
     } finally {
       try {
-        await waitForSettings(runtime.dispose(), AbortSignal.timeout(3000))
+        await runtime.dispose()
       } catch (error) {
         session.dispose()
         throw error
@@ -1665,6 +1745,44 @@ function disposeRuntime(runtime) {
   return disposal
 }
 
+function idleSessionManager(state) {
+  const manager = state.manager || SessionManager.open(state.info.path)
+  if (!state.manager && manager.getEntries().at(-1)?.id !== state.lastEntryId) {
+    idleSessions.delete(state.info.id)
+    return manager
+  }
+  if (state.leafId && manager.getEntry(state.leafId)) manager.branch(state.leafId)
+  else if (state.leafId === null) manager.resetLeaf()
+  return manager
+}
+
+async function suspendIdleRuntime(handle) {
+  const session = handle.runtime.session
+  const manager = session.sessionManager
+  const info = sessionInfo(handle)
+  const suspended = {
+    info: {
+      ...info,
+      firstMessage: info.firstMessage.slice(0, 140),
+      research: compactResearchState(info.research),
+    },
+    model: session.model && { provider: session.model.provider, id: session.model.id },
+    thinkingLevel: session.thinkingLevel,
+    ultrafast: handle.extensionUiState?.statuses?.[ULTRAFAST_STATUS_KEY] === 'on',
+    activityState: handle.activityState,
+    leafId: manager.getLeafId(),
+    lastEntryId: manager.getEntries().at(-1)?.id,
+    manager: !session.sessionFile || !existsSync(session.sessionFile) ? manager : undefined,
+  }
+  idleSessions.set(handle.sessionId, suspended)
+  try {
+    await discardRuntimeHandle(handle)
+  } finally {
+    suspended.leafId = manager.getLeafId()
+    suspended.lastEntryId = manager.getEntries().at(-1)?.id
+  }
+}
+
 function discardRuntimeHandle(handle) {
   if (handle.disposalPromise) return handle.disposalPromise
   handle.promptQueue?.dispose()
@@ -1676,8 +1794,11 @@ function discardRuntimeHandle(handle) {
   handle.unsubscribe?.()
   handle.disposalPromise = Promise.resolve().then(async () => {
     try {
-      await interruptSession(handle)
-      await disposeRuntime(handle.runtime)
+      try {
+        await interruptSession(handle)
+      } finally {
+        await disposeRuntime(handle.runtime)
+      }
     } finally {
       hiddenRuntimeHandles.delete(handle)
       if (runtimeHandles.get(handle.sessionId) === handle) {
@@ -1692,6 +1813,7 @@ function discardRuntimeHandle(handle) {
 function shutdownRuntime() {
   if (runtimeShutdownPromise) return runtimeShutdownPromise
   runtimeShuttingDown = true
+  idleRuntimeCleanup.stop()
   runtimeShutdownPromise = waitForSettings(Promise.resolve().then(async () => {
     await Promise.all([closeSessionSummaryWorkers(), shutdownSettingsOperations()])
     await providerSettingsRuntimes.dispose()
@@ -1713,6 +1835,7 @@ function shutdownRuntime() {
     }
   }), AbortSignal.timeout(RUNTIME_SHUTDOWN_TIMEOUT_MS)).finally(async () => {
     await tracing.close()
+    idleSessions.clear()
     runtimeShuttingDown = false
     runtimeShutdownPromise = undefined
   })
@@ -1965,6 +2088,7 @@ async function bindRuntimeHandle(handle) {
   if (runtimeShuttingDown) throw new Error('Runtime is shutting down')
   if (handle.bindingExtensions) throw new Error('Wait for session initialization to finish.')
   handle.bindingExtensions = true
+  idleRuntimeCleanup.touch(handle)
   ensurePromptQueue(handle)
   try {
     await bindRuntimeHandleExtensions(handle, events)
@@ -1975,8 +2099,8 @@ async function bindRuntimeHandle(handle) {
   }
 }
 
-function openEventStream(req, res) {
-  return events.openEventStream(req, res)
+function openEventStream(req, ws) {
+  return events.openEventStream(req, ws)
 }
 
 function broadcastActiveSession(handle = activeHandle) {
@@ -1990,6 +2114,15 @@ function broadcastEvent(type, data) {
 async function sessionDetail(id, path) {
   const handle = runtimeHandles.get(id)
   if (handle) return toActiveSessionDetailDto(handle)
+  const suspended = idleSessions.get(id)
+    || (path && [...idleSessions.values()].find(state => state.info.path === path))
+  if (suspended) {
+    const manager = idleSessionManager(suspended)
+    const info = idleSessions.has(suspended.info.id) ? suspended.info : {
+      id: manager.getSessionId(), path: manager.getSessionFile(), cwd: manager.getCwd(),
+    }
+    return toSessionDetailFromManager(manager, info)
+  }
   if (path) return toSessionDetailFromPath(id, path)
 
   const session = await findSession(id)
@@ -2020,7 +2153,9 @@ function parentTracingContext(parentSessionId, parentSessionPath, toolCallId) {
   }
 }
 
-const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinkingLevel, tools, excludeTools, systemPrompt, isolatedSystemPrompt, images, allowImages = false, signal, onStart }) => {
+const runSubagent = trackRuntimeCreation(async ({ title, task, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinkingLevel, tools, excludeTools, systemPrompt, isolatedSystemPrompt, images, allowImages = false, signal, onStart }) => {
+  const sessionTitle = normalizeSessionName(title)
+  if (!sessionTitle) throw new Error('A nonblank subagent title is required')
   if (!cwd) throw new Error('cwd is required')
   if (!task) throw new Error('task is required')
   if (tools !== undefined && !Array.isArray(tools)) {
@@ -2053,6 +2188,7 @@ const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, 
   }
 
   const childId = sessionManager.getSessionId()
+  sessionManager.appendSessionInfo(sessionTitle)
   sessionManager.appendCustomEntry(SUBAGENT_SESSION_CUSTOM_TYPE, {
     sessionId: childId,
     parentSessionPath: parentSessionPath || null,
@@ -2179,7 +2315,9 @@ const runSubagent = trackRuntimeCreation(async ({ task, cwd, parentSessionPath, 
     }
     return result
   } catch (error) {
-    if (signal?.aborted) throw new Error('Subagent cancelled')
+    if (signal?.aborted) {
+      throw Object.assign(new Error('Subagent cancelled'), { name: 'AbortError' })
+    }
     throw error
   } finally {
     signal?.removeEventListener?.('abort', abortSubagent)
@@ -2203,6 +2341,7 @@ const VISION_AGENT_PROMPT =
 async function runVision({ question, cwd, parentSessionPath, parentSessionId, _toolCallId, model, thinking, image, signal }) {
   if (!image) throw new Error('image is required')
   return runSubagent({
+    title: 'Image inspection',
     task: question || 'Describe this image in detail.',
     cwd,
     parentSessionPath,

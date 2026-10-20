@@ -19,6 +19,7 @@
   left: 0;
   z-index: 4;
   height: var(--terminal-drawer-height);
+  min-height: 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-right: 0;
@@ -114,8 +115,14 @@
 }
 
 .terminal-frame {
-  height: calc(100% - 36px);
+  height: max(0px, calc(100% - var(--terminal-header-height, 36px)));
+  min-height: 0;
+  overflow: hidden;
   padding: 8px 12px 10px;
+}
+
+.terminal-panel.is-compact .terminal-frame {
+  display: none;
 }
 
 .terminal-frame .xterm {

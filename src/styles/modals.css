@@ -269,7 +269,10 @@
 
 .confirm-modal {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  max-height: calc(var(--app-height, 100dvh) - 36px);
+  min-height: 0;
   gap: 14px;
   width: min(420px, 100%);
   border: 1px solid var(--border);
@@ -302,6 +305,10 @@
 
 .confirm-copy {
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
 }
 
 .confirm-copy h2 {

@@ -56,7 +56,7 @@ When a user attaches images to a parent model without image input, Leyline does 
 
 The attachment directory is `$LEYLINE_MEMORY_DIR/attachments/<session-id>/`. Without `LEYLINE_MEMORY_DIR`, it is `~/.local/share/leyline/attachments/<session-id>/`.
 
-The parent model calls `vision_agent` as part of its turn. The tool starts a hidden vision child. Its result appears in the transcript. The composer does not wait for a hidden vision-child preflight.
+The parent model calls `vision_agent` as part of its turn. The tool starts an isolated vision child. Its result appears in the transcript. The composer does not wait for a vision-child preflight.
 
 Leyline removes the session attachment directory after it moves a session or project to trash.
 
@@ -79,12 +79,12 @@ The child has these constraints:
 - Its model must support image input.
 - Its active tool allowlist is empty.
 - Its thinking level uses the effective vision override when one is set.
-- Its session contains the `leyline-subagent-session` marker and stays hidden from the sidebar.
+- Its session contains the `leyline-subagent-session` marker, which identifies it as a child for sidebar nesting.
 - Its JSONL history keeps the vision prompt and image.
 - Its trace capture retains bounded text and usage, with image payloads and thinking content omitted.
 - A session-local settings override permits image input without changing the user's persisted pi image setting.
 
-The configured model provider receives the image and prompt. Provider authentication must be available to the Leyline server process. Leyline does not delete the hidden child session after execution.
+The configured model provider receives the image and prompt. Provider authentication must be available to the Leyline server process. Leyline does not delete the child session after execution.
 
 Bundled requests carry `parentSessionId` and `_toolCallId` so capture can link the child to its parent tool observation. Delayed committed child usage can reconcile parent totals. Capture continues while trace views are closed. See [Elune integration](./elune) for content and accounting limits.
 

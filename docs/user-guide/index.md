@@ -26,7 +26,7 @@ Use these pages for the main session tasks:
 
 - [Memory](./memory)
 - [Subagents](./subagents)
-- [Goals and events](./goals-and-events)
+- [Runtime events](./runtime-events)
 - [Terminal](./terminal)
 - [Images, vision delegation, and previews](./images-and-previews)
 - [Export](./export)

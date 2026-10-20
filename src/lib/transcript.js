@@ -75,6 +75,8 @@ function createMarkdown({ preview = false, autoDetect = true } = {}) {
     highlight: (source, language) => highlightCode(source, language, autoDetect),
   })
   configureMarkdownLinks(markdown, { preview })
+  markdown.renderer.rules.table_open = () => '<div class="table-wrap"><table>'
+  markdown.renderer.rules.table_close = () => '</table></div>'
   return markdown
 }
 

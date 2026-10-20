@@ -6,7 +6,7 @@ const scrollAnimationMs = 220
 const scrollSettleMs = 900
 const userScrollIdleMs = 450
 
-export function useWorkbenchScroll({ workbench, composerRef, isActive = () => true }) {
+export function useWorkbenchScroll({ workbench, composerRef, isActive = () => true, prepareEntry }) {
   const composerHeight = ref(0)
   const stickToBottom = ref(true)
   const userScrollActive = ref(false)
@@ -294,9 +294,13 @@ export function useWorkbenchScroll({ workbench, composerRef, isActive = () => tr
 
   async function scrollToEntry(entryId, isCurrent = () => true) {
     const sessionId = selectedSessionIdRef?.value
+    const ownsNavigation = () => isActive() && isCurrent() && sessionId === selectedSessionIdRef?.value
+    await nextTick()
+    if (!ownsNavigation()) return false
+    prepareEntry?.(entryId)
     await nextTick()
     await new Promise(requestAnimationFrame)
-    if (!isActive() || !isCurrent() || sessionId !== selectedSessionIdRef?.value) return false
+    if (!ownsNavigation()) return false
     const entry = workbench.value?.querySelector(`[data-entry-id="${CSS.escape(String(entryId))}"]`)
     if (!entry) return false
     pauseScroll()

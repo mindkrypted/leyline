@@ -29,7 +29,7 @@ The token value is the latest available context usage. It is not a total of all 
 
 ## Read export content
 
-The export includes rendered Markdown, assistant thoughts, collapsed tool rows, skill rows, subagent results, and attached images.
+The export includes rendered Markdown, assistant thoughts, Activity cards, skill rows, subagent results, and attached images.
 
 System events use the same muted dividers as the app. Select **System prompt** or **System updated** to open the prompt inspector.
 
@@ -47,11 +47,23 @@ Elune traces are separate from the transcript and are not included in the HTML. 
 
 Images and transcript data are embedded in the HTML. File, diff, and patch previews in tool rows load their renderer from `esm.sh` when expanded. Those tool previews require network access.
 
+## Inspect exported subagents
+
+![Exported subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-export.png)
+
+Subagent calls stay compact inside Activity. A card containing only one subagent call opens its inspector directly from the header or row, including calls with parallel tasks. Expand cards with several tool calls first.
+
+Select a task to read its Markdown result and **Full task prompt**. Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
+
+Child-session navigation is available only in Leyline, not in the exported file. Press Escape, select the close button, or select the backdrop to return to the transcript.
+
 ## Use the responsive layout
 
 The export changes to a compact layout below 820 pixels. Metadata uses two columns, and message padding decreases.
 
 Above 1120 pixels, the System inspector reserves space beside the transcript. At narrower widths, it overlays the right side. At 760 pixels or less, it fills the viewport width.
+
+The subagent inspector uses a floating side sheet on desktop and a bottom sheet at 760 pixels or less. It does not expand or shift the transcript.
 
 The HTML also respects the system reduced-motion preference.
 

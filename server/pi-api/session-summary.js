@@ -1,15 +1,15 @@
 import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { byteLines } from './session-lines.js'
-import { goalStateFromEntries } from './goal-state.js'
 import {
   RESEARCH_CUSTOM_TYPE,
   researchStateFromEntries,
 } from '../../lib/research-state.js'
+import { subagentTaskTitle } from '../../lib/subagent-view.js'
 
 export const SUBAGENT_SESSION_CUSTOM_TYPE = 'leyline-subagent-session'
 
-export async function buildSessionInfo(filePath, goalFallback) {
+export async function buildSessionInfo(filePath) {
   try {
     const stats = await stat(filePath)
     const lines = byteLines(createReadStream(filePath))
@@ -17,10 +17,10 @@ export async function buildSessionInfo(filePath, goalFallback) {
     let messageCount = 0
     let firstMessage = ''
     let name
-    let goalObjective = ''
     let lastActivityTime = 0
     let isSubagentSession = false
     const subagentChildPaths = []
+    const subagentChildren = []
     const researchTree = new Map()
     let researchLeafId = ''
 
@@ -54,8 +54,7 @@ export async function buildSessionInfo(filePath, goalFallback) {
 
       if (prefix.includes('"type":"custom"')) {
         if (!line.includes(`"customType":"${SUBAGENT_SESSION_CUSTOM_TYPE}"`)
-          && !line.includes(`"customType":"${RESEARCH_CUSTOM_TYPE}"`)
-          && !line.includes('"customType":"goal-state"')) continue
+          && !line.includes(`"customType":"${RESEARCH_CUSTOM_TYPE}"`)) continue
         try {
           const entry = JSON.parse(line)
           if (entry.customType === SUBAGENT_SESSION_CUSTOM_TYPE
@@ -66,8 +65,6 @@ export async function buildSessionInfo(filePath, goalFallback) {
             const node = researchTree.get(entry.id)
             if (node) node.researchEntry = entry
           }
-          const goal = goalStateFromEntries([entry])
-          if (goal?.objective) goalObjective = goal.objective
         } catch {}
         continue
       }
@@ -78,10 +75,18 @@ export async function buildSessionInfo(filePath, goalFallback) {
       if (role === 'toolResult' && line.includes('"toolName":"subagent"')) {
         try {
           const entry = JSON.parse(line)
-          for (const result of entry.message?.details?.results || []) {
+          const results = entry.message?.details?.results || []
+          results.forEach((result, index) => {
             const path = result.childSession?.path
-            if (typeof path === 'string' && path) subagentChildPaths.push(path)
-          }
+            if (typeof path !== 'string' || !path) return
+            subagentChildPaths.push(path)
+            subagentChildren.push({
+              path,
+              id: result.childSession?.id || '',
+              agent: typeof result.agent === 'string' ? result.agent : '',
+              task: subagentTaskTitle(result, index),
+            })
+          })
         } catch {}
       }
       if (role !== 'user' && role !== 'assistant') continue
@@ -118,6 +123,7 @@ export async function buildSessionInfo(filePath, goalFallback) {
       parentSessionPath: header.parentSession,
       isSubagentSession,
       subagentChildPaths,
+      subagentChildren,
       research: researchStateFromEntries(
         activeResearchEntries(researchTree, researchLeafId),
         header.id,
@@ -125,9 +131,7 @@ export async function buildSessionInfo(filePath, goalFallback) {
       created: new Date(header.timestamp),
       modified,
       messageCount,
-      firstMessage: firstMessage
-        || (goalFallback ? goalObjective : '')
-        || '(no messages)',
+      firstMessage: firstMessage || '(no messages)',
     }
   } catch {
     return null

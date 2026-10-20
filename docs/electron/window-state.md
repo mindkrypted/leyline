@@ -1,3 +1,7 @@
+---
+description: Open Leyline from the CLI, work across desktop windows and backend connections, and restore saved window positions.
+---
+
 # Electron windows and state
 
 ## Start from the CLI

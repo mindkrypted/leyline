@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { backendHttpUrl } from '../lib/backend'
+import { openEventSocket } from '../lib/event-socket'
 
 const transientRuntimeEventTypes = new Set([
   'message_update',
@@ -23,7 +23,7 @@ export function useRuntimeEvents({
       .sort((a, b) => b.loggedAt.localeCompare(a.loggedAt))
       .slice(0, 20),
   )
-  let eventSource
+  let eventSocket
   let eventSessionId = ''
   let streamOpened = false
   const traceSubscribers = new Set()
@@ -38,95 +38,60 @@ export function useRuntimeEvents({
   }
 
   function openEventStream() {
-    eventSource?.close()
-    eventSource = undefined
-    eventStreamConnected.value = false
-
+    closeEventStream()
     const params = new URLSearchParams({ sessionId: eventSessionId })
-    const source = new EventSource(
-      backendHttpUrl(`/api/pi/events?${params}`),
-    )
-    eventSource = source
-
-    source.addEventListener('active_session', (event) => {
-      if (eventSource !== source) return
-      const data = parseEvent(event, 'active session')
-      if (data) onActiveSession?.(data)
+    eventSocket = openEventSocket(`/api/pi/events?${params}`, {
+      onEvent: handleEvent,
+      onOpen() {
+        const reconnected = streamOpened
+        streamOpened = true
+        eventStreamConnected.value = true
+        eventStreamError.value = ''
+        appendRuntimeEvent({ type: 'connected' })
+        if (reconnected) {
+          publishTraceNotice({ type: 'reconnect' })
+          onReconnect?.()
+        }
+      },
+      onDisconnect() {
+        eventStreamConnected.value = false
+        eventStreamError.value = 'Runtime event stream disconnected'
+        appendRuntimeEvent({ type: 'disconnected' })
+        console.warn('pi event stream disconnected')
+      },
+      onError(error) {
+        const message = `Invalid runtime event: ${error.message}`
+        eventStreamError.value = message
+        appendRuntimeEvent({ type: 'error', message })
+      },
     })
+  }
 
-    source.addEventListener('runtime_event', (event) => {
-      if (eventSource !== source) return
-      const data = parseEvent(event, 'runtime')
-      if (!data) return
+  function handleEvent(type, data) {
+    if (!data) return
+    if (type === 'trace_updated' || type === 'trace_config') {
+      publishTraceNotice({ ...data, type, activeSessionId: data.sessionId })
+      return
+    }
+    if (type === 'active_session') {
+      onActiveSession?.(data)
+    } else if (type === 'runtime_event') {
       if (data.event?.type === 'trace_updated' || data.event?.type === 'trace_config') {
         publishTraceNotice({ ...data.event, activeSessionId: data.event.sessionId })
         return
       }
-      if (!transientRuntimeEventTypes.has(data.event?.type)) {
-        appendRuntimeEvent(data)
-      }
+      if (!transientRuntimeEventTypes.has(data.event?.type)) appendRuntimeEvent(data)
       onRuntimeEvent?.(data)
-    })
-
-    for (const type of ['trace_updated', 'trace_config']) {
-      source.addEventListener(type, (event) => {
-        if (eventSource !== source || !traceSubscribers.size) return
-        try {
-          const data = JSON.parse(event.data)
-          publishTraceNotice({ ...data, type, activeSessionId: data.sessionId })
-        } catch (error) {
-          console.warn(`Invalid ${type} notice: ${error.message}`)
-        }
-      })
-    }
-
-    source.addEventListener('runtime_roster', (event) => {
-      if (eventSource !== source) return
-      const data = parseEvent(event, 'runtime roster')
-      if (data) onRuntimeRoster?.(data)
-    })
-
-    source.addEventListener('runtime_removed', (event) => {
-      if (eventSource !== source) return
-      const data = parseEvent(event, 'removed runtime')
-      if (data) onRuntimeRemoved?.(data)
-    })
-
-    source.addEventListener('extension_ui', (event) => {
-      if (eventSource !== source) return
-      const data = parseEvent(event, 'extension UI')
-      if (!data) return
-      appendRuntimeEvent({ ...data, type: 'extension_ui' })
+    } else if (type === 'runtime_roster') {
+      onRuntimeRoster?.(data)
+    } else if (type === 'runtime_removed') {
+      onRuntimeRemoved?.(data)
+    } else if (type === 'extension_ui') {
+      appendRuntimeEvent({ ...data, type })
       onExtensionUi?.(data)
-    })
-
-    source.addEventListener('extension_error', (event) => {
-      if (eventSource !== source) return
-      const data = parseEvent(event, 'extension error')
-      if (!data) return
-      appendRuntimeEvent({ ...data, type: 'extension_error' })
+    } else if (type === 'extension_error') {
+      appendRuntimeEvent({ ...data, type })
       onExtensionError?.(data)
-    })
-
-    source.onopen = () => {
-      if (eventSource !== source) return
-      const reconnected = streamOpened
-      streamOpened = true
-      eventStreamConnected.value = true
-      eventStreamError.value = ''
-      appendRuntimeEvent({ type: 'connected' })
-      if (reconnected) {
-        publishTraceNotice({ type: 'reconnect' })
-        onReconnect?.()
-      }
-    }
-
-    source.onerror = () => {
-      if (eventSource !== source) return
-      eventStreamConnected.value = false
-      eventStreamError.value = 'Runtime event stream disconnected'
-      appendRuntimeEvent({ type: 'disconnected' })
-      console.warn('pi event stream disconnected')
     }
   }
 
@@ -134,23 +99,12 @@ export function useRuntimeEvents({
     const next = String(sessionId || '')
     if (next === eventSessionId) return
     eventSessionId = next
-    if (eventSource) openEventStream()
-  }
-
-  function parseEvent(event, label) {
-    try {
-      return JSON.parse(event.data)
-    } catch (error) {
-      const message = `Invalid ${label} event: ${error.message}`
-      eventStreamError.value = message
-      appendRuntimeEvent({ type: 'error', message })
-      return null
-    }
+    if (eventSocket) openEventStream()
   }
 
   function closeEventStream() {
-    eventSource?.close()
-    eventSource = undefined
+    eventSocket?.close()
+    eventSocket = undefined
     eventStreamConnected.value = false
   }
 

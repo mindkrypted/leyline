@@ -17,14 +17,7 @@ const emit = defineEmits(['close'])
 const preview = ref(null)
 const placement = ref('below')
 const position = ref({})
-const primaryText = computed(() => {
-  return props.source.claim
-    || props.source.evidence
-    || props.source.exclusionReason
-    || ''
-})
-const secondaryText = computed(() => {
-  if (!props.source.claim) return ''
+const distinctEvidence = computed(() => {
   return props.source.evidence === props.source.claim
     ? ''
     : props.source.evidence || ''
@@ -100,7 +93,9 @@ function closeFromOutside(event) {
   emit('close')
 }
 
-function closeFromViewportChange() {
+function closeFromViewportChange(event) {
+  if (event.type === 'scroll' && event.target instanceof Element
+    && preview.value?.contains(event.target)) return
   emit('close')
 }
 </script>
@@ -125,23 +120,20 @@ function closeFromViewportChange() {
         ×
       </button>
     </header>
-    <strong>{{ source.title }}</strong>
-    <p v-if="primaryText" class="research-citation-preview-claim">
-      {{ primaryText }}
-    </p>
-    <p v-if="secondaryText" class="research-citation-preview-evidence">
-      {{ secondaryText }}
-    </p>
-    <a
-      v-if="source.url"
-      :href="source.url"
-      target="_blank"
-      rel="noreferrer"
-      @click="emit('close')"
-    >Open source ↗</a>
-    <template v-else-if="source.path">
-      <code>{{ source.path }}</code>
-      <a href="#" :data-local-file="encodeURIComponent(source.path)">Preview file</a>
-    </template>
+    <div class="research-citation-preview-body">
+      <strong>{{ source.title }}</strong>
+      <p v-if="source.claim" class="research-citation-preview-claim"><span class="research-citation-preview-field-label">Claim</span>{{ source.claim }}</p>
+      <p v-if="distinctEvidence" class="research-citation-preview-evidence"><span class="research-citation-preview-field-label">Evidence</span>{{ distinctEvidence }}</p>
+      <p v-if="source.exclusionReason" class="research-citation-preview-exclusion"><span class="research-citation-preview-field-label">Exclusion reason</span>{{ source.exclusionReason }}</p>
+      <code v-if="source.path">{{ source.path }}</code>
+      <a
+        v-if="source.url"
+        :href="source.url"
+        target="_blank"
+        rel="noopener noreferrer"
+        @click="emit('close')"
+      >Open source ↗</a>
+      <a v-else-if="source.path" href="#" :data-local-file="encodeURIComponent(source.path)">Preview file</a>
+    </div>
   </section>
 </template>

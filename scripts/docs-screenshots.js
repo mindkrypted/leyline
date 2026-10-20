@@ -10,6 +10,7 @@ import {
   compactResearchState,
 } from '../lib/research-state.js'
 import { renderSessionExportHtml } from '../server/pi-api/export-renderer.js'
+import { subagentTaskTitle } from '../lib/subagent-view.js'
 
 const baseUrl = process.env.DOCS_SCREENSHOT_URL || 'http://localhost:5173/'
 const screenshotFilter = (process.env.DOCS_SCREENSHOT_FILTER || '')
@@ -84,7 +85,7 @@ const backendRegistry = {
 const backendInfo = {
   name: 'Leyline',
   version: '0.0.0',
-  apiVersion: 1,
+  apiVersion: 2,
   capabilities: {
     events: true,
     exports: true,
@@ -673,6 +674,138 @@ const markdownPreviewEntries = [
   }),
 ]
 
+const skillPreviewContent = `---
+name: release-review
+description: Review release checks before publication.
+---
+
+# Release review
+
+- Check that validation runs before publication.
+- Confirm that a failed check stops the release.
+`
+const toolActivityEntries = [
+  messageEntry({
+    id: 'tools-user',
+    role: 'user',
+    label: 'You',
+    text: 'Use the release-review skill to check the release flow.',
+    timestamp: '2026-08-06T15:43:00.000Z',
+  }),
+  toolEntry({
+    id: 'tool-skill-read',
+    label: 'Skill · release-review',
+    code: '.pi/skills/release-review/SKILL.md',
+    toolName: 'read-skill',
+    text: skillPreviewContent,
+    preview: {
+      kind: 'file',
+      path: '.pi/skills/release-review/SKILL.md',
+      content: skillPreviewContent,
+      language: 'markdown',
+    },
+    timestamp: '2026-08-06T15:44:00.000Z',
+  }),
+  toolEntry({
+    id: 'tool-release-check',
+    label: 'Bash',
+    code: 'npm run verify',
+    toolName: 'bash',
+    text: 'Release checks passed.',
+    timestamp: '2026-08-06T15:45:00.000Z',
+  }),
+]
+
+const subagentOutcomeResults = [
+  { agent: 'general', title: 'Release verification', task: 'Check release verification\n\nInspect the release script. Confirm that validation finishes before publication and that failed checks stop the release.' },
+  { agent: 'explore', title: 'Packaging configuration', task: 'Inspect packaging configuration' },
+  { agent: 'general', title: 'Rollback handling', task: 'Review rollback handling' },
+  { agent: 'explore', title: 'Release notes', task: 'Check release notes' },
+  { agent: 'general', title: 'Publication conditions', task: 'Review publication conditions' },
+].map((task, index) => ({
+  ...task,
+  status: index === 2 ? 'stopped' : 'done',
+  stopReason: index === 2 ? 'aborted' : 'stop',
+  exitCode: index === 2 ? 1 : 0,
+  childSession: {
+    id: `release-check-${index + 1}`,
+    path: `/workspace/harbor/sessions/release-check-${index + 1}.jsonl`,
+  },
+  messages: index === 2 ? [] : [{ role: 'assistant', content: index === 0
+    ? '## Verification precedes publication\n\nThe release script completes validation before it publishes artifacts.\n\n- Build checks run first.\n- A failed check stops publication.\n- The parent session keeps the error details.'
+    : 'Check complete.' }],
+  error: index === 2 ? 'This operation was aborted' : undefined,
+}))
+const subagentOutcomeEntries = [
+  messageEntry({
+    id: 'subagent-outcomes-user',
+    role: 'user',
+    label: 'You',
+    text: 'Review the release flow. Split verification, packaging, rollback handling, release notes, and publication checks across five tasks.',
+    timestamp: '2026-08-06T15:43:00.000Z',
+  }),
+  {
+    ...toolEntry({
+      id: 'subagent-outcomes-tool',
+      label: 'Subagent · subagent',
+      code: '5 tasks',
+      toolName: 'subagent',
+      text: 'Four tasks completed. One task stopped.',
+      timestamp: '2026-08-06T15:44:00.000Z',
+    }),
+    isError: true,
+    subagentDetails: { mode: 'parallel', results: subagentOutcomeResults, background: false },
+  },
+  messageEntry({
+    id: 'subagent-outcomes-assistant',
+    role: 'assistant',
+    label: 'Agent',
+    text: 'Four checks completed. The rollback review stopped before it returned a result. The completed results are still available above.',
+    timestamp: '2026-08-06T15:45:00.000Z',
+  }),
+]
+
+const subagentMobileEntries = subagentOutcomeEntries.map((entry) => {
+  if (entry.type === 'tool') return {
+    ...entry,
+    code: '3 tasks',
+    text: 'Two tasks completed. One task stopped.',
+    copyText: 'Two tasks completed. One task stopped.',
+    subagentDetails: { ...entry.subagentDetails, results: subagentOutcomeResults.slice(0, 3) },
+  }
+  return messageEntry({
+    id: entry.id, role: entry.role, label: entry.label, timestamp: entry.timestamp,
+    text: entry.role === 'user'
+      ? 'Review release verification, packaging, and rollback handling in three parallel tasks.'
+      : 'Two checks completed. The rollback review stopped before it returned a result.',
+  })
+})
+
+const subagentSidebarResults = [subagentOutcomeResults[0], subagentOutcomeResults[1], subagentOutcomeResults[4]]
+  .map((result, index) => ({
+    ...result,
+    status: index ? 'running' : 'done',
+    stopReason: index ? undefined : 'stop',
+    exitCode: index ? -1 : 0,
+    messages: index ? [] : result.messages,
+  }))
+const subagentSidebarEntries = [
+  messageEntry({
+    id: 'subagent-sidebar-user',
+    role: 'user',
+    label: 'You',
+    text: 'Review release verification, packaging, and publication conditions in parallel.',
+    timestamp: '2026-08-06T15:43:00.000Z',
+  }),
+  messageEntry({
+    id: 'subagent-sidebar-assistant',
+    role: 'assistant',
+    label: 'Agent',
+    text: 'Verification is complete. The packaging and publication checks are still running in separate child sessions.',
+    timestamp: '2026-08-06T15:44:00.000Z',
+  }),
+]
+
 const researchEntries = [
   messageEntry({
     id: 'research-user',
@@ -704,6 +837,7 @@ const researchEntries = [
       results: researchThreads.map((thread) => ({
         agent: 'researcher',
         agentSource: 'bundled',
+        title: thread.title,
         task: `[${thread.id}] ${thread.task}`,
         status: 'done',
         research: {
@@ -740,9 +874,7 @@ const researchEntries = [
 
 **Recommendation:** Use signed artifacts, protected promotion stages, and a rehearsed rollback action.
 
-## Release controls
-
-Use a preview channel before broad rollout. Electron exposes the update lifecycle needed to check, download, and install releases [1](https://www.electronjs.org/docs/latest/api/auto-updater).
+Validate update checks, downloads, and installation in a preview channel before broad rollout [1](https://www.electronjs.org/docs/latest/api/auto-updater).
 
 Sign each platform artifact [2](https://www.electronjs.org/docs/latest/tutorial/code-signing) and publish build provenance from CI [3](https://docs.npmjs.com/generating-provenance-statements).
 
@@ -892,27 +1024,23 @@ const visionConfigPayload = (sessionAvailable) => ({
   thinkingSource: sessionAvailable ? 'session' : 'project',
 })
 
-const goal = {
-  objective: 'Prepare a safe release candidate',
-  status: 'active',
-  tokenBudget: 50000,
-  continuationLimit: 8,
-  continuationsUsed: 2,
-  tokensUsed: 12480,
-  timeUsedSeconds: 420,
-  createdAt: fixedNow - 480000,
-  updatedAt: fixedNow,
-}
-
-const traceFixtures = docsTraces(baseEntries, sessions)
+const traceFixtures = await docsTraces(baseEntries, sessions)
+const primaryTrace = traceFixtures[0]
+const traceEditObservation = primaryTrace.observations.find(item => item.type === 'TOOL' && item.metadata.toolResultEntryId === 'tool-edit')
+const traceFinalGeneration = primaryTrace.observations.find(item => item.type === 'GENERATION' && item.metadata.messageEntryId === 'assistant-2')
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
+const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
+const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
   ...await fs.readdir(readmeOutputDir),
   ...traceAssetNames,
   ...pinnedAssetNames,
+  ...networkAssetNames,
+  ...subagentAssetNames,
+  'tool-activity.png',
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -956,8 +1084,9 @@ try {
       await page.getByRole('button', { name: 'Trace explorer', exact: true }).click()
       await waitForTrace(page)
       await page.locator('.elune-table tbody tr').nth(4).waitFor()
-      await page.locator('[data-observation-id="release-edit"]').click()
-      await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+      await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).click()
+      await page.locator('.elune-detail-heading h3').filter({ hasText: traceEditObservation.name }).waitFor()
+      await page.locator('.elune-tabs button').filter({ hasText: /^input$/ }).click()
       await page.locator('.elune-table').getByText('field-notes', { exact: true }).first().waitFor()
       if (await page.getByRole('combobox', { name: 'Trace project', exact: true }).inputValue()) throw new Error('Explorer project filter is not clear')
     },
@@ -970,20 +1099,19 @@ try {
     scenario: 'trace',
     interact: async (page) => {
       await openTraceInspector(page)
-      await page.locator('[data-observation-id="release-model-3"]').click()
-      await page.locator('.elune-detail-heading h3').filter({ hasText: 'Summarize the change' }).waitFor()
+      await page.locator(`[data-observation-id="${traceFinalGeneration.id}"]`).click()
+      await page.locator('.elune-detail-heading h3').filter({ hasText: traceFinalGeneration.name }).waitFor()
+      await page.locator('.elune-tabs button').filter({ hasText: /^output$/ }).click()
       await page.locator('.trace-host-footer summary').click()
       await assertTraceContentReachable(page)
-      await page.locator('.elune-selected').evaluate(element => { element.scrollTop = 0 })
-      await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = 0 })
-      await page.locator('[data-observation-id="release-model-3"]').scrollIntoViewIfNeeded()
+      await page.locator(`[data-observation-id="${traceFinalGeneration.id}"]`).scrollIntoViewIfNeeded()
     },
   })
   await capture({
     browser,
     file: path.join(docsOutputDir, 'trace-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     scenario: 'trace',
     interact: async (page) => {
@@ -1015,6 +1143,8 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message .thinking-trigger',
     scenario: 'ultrafast',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 2),
   })
   await capture({
     browser,
@@ -1040,7 +1170,11 @@ try {
     route: '/sessions/research-session',
     ready: '.research-report-message',
     scenario: 'research',
-    interact: waitForResearchSources,
+    sidebarChildren: true,
+    interact: async (page) => {
+      await waitForResearchSources(page)
+      await openSidebarChildren(page, 3)
+    },
   })
   await capture({
     browser,
@@ -1132,13 +1266,24 @@ try {
     file: path.join(docsOutputDir, 'backend-connections.png'),
     route: '/sessions/demo-session',
     ready: '.assistant-message',
-    interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
-      const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
-      await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
-      await dialog.locator('.backend-connection-card').filter({ hasText: 'Team backend' }).waitFor()
-      await dialog.locator('button:not(:disabled)').filter({ hasText: /^Add connection$/ }).waitFor()
-    },
+    interact: openBackendConnections,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'network-access.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'network',
+    interact: (page) => openBackendConnections(page, true),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'network-access-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-model-control',
+    scenario: 'network',
+    viewport: { width: 390, height: 844 },
+    interact: (page) => openBackendConnections(page, true),
   })
   await capture({
     browser,
@@ -1146,7 +1291,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1161,7 +1306,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1215,7 +1360,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1234,11 +1379,11 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
-      await dialog.getByRole('button', { name: 'Edit MiniMax M2.7', exact: true }).click()
+      await dialog.getByRole('button', { name: 'Edit MiniMax M2.7 (minimax-m2.7)', exact: true }).click()
       await dialog.getByRole('textbox', { name: /^Display name/ }).fill('MiniMax M2.7 (draft)')
       const actions = dialog.locator('.pi-settings-draft-actions')
       await actions.getByRole('button', { name: 'Test connection', exact: true }).click()
@@ -1252,7 +1397,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'MCP servers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1278,11 +1423,11 @@ try {
     browser,
     file: path.join(docsOutputDir, 'settings-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     interact: async (page) => {
       await page.getByRole('button', { name: 'Open sessions' }).click()
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('combobox', { name: 'Settings category' }).selectOption('providers')
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
@@ -1294,7 +1439,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'model-catalog-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     scenario: 'model-catalog',
     viewport: { width: 390, height: 844 },
     interact: openModelCatalog,
@@ -1360,12 +1505,38 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'tool-activity.png'),
+    route: '/sessions/demo-session',
+    ready: '.transcript-tool',
+    scenario: 'tools',
+    interact: async (page) => {
+      const activity = page.locator('.mobile-activity-card')
+      await activity.locator('.mobile-activity-summary').click()
+      const tool = activity.locator('.transcript-tool').filter({ hasText: 'Skill · release-review' })
+      await tool.locator('.tool-expand-button').click()
+      await tool.locator('.pierre-diffs-container [data-line]').filter({ hasText: 'Confirm that a failed check stops the release.' }).waitFor()
+      await disableMotion(page)
+      const label = await tool.locator('.tool-label').boundingBox()
+      const preview = await tool.locator('.tool-preview-clip').boundingBox()
+      const action = await tool.locator('.tool-preview-cta').boundingBox()
+      const composer = await page.locator('.composer').boundingBox()
+      if (label.x !== preview.x || preview.x !== action.x || action.y + action.height > composer.y) {
+        throw new Error('Expanded tool preview or action is misaligned or obscured')
+      }
+      if (await tool.locator('.mobile-tool-target').isVisible()) throw new Error('Duplicate desktop tool path is visible')
+    },
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'preview-fullscreen.png'),
     route: '/sessions/demo-session',
     ready: '.transcript-tool',
     scenario: 'markdown',
     interact: async (page) => {
-      const tool = page.locator('.transcript-tool').filter({ hasText: 'docs/release-checklist.md' })
+      const activity = page.locator('.mobile-activity-card')
+      const tool = activity.locator('.transcript-tool').filter({ hasText: 'docs/release-checklist.md' })
+      await activity.locator('.mobile-activity-summary').click()
+      await tool.locator('.tool-expand-button').click()
       await tool.getByTitle('Open full screen').click()
       await page.locator('.tool-fullscreen-markdown blockquote').waitFor()
       await page.locator('.tool-fullscreen-backdrop').evaluate((element) => {
@@ -1393,7 +1564,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Agent defaults', exact: true }).click()
       await dialog.locator('section[aria-label="Vision agent"][aria-busy="false"]').waitFor()
@@ -1409,16 +1580,58 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'subagent-outcomes.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    scenario: 'subagent-outcomes',
+    sidebarChildren: true,
+    interact: async (page) => {
+      await openSidebarChildren(page, 5)
+      await openSubagentInspector(page, 5)
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-sidebar.png'),
+    route: '/sessions/demo-session',
+    ready: '.session-child-row .status-running',
+    scenario: 'subagent-sidebar',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 3),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-inspector-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    viewport: { width: 390, height: 844 },
+    scenario: 'subagent-mobile',
+    interact: (page) => openSubagentInspector(page, 3),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-inspector-export.png'),
+    route: '/api/pi/sessions/demo-session/export?disposition=inline',
+    ready: '.subagent-card .tool-inspect-button',
+    scenario: 'subagent-outcomes',
+    exportPage: true,
+    interact: (page) => openSubagentInspector(page, 5, true),
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'vision-tool-call.png'),
     route: '/sessions/demo-session',
     ready: '.transcript-tool',
     scenario: 'vision',
     interact: async (page) => {
-      const tool = page.locator('.transcript-tool').filter({ hasText: 'Tool · vision_agent' })
-      await tool.click()
+      const activity = page.locator('.mobile-activity-card')
+      const tool = activity.locator('.transcript-tool')
+        .filter({ hasText: 'Tool · vision_agent' })
+      await activity.locator('.mobile-activity-summary').click()
+      await tool.locator('.tool-expand-button').click()
       await tool.locator('.tool-output').waitFor()
     },
-    clipSelectors: ['.transcript-message.user-message', '.transcript-tool'],
+    clipSelectors: ['.transcript-message.user-message', '.mobile-activity-card'],
     padding: 18,
   })
   await capture({
@@ -1427,7 +1640,7 @@ try {
     route: '/sessions/demo-session',
     ready: '.assistant-message',
     interact: async (page) => {
-      await page.getByRole('button', { name: 'Open settings' }).click()
+      await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Agent defaults', exact: true }).click()
       await dialog.locator('section[aria-label="Subagents"][aria-busy="false"]').waitFor()
@@ -1452,10 +1665,9 @@ try {
   })
   await capture({
     browser,
-    file: path.join(docsOutputDir, 'goal-events.png'),
+    file: path.join(docsOutputDir, 'runtime-events.png'),
     route: '/sessions/demo-session',
-    ready: '.goal-control-plane',
-    scenario: 'goal',
+    ready: '.assistant-message',
     interact: async (page) => {
       await page.getByRole('button', { name: 'Events' }).click()
       await page.locator('aside[aria-label="Runtime events"] .event-log-row').first().waitFor()
@@ -1536,7 +1748,7 @@ try {
     browser,
     file: path.join(docsOutputDir, 'mobile-session.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     scenario: 'ultrafast',
   })
@@ -1544,18 +1756,21 @@ try {
     browser,
     file: path.join(docsOutputDir, 'mobile-sidebar.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
+    scenario: 'subagent-sidebar',
+    sidebarChildren: true,
     interact: async (page) => {
       await page.getByRole('button', { name: 'Open sessions' }).click()
       await page.locator('.leyline-app.sidebar-open .sidebar').waitFor()
+      await openSidebarChildren(page, 3)
     },
   })
   await capture({
     browser,
     file: path.join(docsOutputDir, 'activity-mobile.png'),
     route: '/sessions/demo-session',
-    ready: '.composer .mobile-label',
+    ready: '.composer .mobile-model-control',
     viewport: { width: 390, height: 844 },
     scenario: 'activity',
     interact: async (page) => {
@@ -1579,6 +1794,8 @@ try {
     ready: '.assistant-message .thinking-trigger',
     viewport: { width: 1503, height: 818 },
     scenario: 'ultrafast',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 2),
     macWindow: true,
   })
   await capture({
@@ -1588,7 +1805,11 @@ try {
     ready: '.research-report-message',
     viewport: { width: 1503, height: 818 },
     scenario: 'research',
-    interact: waitForResearchSources,
+    sidebarChildren: true,
+    interact: async (page) => {
+      await waitForResearchSources(page)
+      await openSidebarChildren(page, 3)
+    },
     macWindow: true,
   })
 } finally {
@@ -1598,17 +1819,22 @@ try {
 console.log('Screenshot capture complete')
 
 async function waitForTrace(page) {
-  await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: 'Verify before publication' }).waitFor()
-  await page.locator('[data-observation-id="release-edit"]').waitFor()
-  await page.locator('.trace-host-footer').getByText('New runs will be captured.', { exact: false }).waitFor()
-  await page.locator('.elune-observations > .elune-pagination').getByText('1–8 of 8 loaded observations', { exact: false }).waitFor()
+  await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: primaryTrace.name }).waitFor()
+  await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).waitFor()
+  await page.locator('.trace-host-footer summary').filter({ hasText: 'Capture new runs' }).waitFor()
+  const count = primaryTrace.observations.length
+  await page.locator('.elune-observations > .elune-pagination').getByText(`1–${count} of ${count} loaded observations`, { exact: false }).waitFor()
 }
 
 async function openTraceInspector(page) {
+  if (await page.locator('.header-more-button').isVisible().catch(() => false)) {
+    await page.locator('.header-more-button').click()
+  }
   await page.getByRole('button', { name: 'Session traces', exact: true }).click()
   await waitForTrace(page)
-  await page.locator('[data-observation-id="release-edit"]').click()
-  await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+  await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).click()
+  await page.locator('.elune-detail-heading h3').filter({ hasText: traceEditObservation.name }).waitFor()
+  await page.locator('.elune-tabs button').filter({ hasText: /^input$/ }).click()
   await page.locator('.elune-payload').filter({ hasText: 'await verify()' }).waitFor()
   const geometry = await page.locator('.elune-run-select').evaluate(element => {
     const select = element.querySelector('select').getBoundingClientRect()
@@ -1623,9 +1849,9 @@ async function openTraceWorkspace(page) {
   await page.getByRole('button', { name: 'Open workspace', exact: true }).click()
   await page.locator('.trace-panel-workspace .elune-ui[aria-busy="false"]').waitFor()
   await page.locator('.elune-timeline .elune-span.tool').first().waitFor()
-  await page.locator('[data-observation-id="release-edit"][aria-pressed="true"]').waitFor()
-  await page.locator('.elune-tabs button[aria-pressed="true"]').filter({ hasText: 'output' }).waitFor()
-  await page.locator('.elune-detail-heading h3').filter({ hasText: 'edit · scripts/release.js' }).waitFor()
+  await page.locator(`[data-observation-id="${traceEditObservation.id}"][aria-pressed="true"]`).waitFor()
+  await page.locator('.elune-tabs button[aria-pressed="true"]').filter({ hasText: 'input' }).waitFor()
+  await page.locator('.elune-detail-heading h3').filter({ hasText: traceEditObservation.name }).waitFor()
   await assertTraceContentReachable(page)
 }
 
@@ -1647,6 +1873,69 @@ async function assertTraceContentReachable(page) {
     return line.top >= port.top && line.bottom <= Math.min(port.bottom, footer.top) && (hit === element || element.contains(hit)) && footer.bottom <= innerHeight
   })
   if (!reachable) throw new Error('Trace payload last line or capture footer is inaccessible')
+  await page.locator('.elune-selected').evaluate(element => { element.scrollTop = 0 })
+  await page.locator('.elune-payload-scroll').evaluate(element => { element.scrollTop = 0 })
+}
+
+async function openSidebarChildren(page, count) {
+  const toggle = page.locator('.session-children-toggle').first()
+  await toggle.waitFor()
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+  await page.locator('.session-child-node').nth(count - 1).waitFor()
+  await page.waitForFunction(() => !document.querySelector('.session-child-row.is-folding'))
+  const geometry = await toggle.evaluate((button) => {
+    const parent = button.closest('.project-session-row')
+    const title = parent.querySelector('.session-title-with-kind').getBoundingClientRect()
+    const control = button.getBoundingClientRect()
+    const child = parent.nextElementSibling
+    const node = child.querySelector('.session-child-node').getBoundingClientRect()
+    return {
+      gap: title.left - control.right,
+      inset: node.left + node.width / 2 - title.left,
+      height: child.getBoundingClientRect().height,
+      glyphs: document.querySelectorAll('.session-child-icon').length,
+    }
+  })
+  if (geometry.gap < 6 || geometry.inset < 10 || geometry.height !== 30 || geometry.glyphs) {
+    throw new Error(`Unexpected sidebar child layout: ${JSON.stringify(geometry)}`)
+  }
+}
+
+async function openSubagentInspector(page, taskCount, exportPage = false) {
+  if (!exportPage) await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
+  await disableMotion(page)
+  const activity = page.locator('.mobile-activity-card').filter({ has: page.locator('.subagent-card') })
+  await activity.scrollIntoViewIfNeeded()
+  const before = await activity.boundingBox()
+  await activity.locator('.mobile-activity-summary').click()
+  const inspector = page.locator('.subagent-inspector')
+  await inspector.waitFor()
+  const tasks = inspector.locator('.subagent-inspector-task')
+  if (await tasks.count() !== taskCount) throw new Error('Subagent inspector task count changed')
+  const titles = await tasks.locator('.subagent-inspector-task-label').allTextContents()
+  if (titles.some((title, index) => title.trim() !== subagentOutcomeResults[index].title)) {
+    throw new Error('Subagent inspector must show the supplied session titles')
+  }
+  await inspector.locator('.subagent-summary').filter({ hasText: `${taskCount - 1} completed` }).waitFor()
+  await inspector.locator('.subagent-summary').filter({ hasText: '1 stopped' }).waitFor()
+  await tasks.nth(2).click()
+  await inspector.locator('.subagent-inspector-empty').filter({ hasText: 'This task was stopped.' }).waitFor()
+  await tasks.first().click()
+  await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
+  await inspector.locator('.subagent-inspector-prompt > summary').click()
+  if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentOutcomeResults[0].task) {
+    throw new Error('Subagent inspector changed the full task prompt')
+  }
+  await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
+  await inspector.waitFor({ state: 'detached' })
+  await activity.locator('.tool-inspect-button').click()
+  await inspector.locator('.subagent-inspector-output h2').waitFor()
+  if (exportPage) await inspector.getByText('Child sessions are available in Leyline', { exact: true }).waitFor()
+  else await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
+  const after = await activity.boundingBox()
+  if (before.height !== after.height || before.y !== after.y || await activity.evaluate(element => element.classList.contains('is-expanded'))) {
+    throw new Error(`Single-call subagent inspection expanded or moved the Activity card: ${JSON.stringify({ before, after })}`)
+  }
 }
 
 async function waitForResearchSources(page) {
@@ -1654,6 +1943,13 @@ async function waitForResearchSources(page) {
   await pane.waitFor()
   await pane.getByRole('button', { name: 'Cited 4', pressed: true }).waitFor()
   await pane.locator('.research-source-card').first().waitFor()
+  await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
+  await disableMotion(page)
+  await page.locator('.workbench').dispatchEvent('wheel', { deltaY: -1 })
+  await page.locator('.mobile-activity-card').evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }))
+  const report = await page.locator('.research-report-message').boundingBox()
+  const composer = await page.locator('.composer').boundingBox()
+  if (report.y + report.height > composer.y) throw new Error('Research report is hidden behind the composer')
 }
 
 async function openActivity(page) {
@@ -1772,6 +2068,8 @@ function runtimeFor(scenario) {
   const queued = ['queue', 'queue-held'].includes(scenario)
   const held = scenario === 'queue-held'
   const research = scenario === 'research'
+  const sidebar = scenario === 'subagent-sidebar'
+  const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar'].includes(scenario)
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
@@ -1785,10 +2083,22 @@ function runtimeFor(scenario) {
       availableModels,
       thinkingLevel: 'high',
       availableThinkingLevels: selectedModel.availableThinkingLevels,
-      isStreaming: (queued && !held) || activity,
+      isStreaming: (queued && !held) || activity || sidebar,
       isCompacting: false,
-      pendingToolCalls: activity ? ['activity-selected-tool'] : [],
-      pendingTools: activity
+      pendingToolCalls: sidebar ? ['subagent-sidebar-tool']
+        : activity ? ['activity-selected-tool'] : [],
+      pendingTools: sidebar ? [{
+        toolCallId: 'subagent-sidebar-tool',
+        toolName: 'subagent',
+        args: {
+          mode: 'parallel',
+          tasks: subagentSidebarResults.map(({ agent, title, task }) => ({ agent, title, task })),
+        },
+        partialResult: {
+          content: [{ type: 'text', text: 'One check completed. Two checks are running.' }],
+          details: { mode: 'parallel', results: subagentSidebarResults, background: true },
+        },
+      }] : activity
         ? [{
             toolCallId: 'activity-selected-tool',
             toolName: 'read',
@@ -1797,10 +2107,11 @@ function runtimeFor(scenario) {
         : [],
       steeringMode: 'one-at-a-time',
       followUpMode: 'one-at-a-time',
-      activeToolCount: research ? 6 : 4,
+      activeToolCount: research ? 6 : subagents ? 5 : 4,
       activeToolNames: research
         ? ['read', 'grep', 'subagent', 'research_update', 'exa_search', 'exa_contents']
-        : ['read', 'grep', 'bash', 'edit'],
+        : subagents ? ['read', 'grep', 'bash', 'edit', 'subagent']
+          : ['read', 'grep', 'bash', 'edit'],
       contextUsage: {
         tokens: 12480,
         contextWindow: selectedModel.contextWindow,
@@ -1808,7 +2119,6 @@ function runtimeFor(scenario) {
       },
       slashCommands: [
         { name: 'compact', description: 'Compact context', source: 'command' },
-        { name: 'goal', description: 'Start or manage a goal', source: 'extension' },
         { name: 'skill:review', description: 'Load the review skill', source: 'skill' },
       ],
       promptQueue: {
@@ -1824,12 +2134,10 @@ function runtimeFor(scenario) {
       extensionUi: {
         statuses: {
           'leyline-ultrafast': scenario === 'ultrafast' ? 'on' : 'off',
-          ...(scenario === 'goal' ? { goal: 'goal: active' } : {}),
         },
         widgets: {},
         notifications: [],
       },
-      goal: scenario === 'goal' ? goal : null,
       research: research ? researchState : null,
     },
   }
@@ -1894,7 +2202,11 @@ function detailFor(scenario) {
     ultrafast: systemTranscriptEntries,
     export: systemTranscriptEntries,
     research: researchEntries,
+    'subagent-outcomes': subagentOutcomeEntries,
+    'subagent-mobile': subagentMobileEntries,
+    'subagent-sidebar': subagentSidebarEntries,
     markdown: markdownPreviewEntries,
+    tools: toolActivityEntries,
     shell: shellEntries,
     vision: visionEntries,
   }[scenario] || baseEntries
@@ -1915,6 +2227,75 @@ function detailFor(scenario) {
     },
     entries,
   }
+}
+
+function sidebarFixtureFor(scenario, parent) {
+  const results = scenario === 'research'
+    ? researchEntries.find((entry) => entry.toolName === 'subagent').subagentDetails.results
+    : scenario === 'subagent-sidebar' ? subagentSidebarResults
+      : scenario === 'subagent-outcomes' ? subagentOutcomeResults
+        : subagentOutcomeResults.slice(0, 2)
+  const children = results.map((result, index) => ({
+    ...session(
+      result.childSession.id,
+      subagentTaskTitle(result, index),
+      new Date(Date.parse(parent.timestamp) + (index + 1) * 60000).toISOString(),
+      4,
+      parent.cwd,
+    ),
+    path: result.childSession.path,
+    parentSessionPath: parent.path,
+    isSubagentSession: true,
+  }))
+  return {
+    parent: {
+      ...parent,
+      subagentChildren: results.map((result, index) => ({
+        id: result.childSession.id,
+        agent: result.agent,
+        task: subagentTaskTitle(result, index),
+      })),
+    },
+    children,
+    liveChildren: children.filter((child, index) => results[index].status === 'running'),
+  }
+}
+
+async function openBackendConnections(page, enabled = false) {
+  const sidebar = page.getByRole('button', { name: 'Open sessions', exact: true })
+  if (await sidebar.isVisible()) await sidebar.click()
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
+  await dialog.waitFor()
+  const category = dialog.getByRole('combobox', { name: 'Settings category', exact: true })
+  if (await category.isVisible()) await category.selectOption('connections')
+  else await dialog.getByRole('button', { name: 'Connections', exact: true }).click()
+  const network = dialog.locator('.network-settings[aria-busy="false"]')
+  await network.waitFor()
+  const toggle = network.getByRole('switch', { name: 'Allow network access' })
+  if (await toggle.getAttribute('aria-checked') !== 'false' || await toggle.isDisabled()) {
+    throw new Error('Network access must start off and available')
+  }
+  const port = network.getByRole('textbox', { name: 'Proxy port', exact: true })
+  if (await port.inputValue() !== '') throw new Error('Proxy port must start in automatic mode')
+  await dialog.locator('.backend-connection-card').filter({ hasText: 'Team backend' }).waitFor()
+  await dialog.getByRole('button', { name: 'Add connection', exact: true }).waitFor()
+  if (!enabled) return
+  await port.fill('52342')
+  const apply = network.getByRole('button', { name: 'Apply', exact: true })
+  await apply.click()
+  await network.waitFor()
+  if (await toggle.getAttribute('aria-checked') !== 'false' || await port.inputValue() !== '52342' || !await apply.isDisabled()) {
+    throw new Error('Proxy port must save without enabling network access')
+  }
+  await toggle.click()
+  await network.getByRole('status').filter({ hasText: 'Listening on port 52342.' }).waitFor()
+  if (await toggle.getAttribute('aria-checked') !== 'true'
+    || await network.locator('.network-settings-address').count() !== 2) {
+    throw new Error('Network access capture did not reach the enabled state')
+  }
+  await network.getByRole('button', { name: 'Copy http://192.0.2.10:52342', exact: true }).waitFor()
+  await network.getByRole('button', { name: 'Copy http://198.51.100.10:52342', exact: true }).waitFor()
 }
 
 async function openModelCatalog(page) {
@@ -1948,6 +2329,7 @@ async function capture({
   ready,
   viewport = { width: 1440, height: 900 },
   scenario = 'default',
+  sidebarChildren = false,
   terminal = false,
   exportPage = false,
   interact,
@@ -1961,7 +2343,27 @@ async function capture({
   const embeddedSelected = embeddedFile && (!screenshotFilter.length || screenshotFilter.includes(path.basename(embeddedFile)) || selected)
   if (!selected && !embeddedSelected) return
   const runtime = runtimeFor(scenario)
+  const detail = detailFor(scenario)
+  const sidebar = sidebarChildren ? sidebarFixtureFor(scenario, detail.session) : null
+  if (sidebar) {
+    detail.session = sidebar.parent
+    runtime.session = sidebar.parent
+  }
+  const captureSessions = (scenario === 'research' ? [researchSession, ...sessions] : sessions)
+    .map((summary) => sidebar && summary.id === runtime.id ? sidebar.parent : summary)
+    .concat(sidebar?.children || [])
   const runtimeFixtures = runtimeFixturesFor(scenario, runtime)
+  for (const child of sidebar?.liveChildren || []) {
+    const childRuntime = runtimeFor('default')
+    runtimeFixtures.runtimeSessions.push({
+      ...childRuntime,
+      id: child.id,
+      path: child.path,
+      cwd: child.cwd,
+      session: child,
+      state: { ...childRuntime.state, isStreaming: true },
+    })
+  }
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: 2,
@@ -1975,13 +2377,13 @@ async function capture({
     runtime,
     runtimeSessions: runtimeFixtures.runtimeSessions,
     runtimeEvents: runtimeFixtures.runtimeEvents,
-    goal: scenario === 'goal' ? goal : null,
     terminal,
     emitRuntimeEvents: scenario !== 'home',
   })
   const page = await context.newPage()
   const unexpected = []
   let captureConfig = { enabled: true, error: '' }
+  let networkAccess = { available: true, enabled: false, port: null, configuredPort: 0, urls: [], directAccess: false, error: '' }
   const capturedTraces = structuredClone(traceFixtures)
   await page.route('**/*', (request) => {
     const origin = new URL(request.request().url()).origin
@@ -2018,6 +2420,20 @@ async function capture({
     })
 
     if (key === 'GET /api/leyline/connections') return json(backendRegistry)
+    if (key === 'GET /api/leyline/network-access') return json(networkAccess)
+    if (key === 'PUT /api/leyline/network-access' && scenario === 'network') {
+      const enabled = req.postDataJSON().enabled ?? networkAccess.enabled
+      const configuredPort = req.postDataJSON().port ?? networkAccess.configuredPort
+      const port = configuredPort || 52342
+      networkAccess = {
+        ...networkAccess,
+        enabled,
+        configuredPort,
+        port: enabled ? port : null,
+        urls: enabled ? [`http://192.0.2.10:${port}`, `http://198.51.100.10:${port}`] : [],
+      }
+      return json(networkAccess)
+    }
     if (key === `GET /api/leyline/settings/${THINKING_DEFAULT_SETTING_KEY}`) {
       return json({ key: THINKING_DEFAULT_SETTING_KEY, value: 'collapsed' })
     }
@@ -2073,16 +2489,10 @@ async function capture({
     if (key === 'GET /api/pi/files/settings') return json(fileSettings)
     if (key === 'GET /api/pi/projects') return json({ projects })
     if (key === 'GET /api/pi/fs') return json(projectDirectory)
-    if (key === 'GET /api/pi/sessions') {
-      return json({
-        sessions: scenario === 'research'
-          ? [researchSession, ...sessions]
-          : sessions,
-      })
-    }
+    if (key === 'GET /api/pi/sessions') return json({ sessions: captureSessions })
     if (key === 'GET /api/pi/state') return json({ active: runtime })
     if (key === 'POST /api/pi/active-session') return json({ active: runtime })
-    if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detailFor(scenario))
+    if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detail)
     if (key === 'GET /api/pi/review') {
       return json(scenario === 'review' ? reviewPayload : cleanReviewPayload)
     }
@@ -2093,7 +2503,7 @@ async function capture({
       return json(visionConfigPayload(url.searchParams.has('sessionPath')))
     }
     if (key === `GET /api/pi/sessions/${runtime.id}/export`) {
-      const html = await renderSessionExportHtml(detailFor(scenario))
+      const html = await renderSessionExportHtml(detail)
       return request.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: html })
     }
 
@@ -2137,12 +2547,24 @@ async function capture({
     await page.evaluate(() => window.scrollTo(0, 0))
     await assertPrivateDataAbsent(page)
     if (!exportPage) {
-      await assertModelLabel(page, `${runtime.state.model.provider}/${runtime.state.model.id}`)
+      await assertModelLabel(
+        page,
+        `${runtime.state.model.provider}/${runtime.state.model.id}`,
+        runtime.state.model.name,
+      )
       if (['home', 'ultrafast'].includes(scenario)) {
-        const chip = page.locator('.ultrafast-toggle:visible').first()
-        if ((await chip.innerText()).trim() !== 'ultrafast'
-          || await chip.getAttribute('aria-pressed') !== String(scenario === 'ultrafast')) {
-          throw new Error('Unexpected Ultrafast control state')
+        const enabled = scenario === 'ultrafast'
+        if (await page.locator('.mobile-model-control:visible').count()) {
+          const indicator = await page.locator('.mobile-ultrafast:visible').count()
+          if (indicator !== (enabled ? 1 : 0)) {
+            throw new Error('Unexpected mobile Ultrafast indicator state')
+          }
+        } else {
+          const chip = page.locator('.ultrafast-toggle:visible').first()
+          if ((await chip.innerText()).trim() !== 'ultrafast'
+            || await chip.getAttribute('aria-pressed') !== String(enabled)) {
+            throw new Error('Unexpected Ultrafast control state')
+          }
         }
       }
     }
@@ -2363,7 +2785,19 @@ async function assertPrivateDataAbsent(page) {
   }
 }
 
-async function assertModelLabel(page, expected) {
+async function assertModelLabel(page, expected, mobileExpected = expected) {
+  const mobileControl = page.locator('.mobile-model-control:visible').first()
+  if (await mobileControl.count()) {
+    await page.waitForFunction(({ expected }) => {
+      const controls = [...document.querySelectorAll('.mobile-model-control')]
+        .filter((control) => control.getClientRects().length)
+      return controls.length > 0 && controls.every((control) => {
+        const title = control.querySelector('.mobile-model-title > span')
+        return title && title.textContent.trim() === expected
+      })
+    }, { expected: mobileExpected }, { timeout: 15000 })
+    return
+  }
   const selector = '.model-picker:not(.small-picker):not(.tool-picker) > .model-picker-button'
   await page.waitForFunction(({ expected, selector }) => {
     const buttons = [...document.querySelectorAll(selector)]
@@ -2402,7 +2836,6 @@ function initBrowser({
   runtime,
   runtimeSessions,
   runtimeEvents,
-  goal: activeGoal,
   terminal,
   emitRuntimeEvents,
 }) {
@@ -2429,22 +2862,42 @@ function initBrowser({
   window.SpeechRecognition = MockSpeechRecognition
   window.webkitSpeechRecognition = MockSpeechRecognition
 
-  class MockEventSource extends EventTarget {
-    constructor(url) {
+  const NativeWebSocket = window.WebSocket
+  class MockWebSocket extends EventTarget {
+    static CONNECTING = 0
+    static OPEN = 1
+    static CLOSING = 2
+    static CLOSED = 3
+    constructor(url, protocols) {
       super()
-      this.url = url
-      this.readyState = 0
+      if ([protocols].flat().includes('vite-hmr')) return new NativeWebSocket(url, protocols)
+      this.url = String(url)
+      this.readyState = MockWebSocket.CONNECTING
+      const pathname = new URL(url, window.location.href).pathname
       setTimeout(() => {
-        if (this.readyState === 2) return
-        this.readyState = 1
-        this.onopen?.(new Event('open'))
-        this.dispatchEvent(new Event('open'))
-        if (new URL(url, window.location.href).pathname === '/api/pi/review/events') return
-        for (const activeRuntime of runtimeSessions) {
-          this.dispatchEvent(new MessageEvent('active_session', {
-            data: JSON.stringify(activeRuntime),
-          }))
+        if (this.readyState !== MockWebSocket.CONNECTING) return
+        if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal'].includes(pathname)
+          || (pathname === '/api/pi/terminal' && !terminal)) {
+          this.close()
+          return
         }
+        this.readyState = MockWebSocket.OPEN
+        const event = new Event('open')
+        this.onopen?.(event)
+        this.dispatchEvent(event)
+        if (pathname === '/api/pi/terminal') {
+          this.emit({ type: 'ready', cwd: '/workspace/harbor', shell: '/bin/zsh', pty: true })
+          this.emit({ type: 'data', data: '$ npm run docs:build\r\n✓ documentation build complete\r\n' })
+          return
+        }
+        if (pathname === '/api/pi/review/events') {
+          this.emit({ type: 'review_ready', data: {} })
+          return
+        }
+        for (const activeRuntime of runtimeSessions) {
+          this.emit({ type: 'active_session', data: activeRuntime })
+        }
+        this.emit({ type: 'runtime_roster', data: { sessionIds: runtimeSessions.map((session) => session.id) } })
         const events = [
           { activeSessionId: runtime.id, event: { type: 'session_start' } },
           { activeSessionId: runtime.id, event: { type: 'tool_execution_start', toolName: 'read' } },
@@ -2458,70 +2911,26 @@ function initBrowser({
         ]
         if (emitRuntimeEvents) {
           for (const data of [...events, ...runtimeEvents]) {
-            this.dispatchEvent(new MessageEvent('runtime_event', {
-              data: JSON.stringify(data),
-            }))
+            this.emit({ type: 'runtime_event', data })
           }
         }
-        this.dispatchEvent(new MessageEvent('active_session', {
-          data: JSON.stringify({ ...runtime, snapshotRevision: now + 1 }),
-        }))
-        if (activeGoal) {
-          this.dispatchEvent(new MessageEvent('extension_ui', {
-            data: JSON.stringify({
-              activeSessionId: runtime.id,
-              state: {
-                statuses: { goal: 'goal: active' },
-                widgets: {},
-                notifications: [],
-              },
-              goal: activeGoal,
-            }),
-          }))
-        }
-      }, 0)
+        this.emit({ type: 'active_session', data: { ...runtime, snapshotRevision: now + 1 } })
+      }, pathname === '/api/pi/terminal' ? 20 : 0)
     }
+    emit(frame) {
+      if (this.readyState !== MockWebSocket.OPEN) return
+      const event = new MessageEvent('message', { data: JSON.stringify(frame) })
+      this.onmessage?.(event)
+      this.dispatchEvent(event)
+    }
+    send() {}
     close() {
-      this.readyState = 2
+      if (this.readyState === MockWebSocket.CLOSED) return
+      this.readyState = MockWebSocket.CLOSED
+      const event = new CloseEvent('close', { code: 1000, wasClean: true })
+      this.onclose?.(event)
+      this.dispatchEvent(event)
     }
   }
-  window.EventSource = MockEventSource
-
-  if (terminal) {
-    class MockWebSocket extends EventTarget {
-      static CONNECTING = 0
-      static OPEN = 1
-      static CLOSING = 2
-      static CLOSED = 3
-      constructor(url) {
-        super()
-        this.url = url
-        this.readyState = MockWebSocket.CONNECTING
-        setTimeout(() => {
-          this.readyState = MockWebSocket.OPEN
-          this.dispatchEvent(new Event('open'))
-          this.dispatchEvent(new MessageEvent('message', {
-            data: JSON.stringify({
-              type: 'ready',
-              cwd: '/workspace/harbor',
-              shell: '/bin/zsh',
-              pty: true,
-            }),
-          }))
-          this.dispatchEvent(new MessageEvent('message', {
-            data: JSON.stringify({
-              type: 'data',
-              data: '$ npm run docs:build\r\n✓ documentation build complete\r\n',
-            }),
-          }))
-        }, 20)
-      }
-      send() {}
-      close() {
-        this.readyState = MockWebSocket.CLOSED
-        this.dispatchEvent(new Event('close'))
-      }
-    }
-    window.WebSocket = MockWebSocket
-  }
+  window.WebSocket = MockWebSocket
 }

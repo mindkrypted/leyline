@@ -1,3 +1,7 @@
+---
+description: Run Leyline's Electron app with Vite, use desktop shortcuts, and reload backend or desktop changes during development.
+---
+
 # Electron development
 
 ## Start the app

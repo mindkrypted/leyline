@@ -11,7 +11,7 @@ The modal has these categories:
 | Category | Applies to |
 | --- | --- |
 | **Display** | Transcript display across Leyline windows. |
-| **Connections** | Saved backend connections and the default connection. Each window selects its own active backend. |
+| **Connections** | Network access for the native backend, saved connections, and the default connection. Each window selects its own active backend. |
 | **Files** | File actions on the selected backend. |
 | **Agent defaults** | Global subagent and vision defaults on the selected backend. |
 | **Models & providers** | Pi provider credentials, custom providers, model definitions, and catalog overrides on the selected backend. |
@@ -59,7 +59,39 @@ The Leyline backend API does not have authentication. Do not expose the server t
 
 Traces and their capture setting also belong to the selected backend. The trace explorer does not combine data across connections. Trace input and output can contain private data, so protect access to the backend. See [Trace privacy](./tracing#keep-trace-data-private).
 
-For remote browser access, configure the server to allow the frontend origin. See [Environment variables](../reference/environment).
+### Share the native backend
+
+![Network access enabled with a saved proxy port and copyable sharing URLs](../assets/screenshots/network-access.png)
+
+1. Open **Settings → Connections** on the computer that runs Leyline.
+2. Turn on **Allow network access**.
+3. Select **Copy** beside an address that the other device can reach.
+4. Open that URL in the other device's browser.
+
+For Tailscale, use the address for this computer's Tailscale interface. Both devices need network access to that address and port.
+
+These controls share the **native backend**, even when the current window uses a saved remote connection. Network access is off by default. Sharing uses a separate listener on all IPv4 interfaces, including Wi-Fi and Tailscale.
+
+To set a fixed port:
+
+1. Enter a whole number from 1 through 65535 in **Proxy port**.
+2. Select **Apply**.
+
+Leave **Proxy port** blank and select **Apply** for automatic selection. An automatic port can change after you enable sharing again or restart Leyline. A fixed port stays the same across restarts.
+
+You can save a port while sharing is off. **Apply** changes only the port, not the switch. Leyline saves both settings and restores them at startup.
+
+Changes apply immediately without changing the local app's address or interrupting local clients and running agents. Changing an active port or turning access off disconnects remote clients and their terminals. After a port change, use the new sharing URL to reconnect.
+
+If a port is unavailable, Leyline shows an error. A failed change keeps the previous listener and saved port.
+
+::: warning
+Use trusted networks only. The API has no authentication. Anyone who can reach the sharing URL can access files, change settings, and run commands. Sharing is not restricted to Tailscale.
+:::
+
+If startup configuration already exposes the origin, the toggle does not close that separate access path. Settings shows a notice in this case.
+
+Opening the sharing URL serves both the app and API from one origin. No extra allowed-origin setting is necessary. A UI on a different non-loopback origin still needs `LEYLINE_SERVER_ALLOWED_ORIGINS`. See [Environment variables](../reference/environment).
 
 ## Manage models and providers
 

@@ -5,6 +5,9 @@ import MarkdownIt from 'markdown-it'
 import { parseDiffFromFile } from '@pierre/diffs'
 import { configureMarkdownLinks } from '../../lib/markdown-file-links.js'
 import { projectContextView, systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
+import { subagentStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
+import { subagentCallTitle, subagentEmptyText, subagentFallback, subagentOutput, subagentTasks, subagentTaskTitle } from '../../lib/subagent-view.js'
+import { activityEntry, activitySummary, groupToolActivity, mobileToolStatus, singleSubagentEntry, toolStatusTone } from '../../lib/tool-activity.js'
 import {
   imageBlocksFor,
   messageBlocksFor,
@@ -53,9 +56,34 @@ export async function renderSessionExportHtml(detail, shareMeta = {}) {
   const entries = detail.entries
     .filter(isExportRenderableEntry)
     .map(toExportEntry)
-  const body = entries.map(renderExportEntry).join('\n')
+  const entryIndices = new Map(entries.map((entry, index) => [entry, index]))
+  const body = groupToolActivity(entries).map(item => {
+    if (item.type !== 'tool-activity') return renderExportEntry(item, entryIndices.get(item))
+    const summary = activitySummary(item.items)
+    const inspectOnly = Boolean(singleSubagentEntry(item))
+    const disclosure = inspectOnly
+      ? '<svg class="mobile-activity-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" /></svg>'
+      : '<span class="mobile-activity-chevron" aria-hidden="true">›</span>'
+    const statusLabel = [
+      ...(summary.busy ? ['running'] : []),
+      ...summary.outcomes.map(outcome => outcome.text),
+    ].join(' · ') || 'Completed'
+    const outcomeHtml = summary.outcomes.length
+      ? `<span class="mobile-activity-outcomes">${summary.outcomes.map(outcome => `<span class="status-${outcome.status}">${escapeHtml(outcome.text)}</span>`).join('')}</span>`
+      : summary.busy ? '<span class="mobile-activity-live">running</span>' : '<span class="mobile-activity-check" aria-hidden="true">✓</span>'
+    return `<section class="export-tool-activity mobile-activity-card${inspectOnly ? '' : ' is-expanded'}${summary.hasSubagents ? ' has-subagents' : ''}"${inspectOnly ? ' data-subagent-only' : ''}>
+<button type="button" class="mobile-activity-summary" ${inspectOnly ? 'aria-haspopup="dialog" title="Inspect subagent tasks"' : 'aria-expanded="true"'}>
+<span class="mobile-activity-heading"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3ZM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" /></svg><strong>${item.items.length} tool ${item.items.length === 1 ? 'call' : 'calls'}</strong><span class="mobile-activity-state" title="${escapeHtml(statusLabel)}" aria-label="${escapeHtml(statusLabel)}">${summary.busy ? '<span class="mobile-activity-spinner" aria-hidden="true"></span>' : ''}${outcomeHtml}</span>${disclosure}</span>
+<span class="mobile-activity-breakdown">${item.operations.map(operation => `<span>${escapeHtml(operation)}</span>`).join('')}</span>
+</button>
+<div class="mobile-activity-list">${item.items.map(call => renderExportEntry(activityEntry(call), entryIndices.get(call))).join('\n')}</div>
+</section>`
+  }).join('\n')
   const researchSources = renderExportResearchSources(session.research)
-  const exportData = Buffer.from(JSON.stringify({ entries })).toString('base64')
+  const exportData = Buffer.from(JSON.stringify({
+    entries,
+    subagentOutputs: entries.map(entry => entry.toolName === 'subagent' ? subagentTasks(entry).map(subagentOutput) : null),
+  })).toString('base64')
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -88,6 +116,7 @@ ${researchSources}
 </main>
 <script id="export-data" type="application/json">${exportData}</script>
 <script>${systemInspectorJs()}</script>
+<script>${subagentInspectorJs()}</script>
 <script>${highlightJsSource()}</script>
 <script type="module">${exportJs()}</script>
 </body>
@@ -167,7 +196,7 @@ function toExportEntry(entry) {
   if (entry.type !== 'tool') return entry
   if (!entry.preview) return entry
 
-  const next = { ...entry, text: '' }
+  const next = { ...entry, text: '', toolOutcome: mobileToolStatus(entry) }
   if (entry.preview.kind === 'file') {
     const content = clippedExportContent(entry.preview.content || '')
     next.preview = {
@@ -200,18 +229,31 @@ function renderExportModelChange(entry) {
 </div>`
 }
 
+function toolStatusMark(tone) {
+  if (tone === 'running') return '<span class="tool-status-spinner" aria-hidden="true"></span>'
+  if (tone === 'stopped') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 5h6v6H5z" /></svg>'
+  if (tone === 'unknown') return '<span class="tool-status-question" aria-hidden="true">?</span>'
+  const path = tone === 'error'
+    ? 'M4.3 4.3 11.7 11.7M11.7 4.3 4.3 11.7'
+    : 'M3.1 8.5 6.4 11.7 12.9 4.4'
+  return `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${path}" /></svg>`
+}
+
 function renderExportTool(entry, index) {
   if (entry.toolName === 'subagent') {
     return renderExportSubagent(entry, index)
   }
-  return `<details class="tool-card transcript-tool${entry.isError ? ' error-card' : ''}">
+  const status = mobileToolStatus(entry)
+  const tone = toolStatusTone(status)
+  return `<details class="tool-card transcript-tool${['error', 'failed'].includes(status) ? ' error-card' : ''}">
 <summary class="tool-card-header">
 <span class="chevron tool-chevron">›</span>
 <span>${escapeHtml(entry.label)}</span>
 ${entry.code ? `<code>${escapeHtml(entry.code)}</code>` : ''}
 ${entry.contextLabel ? renderToolContext(entry) : ''}
-<em>${entry.isError ? 'error' : 'completed'}</em>
+<span class="tool-status-mark status-${tone}" title="${escapeHtml(status)}" role="img" aria-label="${escapeHtml(status)}">${toolStatusMark(tone)}</span>
 </summary>
+${entry.code && !['bash', 'search_memory'].includes(entry.toolName) ? `<div class="mobile-tool-target"><code>${escapeHtml(entry.preview?.path || entry.code)}</code></div>` : ''}
 <div class="tool-expanded-body" data-tool-index="${index}">
 <div class="tool-lazy-placeholder">Open to render preview</div>
 </div>
@@ -329,71 +371,56 @@ ${tool.removed ? '' : `<div class="system-prompt-prose markdown-body">${renderMa
 }
 
 function renderExportSubagent(entry, index) {
-  const details = entry.subagentDetails
-  const results = details?.results || []
-  const hasErroredResult = results.some((result) => result.error || result.exitCode !== 0)
-  const status = details?.background ? 'running' : (entry.isError || hasErroredResult ? 'error' : 'completed')
-  const target = exportSubagentTarget(entry)
-  const research = entry.researchThreads === true
+  const tasks = subagentTasks(entry)
+  const outcome = subagentSummary(entry)
+  const fallback = subagentFallback(entry)
+  const label = entry.researchThreads ? 'Research threads' : 'Subagent'
+  const callTitle = subagentCallTitle(entry)
+  const title = tasks.length > 1 ? callTitle : tasks.length ? '1 delegated task' : 'Task details'
+  const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4H4v12h4" /></svg>'
+  const status = (task) => {
+    const key = subagentStatus(task, outcome.active)
+    const { label, path } = subagentStatuses[key]
+    return `<span class="subagent-task-status status-${key}"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path d="${path}" /></svg>${label}</span>`
+  }
+  const summary = outcome.counts.length
+    ? `<div class="subagent-summary" aria-label="Task outcomes">${outcome.counts.map(count => `<span class="status-${count.status}">${escapeHtml(count.text)}</span>`).join('')}</div>`
+    : `<span class="subagent-task-status status-${fallback.status}">${escapeHtml(fallback.label)}</span>`
+  const taskTemplates = tasks.map((task, taskIndex) => {
+    const key = subagentStatus(task, outcome.active)
+    const output = subagentOutput(task)
+    return `<template data-subagent-task-content="${taskIndex}">
+<div class="subagent-inspector-meta"><span>Agent <code>${escapeHtml(task.agent)}</code></span>${task.research ? `<span>${escapeHtml(task.research.sources?.length || 0)} sources</span>` : ''}${status(task)}</div>
+${task.task ? `<details class="subagent-inspector-prompt"><summary><span aria-hidden="true">›</span> Full task prompt</summary><pre>\n${escapeHtml(task.task)}</pre></details>` : ''}
+<h3>${output ? (key === 'completed' ? 'Result' : 'Output') : 'Task outcome'}</h3>
+${output ? `<div class="subagent-inspector-output markdown-body">${renderMarkdown(output)}</div>` : `<p class="subagent-inspector-empty">${escapeHtml(subagentEmptyText(key))}</p>`}
+${task.error && task.error !== output ? `<pre class="subagent-inspector-error">${escapeHtml(task.error)}</pre>` : ''}
+${entry.subagentDetails?.resultsUnavailable && entry.text ? `<h3>Call output</h3><pre class="subagent-inspector-raw">${escapeHtml(entry.text)}</pre>` : ''}
+</template>`
+  }).join('')
 
-  let resultsHtml = ''
-  for (const result of results) {
-    const output = subagentFinalOutput(result)
-    resultsHtml += `
-<div class="subagent-detail-block">
-<div class="subagent-detail-header">
-<strong>${escapeHtml(research ? researchThreadId(result) : result.agent)}</strong>
-<span class="subagent-detail-task">${escapeHtml(research ? researchThreadTitle(result) : result.task)}</span>
+  return `<div class="tool-card subagent-card transcript-tool">
+<div class="subagent-header">
+<button type="button" class="tool-inspect-button" data-subagent-index="${index}" aria-haspopup="dialog" aria-label="${escapeHtml(`Inspect ${label}: ${callTitle}`)}">
+<span class="subagent-icon" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13" /><path d="m10 7 3 3-3 3" /></svg></span>
+<span class="subagent-label">${label}</span>
+<span class="subagent-call-title">${escapeHtml(callTitle)}</span>
+<svg class="subagent-inspect-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" /></svg>
+</button>
 </div>
-${output ? `<pre class="subagent-detail-output">${escapeHtml(output)}</pre>` : ''}
+<template id="subagent-template-${index}">
+<header class="subagent-inspector-header">
+<div><p>${label}</p><h2 id="subagent-inspector-title">${escapeHtml(title)}</h2></div>
+<button class="subagent-inspector-icon-button" type="button" title="Copy tool output" aria-label="Copy tool output" data-subagent-copy-tool>${copyIcon}</button>
+<button class="subagent-inspector-icon-button" type="button" aria-label="Close subagent inspector" data-subagent-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
+</header>
+<div class="subagent-inspector-summary">${summary}${tasks.length === 1 ? `<p class="subagent-inspector-task-title">${escapeHtml(subagentTaskTitle(tasks[0]))}</p>` : ''}</div>
+${tasks.length > 1 ? `<nav class="subagent-inspector-tasks" aria-label="Subagent tasks">${tasks.map((task, taskIndex) => `<button class="subagent-inspector-task" type="button" data-subagent-task="${taskIndex}" aria-pressed="${taskIndex === 0}" title="${escapeHtml(subagentTaskTitle(task, taskIndex))}"><span class="subagent-inspector-index">${taskIndex + 1}</span><span class="subagent-inspector-task-label">${escapeHtml(subagentTaskTitle(task, taskIndex))}</span>${status(task)}</button>`).join('')}</nav>` : ''}
+<div class="subagent-inspector-content" tabindex="0" aria-label="Selected task details">${tasks.length ? '' : `<p class="subagent-inspector-empty">${fallback.status === 'running' ? 'Waiting for task updates.' : 'Individual task details are unavailable.'}</p>${entry.text ? `<pre class="subagent-inspector-raw">${escapeHtml(entry.text)}</pre>` : ''}`}</div>
+${taskTemplates}
+<footer class="subagent-inspector-footer"><span>Child sessions are available in Leyline</span><button type="button" data-subagent-copy-result hidden>${copyIcon}<span aria-live="polite">Copy result</span></button></footer>
+</template>
 </div>`
-  }
-
-  return `<details class="tool-card subagent-card transcript-tool${entry.isError ? ' error-card' : ''}">
-<summary class="subagent-header">
-<span class="chevron tool-chevron">›</span>
-<span class="subagent-icon" aria-hidden="true">
-<svg viewBox="0 0 16 16" fill="none">
-<path d="M3 2.5v4A3.5 3.5 0 0 0 6.5 10H13"></path>
-<path d="m10 7 3 3-3 3"></path>
-</svg>
-</span>
-<span class="subagent-label">${research ? 'Research threads' : 'Subagent'}</span>
-${target ? `<code>${escapeHtml(target)}</code>` : ''}
-<em class="subagent-status status-${status}">${status}</em>
-</summary>
-<div class="tool-expanded-body subagent-expanded" data-tool-index="${index}" data-rendered="true">
-${resultsHtml || '<div class="tool-lazy-placeholder">Open to render details</div>'}
-</div>
-</details>`
-}
-
-function researchThreadId(result) {
-  return result.research?.threadId
-    || result.task?.match(/^\s*\[([^\]]+)\]/)?.[1]
-    || result.agent
-}
-
-function researchThreadTitle(result) {
-  return result.research?.title
-    || result.task?.replace(/^\s*\[[^\]]+\]\s*/, '')
-    || result.agent
-}
-
-function exportSubagentTarget(entry) {
-  if (entry.researchThreads) return entry.code || ''
-  const agent = entry.label.replace(/^Subagent · /, '')
-  if (agent && agent !== 'subagent' && agent !== entry.code) return agent
-  return entry.code || ''
-}
-
-function subagentFinalOutput(result) {
-  if (result.error) return result.error
-  for (let i = result.messages.length - 1; i >= 0; i--) {
-    const message = result.messages[i]
-    if (message.role === 'assistant' || message.role === 'error') return message.content.trim()
-  }
-  return ''
 }
 
 function renderToolContext(entry) {
@@ -694,6 +721,148 @@ function systemInspectorJs() {
       clearTimeout(copyTimer)
       copyTimer = setTimeout(() => { copy.querySelector('span').textContent = 'Copy' }, 2000)
     })
+  }
+})()`
+}
+
+function subagentInspectorJs() {
+  return `(() => {
+  for (const button of document.querySelectorAll('.export-tool-activity > .mobile-activity-summary')) {
+    const card = button.parentElement
+    card.classList.remove('is-expanded')
+    if (card.hasAttribute('data-subagent-only')) continue
+    button.setAttribute('aria-expanded', 'false')
+    button.addEventListener('click', () => {
+      const expanded = button.getAttribute('aria-expanded') !== 'true'
+      button.setAttribute('aria-expanded', String(expanded))
+      card.classList.toggle('is-expanded', expanded)
+    })
+    card.addEventListener('click', (event) => {
+      if (card.classList.contains('is-expanded') || button.contains(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      button.click()
+    }, true)
+  }
+
+  let dialog
+  let data
+  for (const trigger of document.querySelectorAll('[data-subagent-index]')) {
+    const open = (opener) => {
+      if (dialog) return
+      if (!data) {
+        const encoded = document.getElementById('export-data').textContent
+        data = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(encoded), char => char.charCodeAt(0))))
+      }
+      const index = Number(trigger.dataset.subagentIndex)
+      const template = document.getElementById('subagent-template-' + index)
+      const pane = document.createElement('dialog')
+      pane.id = 'subagent-inspector'
+      pane.className = 'subagent-inspector'
+      pane.tabIndex = -1
+      pane.autofocus = true
+      pane.setAttribute('aria-modal', 'true')
+      pane.setAttribute('aria-labelledby', 'subagent-inspector-title')
+      pane.appendChild(template.content.cloneNode(true))
+      dialog = pane
+      const body = pane.querySelector('.subagent-inspector-content')
+      const taskTemplates = [...pane.querySelectorAll('[data-subagent-task-content]')]
+      const tasks = [...pane.querySelectorAll('[data-subagent-task]')]
+      const resultButton = pane.querySelector('[data-subagent-copy-result]')
+      let selected = 0
+      let selectionRevision = 0
+
+      function selectTask(taskIndex) {
+        selected = taskIndex
+        selectionRevision++
+        for (const task of tasks) task.setAttribute('aria-pressed', String(Number(task.dataset.subagentTask) === selected))
+        const content = taskTemplates[selected]
+        if (content) body.replaceChildren(content.content.cloneNode(true))
+        body.scrollTop = 0
+        resultButton.hidden = !data.subagentOutputs[index]?.[selected]
+        resultButton.querySelector('span').textContent = 'Copy result'
+        resultButton.title = 'Copy result'
+        resultButton.setAttribute('aria-label', 'Copy result')
+        if (window.hljs) body.querySelectorAll('pre code').forEach(code => window.hljs.highlightElement(code))
+      }
+
+      function bindCopy(button, getText, label) {
+        let timer
+        button.addEventListener('click', async () => {
+          const revision = selectionRevision
+          const text = getText()
+          let copied = false
+          try {
+            await navigator.clipboard.writeText(text)
+            copied = true
+          } catch {
+            if (!pane.isConnected) return
+            const input = document.createElement('textarea')
+            input.value = text
+            input.style.cssText = 'position:fixed;opacity:0;pointer-events:none'
+            pane.appendChild(input)
+            input.focus({ preventScroll: true })
+            input.select()
+            try { copied = document.execCommand('copy') } catch {}
+            input.remove()
+            button.focus({ preventScroll: true })
+          }
+          if (!pane.isConnected || (button === resultButton && revision !== selectionRevision)) return
+          const feedback = copied ? 'Copied' : 'Copy failed'
+          const span = button.querySelector('span')
+          if (span) span.textContent = feedback
+          button.title = feedback
+          button.setAttribute('aria-label', feedback)
+          clearTimeout(timer)
+          timer = setTimeout(() => {
+            if (span) span.textContent = label
+            button.title = label
+            button.setAttribute('aria-label', label)
+          }, 2000)
+        })
+      }
+
+      for (const task of tasks) task.addEventListener('click', () => selectTask(Number(task.dataset.subagentTask)))
+      bindCopy(resultButton, () => data.subagentOutputs[index]?.[selected] || '', 'Copy result')
+      bindCopy(pane.querySelector('[data-subagent-copy-tool]'), () => data.entries[index].text || '', 'Copy tool output')
+      pane.querySelector('[data-subagent-close]').addEventListener('click', () => pane.close())
+      pane.addEventListener('cancel', (event) => {
+        event.preventDefault()
+        pane.close()
+      })
+      let backdropPointer = false
+      function outside(event) {
+        const rect = pane.getBoundingClientRect()
+        return event.target === pane && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)
+      }
+      pane.addEventListener('pointerdown', (event) => { backdropPointer = outside(event) })
+      pane.addEventListener('click', (event) => {
+        if (backdropPointer && outside(event)) pane.close()
+        backdropPointer = false
+      })
+      const scrollX = window.scrollX
+      const scrollY = window.scrollY
+      const overflow = document.documentElement.style.overflow
+      pane.addEventListener('close', () => {
+        pane.remove()
+        dialog = null
+        document.documentElement.style.overflow = overflow
+        opener.focus({ preventScroll: true })
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' })
+      }, { once: true })
+      selectTask(0)
+      document.body.appendChild(pane)
+      document.documentElement.style.overflow = 'hidden'
+      pane.showModal()
+      pane.focus({ preventScroll: true })
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: 'instant' })
+    }
+    trigger.addEventListener('click', () => open(trigger))
+    const card = trigger.closest('[data-subagent-only]')
+    if (card) {
+      const summary = card.querySelector('.mobile-activity-summary')
+      summary.addEventListener('click', () => open(summary))
+    }
   }
 })()`
 }
@@ -1207,8 +1376,8 @@ button, input, textarea { color: inherit; font: inherit; }
 }
 .entry-text { margin-bottom: 0 !important; }
 .markdown-body {
+  min-width: 0;
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
 .markdown-body p,
 .markdown-body ul,
@@ -1243,6 +1412,8 @@ button, input, textarea { color: inherit; font: inherit; }
 }
 .markdown-body pre {
   overflow: auto;
+  overflow-wrap: normal;
+  word-break: normal;
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   background: #131419;
@@ -1267,6 +1438,8 @@ button, input, textarea { color: inherit; font: inherit; }
   border: 0;
   border-collapse: collapse;
   font-size: 13px;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 .markdown-body th,
 .markdown-body td {
@@ -1346,16 +1519,40 @@ button, input, textarea { color: inherit; font: inherit; }
   transition-duration: var(--motion-quick);
   transition-timing-function: var(--ease-accelerate);
 }
-.tool-card-header em {
+.tool-status-mark {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   margin-left: auto;
+  border-radius: 6px;
+  background: rgb(120 189 139 / 13%);
   color: #78bd8b;
-  font-style: normal;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
-.error-card .tool-card-header em { color: #fca5a5; }
+.tool-status-mark svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tool-status-mark.status-running { background: rgb(169 156 255 / 13%); color: #a99cff; }
+.tool-status-mark.status-error { background: rgb(216 138 150 / 13%); color: #d88a96; }
+.tool-status-mark.status-stopped { background: rgb(198 173 131 / 13%); color: #c6ad83; }
+.tool-status-mark.status-unknown { background: rgb(147 147 155 / 13%); color: #93939b; }
+.tool-status-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.4px solid rgb(191 181 255 / 24%);
+  border-top-color: #bfb5ff;
+  border-radius: 999px;
+  animation: session-loading-spin 800ms linear infinite;
+}
+.tool-status-question { font-size: 11px; font-weight: 650; line-height: 1; }
 .tool-card-header code {
   overflow: hidden;
   min-width: 0;
@@ -1734,6 +1931,17 @@ button, input, textarea { color: inherit; font: inherit; }
   .user-message { padding: 9px 10px; }
   .tool-card-header { gap: 7px; }
 }
+@media (pointer: coarse) {
+  .tool-card > summary,
+  .thinking-trigger,
+  .skill-summary,
+  .system-prompt-trigger,
+  .system-prompt-inspector button,
+  .system-prompt-inspector summary {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .transcript-message,
   .tool-card,
@@ -1756,14 +1964,7 @@ button, input, textarea { color: inherit; font: inherit; }
   .tool-card[open] .tool-chevron {
     transform: rotate(90deg);
   }
-  .subagent-card[open] .chevron,
-  .subagent-card[open] .tool-chevron {
-    transform: rotate(90deg);
-  }
 }
-
-.subagent-card summary { list-style: none; cursor: pointer; }
-.subagent-card summary::-webkit-details-marker { display: none; }
 
 .subagent-header {
   display: flex;
@@ -1773,6 +1974,55 @@ button, input, textarea { color: inherit; font: inherit; }
   color: #85858c;
   font-size: 12px;
   font-weight: 650;
+}
+
+.tool-inspect-button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subagent-card.is-inspected .tool-inspect-button {
+  background: rgb(255 255 255 / 3%);
+}
+
+.tool-card .tool-inspect-button:focus-visible {
+  outline: 1px solid #aaa;
+  outline-offset: -2px;
+}
+
+.subagent-call-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #bdbdc5;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-inspect-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  fill: none;
+  stroke: #a5a0b5;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .subagent-icon {
@@ -1800,86 +2050,639 @@ button, input, textarea { color: inherit; font: inherit; }
   font-weight: 650;
 }
 
-.subagent-header code {
-  overflow: hidden;
+.subagent-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.subagent-summary > span {
+  white-space: nowrap;
+}
+
+.subagent-task-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.subagent-task-status svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.subagent-summary .status-completed,
+.subagent-task-status.status-completed {
+  color: #8abb97;
+}
+
+.subagent-summary .status-running,
+.subagent-task-status.status-running {
+  color: #b0a2f4;
+}
+
+.subagent-summary .status-stopped,
+.subagent-task-status.status-stopped {
+  color: #c6ad83;
+}
+
+.subagent-summary .status-failed,
+.subagent-task-status.status-failed {
+  color: #d88a96;
+}
+
+.subagent-summary .status-queued,
+.subagent-summary .status-not-started,
+.subagent-summary .status-unknown,
+.subagent-task-status.status-queued,
+.subagent-task-status.status-not-started,
+.subagent-task-status.status-unknown {
+  color: #93939b;
+}
+
+.subagent-inspector {
+  display: flex;
+  flex-direction: column;
+  width: min(660px, 100%);
+  height: 100%;
+  max-height: 900px;
   min-width: 0;
-  max-width: 320px;
-  border: 1px solid var(--border-soft);
-  border-radius: 7px;
-  background: #17181e;
-  padding: 2px 6px;
-  color: #aaa;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #37373c;
+  border-radius: 13px;
+  padding: 0;
+  outline: none;
+  background: #191919;
+  color: #ececec;
+  font-family: inherit;
+  line-height: 1.5;
+  box-shadow: 0 20px 90px rgb(0 0 0 / 45%);
+}
+
+.subagent-inspector [hidden],
+dialog.subagent-inspector:not([open]) {
+  display: none;
+}
+
+.subagent-inspector svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.subagent-inspector-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #2c2c2f;
+  padding: 17px 20px;
+}
+
+.subagent-inspector-header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.subagent-inspector-header p {
+  margin: 0 0 4px;
+  color: #93939b;
+  font-size: 11px;
+}
+
+.subagent-inspector-header h2 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 550;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.subagent-header em {
-  flex: 0 0 auto;
-  margin-left: auto;
+.subagent-inspector-icon-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 7px;
+  padding: 0;
+  background: transparent;
+  color: #aaaab5;
+  cursor: pointer;
+}
+
+.subagent-inspector-icon-button:hover {
+  background: #29292c;
+  color: #ececec;
+}
+
+.subagent-inspector-summary {
+  flex: none;
+  border-bottom: 1px solid #2b2b2e;
+  padding: 12px 20px;
+}
+
+.subagent-inspector-task-title {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 10px 0 0;
+  color: #c4c4ce;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.subagent-inspector-tasks {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 31%;
+  overflow: auto;
+  border-bottom: 1px solid #2c2c2f;
+  padding: 8px 12px;
+}
+
+.subagent-inspector-task {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 9px;
+  background: transparent;
+  color: #c9c9d0;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion-quick) var(--ease-standard),
+    border-color var(--motion-quick) var(--ease-standard);
+}
+
+.subagent-inspector-task:hover {
+  background: #252527;
+}
+
+.subagent-inspector-task[aria-pressed="true"] {
+  border-color: #3a3a40;
+  background: #2a2a2d;
+}
+
+.subagent-inspector-index {
+  color: #93939b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
-  font-style: normal;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.subagent-inspector-task-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-inspector-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 22px 24px;
+  overflow-wrap: anywhere;
+}
+
+.subagent-inspector-tasks,
+.subagent-inspector-content {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a transparent;
+}
+
+.subagent-inspector-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-height: 28px;
+  color: #93939b;
+  font-size: 11px;
+}
+
+.subagent-inspector-meta > span:first-child {
+  min-width: 0;
+}
+
+.subagent-inspector-meta code {
+  color: #b0b0ba;
+  font-size: inherit;
+}
+
+.subagent-inspector-prompt {
+  margin: 3px 0 16px;
+}
+
+.subagent-inspector-prompt summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  min-height: 30px;
+  color: #a0a0ab;
+  font-size: 11px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.subagent-inspector-prompt summary::-webkit-details-marker {
+  display: none;
+}
+
+.subagent-inspector-prompt summary > span {
+  display: inline-block;
+  transition: transform var(--motion-base) var(--ease-emphasized);
+}
+
+.subagent-inspector-prompt[open] summary > span {
+  transform: rotate(90deg);
+}
+
+.subagent-inspector-prompt pre,
+.subagent-inspector-error,
+.subagent-inspector-raw {
+  margin: 6px 0 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: #131313;
+  color: #b0b0ba;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subagent-inspector-error {
+  margin-top: 14px;
+  color: #dca0aa;
+}
+
+.subagent-inspector-content > h3 {
+  margin: 2px 0 10px;
+  color: #a0a0ab;
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
 }
 
-.subagent-header em.status-completed { color: #78bd8b; }
-.subagent-header em.status-running { color: #a99cff; }
-.subagent-header em.status-error { color: #fca5a5; }
-
-.subagent-expanded {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin: 9px 0 0 39px;
-  border-top: 1px solid var(--border-soft);
-  padding-top: 9px;
-}
-
-.subagent-detail-block {
-  border: 0;
-  border-bottom: 1px solid rgb(255 255 255 / 5%);
-  border-radius: 0;
-  background: transparent;
-  padding: 10px 0;
-}
-
-.subagent-detail-block:last-child { border-bottom: 0; }
-
-.subagent-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 7px;
-}
-
-.subagent-detail-header strong {
-  color: #aaa;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.subagent-detail-task {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  color: #8f8f95;
-  font-size: 12px;
-}
-
-.subagent-detail-output {
-  overflow: auto;
-  max-height: 200px;
+.subagent-inspector-output,
+.subagent-inspector-empty {
   margin: 0;
-  border: 1px solid var(--border-soft);
+  color: #c2c2ca;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.subagent-inspector-output :is(p, ul, ol, pre, blockquote, .table-wrap) {
+  margin: 0 0 14px;
+}
+
+.subagent-inspector-output :is(h1, h2, h3, h4, h5, h6) {
+  margin: 22px 0 10px;
+  color: #e0e0e6;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.subagent-inspector-output h1 {
+  font-size: 22px;
+}
+
+.subagent-inspector-output h2 {
+  font-size: 19px;
+}
+
+.subagent-inspector-output h3 {
+  font-size: 16px;
+}
+
+.subagent-inspector-output > :first-child {
+  margin-top: 0;
+}
+
+.subagent-inspector-output > :last-child {
+  margin-bottom: 0;
+}
+
+.subagent-inspector-output :is(ul, ol) {
+  padding-left: 22px;
+}
+
+.subagent-inspector-output li + li {
+  margin-top: 4px;
+}
+
+.subagent-inspector-output strong {
+  color: #e0e0e6;
+  font-weight: 600;
+}
+
+.subagent-inspector-output code {
+  border: 0;
+  border-radius: 4px;
+  background: #242426;
+  padding: 2px 4px;
+  color: #c6bfdc;
+  font-size: 0.9em;
+}
+
+.subagent-inspector-output pre {
+  overflow: auto;
+  border: 1px solid #2b2b2e;
   border-radius: 6px;
-  background: rgb(0 0 0 / 20%);
-  padding: 8px;
-  color: #b8b8b8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: #141414;
+  padding: 12px;
   font-size: 12px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-}`
+  line-height: 1.65;
+}
+
+.subagent-inspector-output pre code {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+}
+
+.subagent-inspector-output img {
+  max-width: 100%;
+  height: auto;
+}
+
+.subagent-inspector-footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+  border-top: 1px solid #2b2b2f;
+  padding: 8px 21px;
+  color: #93939b;
+  font-size: 11px;
+}
+
+.subagent-inspector-footer > span {
+  min-width: 0;
+}
+
+.subagent-inspector-footer button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 5px;
+  padding: 4px 0;
+  background: transparent;
+  color: #b0a6cb;
+  font: inherit;
+  cursor: pointer;
+}
+
+.subagent-inspector-footer button:hover,
+.subagent-inspector-prompt summary:hover {
+  color: #ececec;
+}
+
+.subagent-inspector :is(button, summary, a):focus-visible {
+  outline: 1px solid #aaa;
+  outline-offset: 2px;
+}
+
+.subagent-inspector-content:focus-visible {
+  outline: 1px solid #777;
+  outline-offset: -4px;
+}
+
+dialog.subagent-inspector {
+  position: fixed;
+  inset: 16px 16px 16px auto;
+  width: min(660px, calc(100% - 32px));
+  max-width: none;
+  height: calc(100dvh - 32px);
+  margin: auto 0;
+}
+
+dialog.subagent-inspector::backdrop {
+  background: rgb(0 0 0 / 58%);
+}
+
+dialog.subagent-inspector[open] {
+  animation: subagent-inspector-in var(--motion-slow) var(--ease-emphasized);
+}
+
+@keyframes subagent-inspector-in {
+  from { opacity: 0; transform: translateX(30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 760px) {
+  .tool-inspect-button {
+    gap: 7px;
+    min-height: 44px;
+  }
+
+  .subagent-inspector {
+    width: 100%;
+    height: 90%;
+    max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+  }
+
+  .subagent-inspector-header {
+    padding: 13px 16px;
+  }
+
+  .subagent-inspector-header h2 {
+    font-size: 16px;
+  }
+
+  .subagent-inspector-summary {
+    padding: 10px 16px;
+  }
+
+  .subagent-inspector-tasks {
+    max-height: 29%;
+    padding: 6px 8px;
+  }
+
+  .subagent-inspector-task {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+    gap: 5px;
+    min-height: 45px;
+  }
+
+  .subagent-inspector-content {
+    padding: 12px 16px 20px;
+  }
+
+  .subagent-inspector-output,
+  .subagent-inspector-empty {
+    font-size: 13px;
+  }
+
+  .subagent-inspector-footer {
+    padding: 6px 16px max(6px, env(safe-area-inset-bottom));
+  }
+
+  dialog.subagent-inspector {
+    inset: auto 0 0;
+    width: 100%;
+    height: 90dvh;
+    margin: 0;
+  }
+
+  dialog.subagent-inspector[open] {
+    animation-name: subagent-inspector-up;
+  }
+
+  @keyframes subagent-inspector-up {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+@media (max-width: 760px), (pointer: coarse) {
+  .subagent-inspector-icon-button,
+  .subagent-inspector-footer button,
+  .subagent-inspector-prompt summary,
+  .subagent-inspector-task {
+    min-height: 44px;
+  }
+
+  .subagent-inspector-icon-button {
+    min-width: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subagent-inspector-task,
+  .subagent-inspector-prompt summary > span {
+    transition: none;
+  }
+
+  dialog.subagent-inspector[open] {
+    animation: none;
+  }
+}
+.export-tool-activity {
+  --activity-row-height: 38px;
+  overflow: hidden;
+  width: min(var(--content-max), 100%);
+  margin: 16px auto 20px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2.4%);
+}
+.export-tool-activity > .mobile-activity-summary {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mobile-activity-heading { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 13px; background: rgb(255 255 255 / 4%); }
+.mobile-activity-heading svg { flex: none; width: 16px; height: 16px; fill: none; stroke: #b7b0ce; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.mobile-activity-heading strong { color: #a5a5a5; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.mobile-activity-state { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; font-size: 11px; font-weight: 550; }
+.mobile-activity-check { color: #8fbc9b; font-size: 13px; }
+.mobile-activity-live { color: #b8aafa; }
+.mobile-activity-outcomes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 10px; min-width: 0; padding: 6px 0; line-height: 1.6; }
+.mobile-activity-outcomes > span { white-space: nowrap; }
+.mobile-activity-outcomes .status-completed { color: #8abb97; }
+.mobile-activity-outcomes .status-running { color: #b0a2f4; }
+.mobile-activity-outcomes .status-queued { color: #93939b; }
+.mobile-activity-outcomes .status-error { color: #fca5a5; }
+.mobile-activity-outcomes .status-stopped { color: #c6ad83; }
+.mobile-activity-outcomes .status-unknown,
+.mobile-activity-outcomes .status-not-started { color: #93939b; }
+.mobile-activity-spinner { flex: none; width: 11px; height: 11px; border: 1.5px solid rgb(191 181 255 / 24%); border-top-color: #bfb5ff; border-radius: 999px; animation: session-loading-spin 800ms linear infinite; }
+@keyframes session-loading-spin { to { transform: rotate(360deg); } }
+.mobile-activity-chevron { flex: none; color: #aaa; transition: transform 280ms var(--ease-emphasized); }
+.mobile-activity-card.is-expanded .mobile-activity-chevron { transform: rotate(90deg); }
+.mobile-activity-breakdown { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 30px; border-top: 1px solid rgb(255 255 255 / 6%); padding: 7px 13px; background: rgb(255 255 255 / 3%); color: #b8b8b8; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 11px; }
+.export-tool-activity > .mobile-activity-list { display: flex; flex-direction: column; justify-content: flex-end; height: calc(var(--activity-row-height) + 1px); padding: 0 13px; overflow: hidden; }
+.export-tool-activity.is-expanded > .mobile-activity-list { display: block; height: auto; padding: 3px 13px; overflow: visible; pointer-events: auto; }
+.mobile-activity-list .tool-card { margin: 0; border-top: 1px solid rgb(255 255 255 / 5%); border-radius: 0; padding: 0; background: transparent; }
+.mobile-activity-list > .tool-card:first-child { border-top: 0; }
+.mobile-activity-list .tool-card:is(.is-expanded, :hover) { background: transparent; }
+.mobile-activity-list .tool-expanded-body { margin-top: 0; padding: 9px 0 12px 13px; }
+.mobile-activity-list .tool-card-header .chevron { flex-shrink: 0; width: 6px; text-align: center; }
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list > .tool-card:last-child { border-top-color: transparent; }
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list > .tool-card:not(:last-child) { display: none; }
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list .tool-expanded-body,
+.export-tool-activity:not(.is-expanded) > .mobile-activity-list .mobile-tool-target { display: none; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header { flex-wrap: nowrap; gap: 7px; min-height: var(--activity-row-height); }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; font-size: 12px; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header .copy-button { display: none; }
+.mobile-activity-list .tool-card:not(.subagent-card)[open] .tool-card-header .copy-button { display: grid; place-items: center; min-width: 30px; min-height: 30px; }
+.tool-card[open] .tool-chevron { transform: none; }
+.mobile-tool-target { display: none; }
+.mobile-activity-list .subagent-header .tool-inspect-button { height: var(--activity-row-height); min-height: var(--activity-row-height); }
+.mobile-activity-card.has-subagents .mobile-activity-state { flex: 1; justify-content: flex-end; }
+.mobile-activity-summary:focus-visible { outline: 2px solid #aaa; outline-offset: -2px; }
+@media (max-width: 760px) {
+  .export-tool-activity { --activity-row-height: 44px; }
+  .mobile-activity-heading { min-height: 46px; padding: 0 11px; }
+  .mobile-activity-breakdown { min-height: 31px; padding: 8px 12px; }
+  .export-tool-activity > .mobile-activity-list { padding: 0 10px; }
+  .export-tool-activity.is-expanded > .mobile-activity-list { padding: 4px 10px; }
+  .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header { min-height: 44px; }
+  .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { max-width: 40%; font-size: 11px; }
+  .mobile-activity-list .tool-card:not(.subagent-card) .tool-card-header code { font-size: 11px; }
+  .mobile-activity-card.has-subagents .mobile-activity-heading { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 0 8px; padding: 9px 11px; }
+  .mobile-activity-card.has-subagents .mobile-activity-chevron { grid-column: 3; grid-row: 1; }
+  .mobile-activity-card.has-subagents .mobile-activity-state { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; min-height: 36px; margin: 5px 0 0; }
+  .mobile-activity-card.has-subagents .mobile-activity-outcomes { justify-content: flex-start; padding: 0; }
+  .tool-card:not(.subagent-card) .tool-card-header { flex-wrap: nowrap; gap: 7px; min-height: 44px; }
+  .tool-card:not(.subagent-card) .tool-card-header > span:nth-child(2) { flex: none; max-width: 40%; font-size: 11px; }
+  .tool-card:not(.subagent-card) .tool-card-header code { flex: 1; min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .tool-card[open] > .mobile-tool-target { display: block; padding: 8px 0; color: #ccc; font-size: 11px; overflow-wrap: anywhere; }
+  .mobile-activity-list .tool-card[open] > .mobile-tool-target { margin-left: 13px; }
+}
+`
 }

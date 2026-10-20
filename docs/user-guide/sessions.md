@@ -9,7 +9,7 @@ A session contains one pi conversation tree. Leyline shows the active branch as 
 
 Use **Go to** when the session belongs to a different project.
 
-You can also focus a session row and press **Enter** or **Space**. Press **Arrow Up** or **Arrow Down** to focus another row.
+You can also focus a session row and press **Enter** or **Space**. Press **Arrow Up** or **Arrow Down** to move between visible parent and child rows.
 
 A selected session uses the route `/sessions/<encoded-id>`. The start screen uses `/`.
 
@@ -104,7 +104,19 @@ Session deletion does not delete its Elune traces. Trace data can retain prompts
 
 ## Open a subagent session
 
-Subagent child sessions do not appear in the sidebar. Open a child session from its subagent card or an available **Child sessions** link in a trace observation.
+Subagent child sessions appear as nested rows under their parent session in the sidebar. Select a child row to open its transcript directly. Use the chevron to the left of the parent title to show or hide its children.
+
+![Sidebar with subagent child rows nested under their parent session](../assets/screenshots/subagent-sidebar.png)
+
+New child rows show the session title supplied by the parent agent. A renamed child uses its current session name. Older children without names use the task label.
+
+By default, children expand when a child is live or selected. A manual chevron choice overrides this default. Settled children remain available under the parent, but collapse by default when none is live or selected. Children stay in creation order, so live updates do not reorder them.
+
+**Search sessions** also matches child titles, agent names, and IDs. See [Projects and search](./projects-and-search#find-a-session-in-the-current-project) for search behavior.
+
+Children do not add to regular session counts and have no separate pins or **Activity** entries. To delete a child, point to its row and select **Delete subagent session**. Confirm deletion in the dialog. This moves the child's JSONL file to Leyline trash.
+
+You can also open the [subagent inspector](./subagents#read-a-subagent-card), select a task, then select **Open child session**. An available **Child sessions** link in a trace observation also opens the child transcript.
 
 The child-session header shows **← parent session**. Select it to return to the
 parent session. Use a modified click on either session target to open it in a

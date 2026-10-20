@@ -1,3 +1,7 @@
+---
+description: Resolve Leyline startup, backend connection, live update, model, terminal, and trace capture problems.
+---
+
 # Troubleshooting
 
 ## The dev server does not start
@@ -24,7 +28,9 @@ also start the Leyline backend.
 5. Remove `/api/pi` from the saved URL. Leyline adds this path.
 
 Open `<backend-url>/api/pi/info` to check the server directly. A compatible
-server returns `name: "Leyline"` and `apiVersion: 1`.
+server returns `name: "Leyline"` and `apiVersion: 2`.
+
+API v2 uses WebSockets for runtime and Git review events. Update the frontend and backend together. After the update, restart the backend and reload existing browser tabs. An installed Electron app needs a rebuilt package and a restart.
 
 When the UI and backend use different non-loopback origins, set
 `LEYLINE_SERVER_ALLOWED_ORIGINS` on the backend. Restart the backend after you
@@ -33,6 +39,37 @@ when the browser blocks mixed content.
 
 Select **Retry** in the sidebar after the backend becomes available. Retry
 checks the backend again and reconnects the runtime event stream.
+
+## Live updates stop or disconnect
+
+1. Check that the selected backend returns API v2 from `/api/pi/info`.
+2. Reload the browser tab to replace an older client.
+3. In the browser's Network panel, check the WebSocket connection to `/api/pi/events`.
+4. If a reverse proxy is present, confirm that it forwards WebSocket upgrades for both event paths.
+
+The event paths are `/api/pi/events` and `/api/pi/review/events`. The review connection opens only when automatic Git review updates are available. Successful upgrades return HTTP `101`. Opening either path as an ordinary HTTP page is not a WebSocket check. An HTTP `426` means that the route requires an upgrade.
+
+Use a secure WebSocket (`wss://`) with an HTTPS backend. Keep proxy idle timeouts longer than the 30-second heartbeat interval. If the browser requests local-network permission, grant it only for a backend that you trust.
+
+The client reconnects automatically after a dropped connection. It then refreshes runtime snapshots and the selected session. Git review refresh waits for `review_ready`. Missed events are not replayed. Custom clients must implement reconnect and heartbeat replies. See [Event WebSockets](./api#event-websockets).
+
+## Another device cannot reach a sharing URL
+
+1. On the host computer, open **Settings → Connections**.
+2. Confirm that **Allow network access** is on.
+3. Copy a current sharing URL. An automatic port can change after sharing starts again.
+4. Use an address that the other device can reach.
+5. Check the host firewall and network access rules for that address and port.
+
+For Tailscale, use the host's Tailscale interface address and check the tailnet access policy. The toggle listens on all IPv4 interfaces. It does not limit access to Tailscale.
+
+Open the sharing URL directly in the other device's browser. The app and API then use the same origin. No extra allowed-origin setting is necessary. A UI on a different non-loopback origin still needs `LEYLINE_SERVER_ALLOWED_ORIGINS` on the backend.
+
+If the port is in use, choose another **Proxy port** and select **Apply**. If sharing is off, turn it on afterward. A failed live port change keeps the previous listener and saved port. Local clients and agent runs continue during sharing changes.
+
+Changing the active port or turning sharing off disconnects remote clients and terminals. Neither action closes an origin that startup configuration separately exposes. Settings shows a notice for that configuration.
+
+Use trusted networks only. The API has no authentication. See [Network access](../user-guide/settings#share-the-native-backend).
 
 ## No sessions appear
 
@@ -284,18 +321,20 @@ Confirm these items:
 3. Confirm that the selected child model exists.
 4. Confirm that its provider has usable credentials if authentication is required.
 5. Confirm that each tool in the agent definition is available.
+6. Confirm that every child has a nonblank `title`, including each parallel task and chain step.
+
+If any title is missing or blank, the call stops before any children start. Ask the parent agent to retry with titles. Reload an existing session if its tool schema still lacks the `title` field.
 
 A project agent definition replaces a global definition with the same agent
 name.
 
 ## Child sessions appear in the sidebar
 
-New child sessions contain a `leyline-subagent-session` marker and are hidden
-from the sidebar. Leyline also recognizes child paths from persisted subagent
-tool results for compatibility.
+Nested child rows under a parent are expected. See [Subagent sessions](../user-guide/sessions#open-a-subagent-session) for sidebar controls.
 
-If an old child session has neither form of metadata, Leyline cannot identify
-it as a child session.
+A child at the top level can indicate missing metadata. New children contain a `leyline-subagent-session` marker. Leyline also recognizes child paths from persisted subagent tool results for compatibility.
+
+Without either form of metadata, Leyline cannot identify a session as a subagent child. A parent session path alone does not identify a subagent. Normal forks remain regular sessions.
 
 ## Memory does not match the Memory Inspector
 
@@ -322,6 +361,43 @@ This is expected. Leyline disables dictation in Electron because Electron does
 not provide the required speech-recognition service.
 
 Use a compatible browser, such as Chrome, for dictation.
+
+## macOS cannot verify Leyline
+
+Downloaded macOS builds use ad-hoc signing and have no Apple notarization.
+macOS can show **“Leyline” Not Opened** or say Apple could not verify that the
+app is free of malware.
+
+For a verified release you trust, use **System Settings → Privacy & Security →
+Open Anyway**. Follow the [macOS installation guide](../getting-started/installation#macos-security-warning)
+for the complete steps and the app-specific quarantine fallback.
+
+This approval can be necessary again after an update. Leyline does not remove
+quarantine automatically.
+
+## macOS says Leyline is damaged
+
+Download the current official release and verify its DMG against the matching
+`SHA256SUMS`. Copy the app to Applications, then check its signature:
+
+```bash
+codesign --verify --deep --strict --verbose=2 "/Applications/Leyline.app"
+```
+
+A valid bundle reports `valid on disk` and `satisfies its Designated Requirement`.
+Errors such as `code has no resources but signature indicates they must be present`
+or `a sealed resource is missing or invalid` indicate a signature or resource
+integrity failure. Do not remove quarantine to bypass a failed signature check.
+Download a fresh release and report the release version and exact error if the
+failure continues.
+
+If the checksum and signature checks pass, follow the
+[security approval steps](../getting-started/installation#macos-security-warning).
+Use the [quarantine fallback](../getting-started/installation#quarantine-fallback)
+only for a verified release you trust.
+
+Signature verification checks bundle integrity. It does not establish Apple
+notarization or a trusted publisher identity.
 
 ## The packaged terminal fails with `ENOTDIR`
 
