@@ -55,7 +55,9 @@ Subagent calls stay compact inside Activity. A card containing only one subagent
 
 Select a task to read its Markdown result and **Full task prompt**. Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
 
-Child-session navigation is available only in Leyline, not in the exported file. Press Escape, select the close button, or select the backdrop to return to the transcript.
+The exported inspector shows recorded task results. It does not subscribe to live child activity. Live previews and child-session navigation are available only in Leyline.
+
+Press Escape, select the close button, or select the backdrop to return to the transcript.
 
 ## Use the responsive layout
 

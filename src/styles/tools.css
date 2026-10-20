@@ -1539,13 +1539,15 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-header h2 {
+  display: -webkit-box;
   overflow: hidden;
   margin: 0;
   font-size: 17px;
   font-weight: 550;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .subagent-inspector-icon-button {
@@ -1861,6 +1863,280 @@ dialog.subagent-inspector:not([open]) {
   outline-offset: -4px;
 }
 
+.subagent-tail-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 16px;
+}
+
+.subagent-tail-heading::after {
+  flex: 1;
+  height: 1px;
+  background: #323034;
+  content: '';
+}
+
+.subagent-tail-heading h3 {
+  margin: 0;
+  color: #a6a2af;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.subagent-tail-heading > span {
+  order: 1;
+  color: #93909b;
+  font-size: 10px;
+}
+
+.subagent-tail-message {
+  margin: 0 0 18px;
+}
+
+.subagent-tail-message-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  color: #99939f;
+  font-size: 10px;
+}
+
+.subagent-tail-writing,
+.subagent-tail-tool-status.status-running {
+  color: #b9acff;
+}
+
+.subagent-tail summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.subagent-tail summary::-webkit-details-marker {
+  display: none;
+}
+
+.subagent-tail-chevron {
+  display: inline-block;
+  flex: none;
+  color: #aaa1b4;
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.subagent-tail details[open] > summary > .subagent-tail-chevron {
+  transform: rotate(90deg);
+}
+
+.subagent-tail-tools {
+  margin: 14px 0 18px;
+  overflow: hidden;
+  border: 1px solid #343039;
+  border-radius: 7px;
+  background: #1c1b1e;
+}
+
+.subagent-tail-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 9px 12px;
+  color: #b9b2c2;
+  font-size: 11px;
+}
+
+.subagent-tail-group-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-left: auto;
+  font-size: 10px;
+}
+
+.subagent-tail-tool-list {
+  padding: 0 12px;
+}
+
+.subagent-tail-tool {
+  border-top: 1px solid #343039;
+}
+
+.subagent-tail-tool > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 9px 0;
+  color: #c1b8cc;
+  font-size: 11px;
+}
+
+.subagent-tail-target {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: #a69daf;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagent-tail-tool-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: #9c93a6;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.subagent-tail-tool-status svg {
+  width: 12px;
+  height: 12px;
+}
+
+.subagent-tail .status-completed {
+  color: #a7b6ab;
+}
+
+.subagent-tail .status-error {
+  color: #dca0aa;
+}
+
+.subagent-tail .status-stopped,
+.subagent-tail .status-unknown {
+  color: #aaa1b4;
+}
+
+.subagent-tail-command {
+  margin: 0;
+  padding: 0 0 12px;
+  color: #d5cbdf;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subagent-tail-tool-output {
+  border-top: 1px solid #302b35;
+  padding: 11px 0 13px;
+}
+
+.subagent-tail-tool-output pre,
+.subagent-tail-thought pre {
+  margin: 0;
+  color: #b0a6bc;
+  font-size: 11px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subagent-tail-tool-output p,
+.subagent-tail-image-note {
+  margin: 0;
+  color: #a49aaf;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.subagent-tail-clipped {
+  display: block;
+  margin: 0 0 8px;
+  color: #9a90a6;
+  font-size: 10px;
+}
+
+.subagent-tail-tools.is-single {
+  border: 0;
+  background: transparent;
+}
+
+.subagent-tail-tools.is-single > .subagent-tail-tool-list {
+  padding: 0;
+}
+
+.subagent-tail-tools.is-single .subagent-tail-tool {
+  overflow: hidden;
+  border: 1px solid #3a3543;
+  border-radius: 7px;
+  background: #161517;
+}
+
+.subagent-tail-tools.is-single .subagent-tail-tool > summary {
+  padding: 11px 12px;
+}
+
+.subagent-tail-tools.is-single .subagent-tail-command {
+  padding: 0 13px 12px;
+}
+
+.subagent-tail-tools.is-single .subagent-tail-tool-output {
+  padding: 12px 13px 14px;
+  background: #131214;
+}
+
+.subagent-tail-thought {
+  margin-bottom: 13px;
+}
+
+.subagent-tail-thought summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  color: #a69dad;
+  font-size: 11px;
+}
+
+.subagent-tail-thought pre {
+  padding: 7px 0;
+}
+
+.subagent-tail-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 16px;
+  color: #b4a7bf;
+  font-size: 11px;
+}
+
+.subagent-tail-notice button {
+  margin-left: auto;
+  border: 0;
+  border-radius: 4px;
+  padding: 5px;
+  background: transparent;
+  color: #c7b8dd;
+  font: inherit;
+  cursor: pointer;
+}
+
+.subagent-tail-activity,
+.subagent-tail-following {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #a69bad;
+  font-size: 11px;
+}
+
+.subagent-tail-activity {
+  margin: 16px 0 0;
+}
+
+.subagent-inspector-footer .subagent-tail-jump {
+  border: 1px solid #45404d;
+  padding: 4px 9px;
+}
+
 .subagent-inspector-enter-active,
 .subagent-inspector-enter-active .subagent-inspector {
   transition: opacity var(--motion-slow) var(--ease-standard),
@@ -1938,6 +2214,17 @@ dialog.subagent-inspector:not([open]) {
     font-size: 13px;
   }
 
+  .subagent-tail-tool > summary,
+  .subagent-tail-group-summary {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .subagent-tail-tool-status,
+  .subagent-tail-following {
+    font-size: 10px;
+  }
+
   .subagent-inspector-footer {
     padding: 6px 16px max(6px, env(safe-area-inset-bottom));
   }
@@ -1952,6 +2239,8 @@ dialog.subagent-inspector:not([open]) {
   .subagent-inspector-icon-button,
   .subagent-inspector-footer button,
   .subagent-inspector-prompt summary,
+  .subagent-tail summary,
+  .subagent-tail-notice button,
   .subagent-inspector-task {
     min-height: 44px;
   }
@@ -1967,7 +2256,8 @@ dialog.subagent-inspector:not([open]) {
   .subagent-inspector-enter-active .subagent-inspector,
   .subagent-inspector-leave-active .subagent-inspector,
   .subagent-inspector-task,
-  .subagent-inspector-prompt summary > span {
+  .subagent-inspector-prompt summary > span,
+  .subagent-tail-chevron {
     transition: none;
   }
 }

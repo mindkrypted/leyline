@@ -89,7 +89,13 @@ Tool targets can shorten to fit the row. User messages and tool cards use the fu
 
 Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
 
-Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and result area scroll separately. The session link and **Copy result** stay in the footer.
+Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and reader scroll separately. The footer keeps the child-session link and the current follow or copy action.
+
+A running child shows live messages and tool output in the same reader. Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity.
+
+![Mobile live subagent preview with compact tool history and running verification output](../assets/screenshots/subagent-live-tail-mobile.png)
+
+Closing the sheet leaves the child run active. See [Follow an active child](./subagents#follow-an-active-child) for preview limits and reconnect behavior.
 
 Select the close button or backdrop to return to the transcript. See [Subagents](./subagents#read-a-subagent-card) for outcome labels and confirmation behavior.
 

@@ -2605,6 +2605,8 @@ The browser supplies `?sessionId=<id>` to select full snapshots and live updates
 
 An empty `sessionId` selects no full runtime. Omitting the parameter selects full events for all runtimes, for protocol compatibility.
 
+This query controls payloads for one connection. It does not activate the requested runtime. Live subagent previews use a separate child-scoped connection; closing it does not abort the child run. Snapshots omit transcript entries and in-flight assistant content, so observers also read saved [session detail](#session-routes).
+
 Implemented event types and their `data` values are:
 
 ```text

@@ -376,7 +376,7 @@ function renderExportSubagent(entry, index) {
   const fallback = subagentFallback(entry)
   const label = entry.researchThreads ? 'Research threads' : 'Subagent'
   const callTitle = subagentCallTitle(entry)
-  const title = tasks.length > 1 ? callTitle : tasks.length ? '1 delegated task' : 'Task details'
+  const title = tasks.length ? callTitle : 'Task details'
   const copyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4H4v12h4" /></svg>'
   const status = (task) => {
     const key = subagentStatus(task, outcome.active)
@@ -414,7 +414,7 @@ ${entry.subagentDetails?.resultsUnavailable && entry.text ? `<h3>Call output</h3
 <button class="subagent-inspector-icon-button" type="button" title="Copy tool output" aria-label="Copy tool output" data-subagent-copy-tool>${copyIcon}</button>
 <button class="subagent-inspector-icon-button" type="button" aria-label="Close subagent inspector" data-subagent-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
 </header>
-<div class="subagent-inspector-summary">${summary}${tasks.length === 1 ? `<p class="subagent-inspector-task-title">${escapeHtml(subagentTaskTitle(tasks[0]))}</p>` : ''}</div>
+${tasks.length !== 1 ? `<div class="subagent-inspector-summary">${summary}</div>` : ''}
 ${tasks.length > 1 ? `<nav class="subagent-inspector-tasks" aria-label="Subagent tasks">${tasks.map((task, taskIndex) => `<button class="subagent-inspector-task" type="button" data-subagent-task="${taskIndex}" aria-pressed="${taskIndex === 0}" title="${escapeHtml(subagentTaskTitle(task, taskIndex))}"><span class="subagent-inspector-index">${taskIndex + 1}</span><span class="subagent-inspector-task-label">${escapeHtml(subagentTaskTitle(task, taskIndex))}</span>${status(task)}</button>`).join('')}</nav>` : ''}
 <div class="subagent-inspector-content" tabindex="0" aria-label="Selected task details">${tasks.length ? '' : `<p class="subagent-inspector-empty">${fallback.status === 'running' ? 'Waiting for task updates.' : 'Individual task details are unavailable.'}</p>${entry.text ? `<pre class="subagent-inspector-raw">${escapeHtml(entry.text)}</pre>` : ''}`}</div>
 ${taskTemplates}
@@ -2170,13 +2170,15 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-header h2 {
+  display: -webkit-box;
   overflow: hidden;
   margin: 0;
   font-size: 17px;
   font-weight: 550;
   line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .subagent-inspector-icon-button {

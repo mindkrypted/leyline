@@ -13,7 +13,8 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/components/ReviewPane.vue`: Renders changed files and prepared Pierre diffs for the selected project.
 - `src/components/SystemPromptInspector.vue`: Renders prompt sections, tool changes, raw text, and actions for a selected System event.
 - `src/components/MobileToolActivity.vue`: Renders shared Activity cards on desktop and mobile, including direct inspector access for a single subagent call.
-- `src/components/SubagentInspector.vue`: Renders ordered tasks, prompts, Markdown results, outcomes, copy actions, and child-session navigation in a bounded reader.
+- `src/components/SubagentInspector.vue`: Owns task selection, live-tail following, reader anchors, and child-scoped tool disclosure state beside prompts, results, and navigation.
+- `src/components/SubagentTailEntry.vue`: Renders compact child messages, thoughts, and tool groups with shared per-call disclosure state.
 - `src/components/ResearchSourcesPane.vue`: Renders cited sources and the complete research ledger.
 - `src/components/ResearchCitationPreview.vue`: Renders the anchored citation preview and mobile bottom sheet.
 - `src/components/GlobalSettingsModal.vue`: Owns global category navigation, capability gates, focus containment, and owner labels.
@@ -31,6 +32,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/composables/useTranscriptPreferences.js`: Owns app-wide transcript display settings.
 - `src/composables/useSettingsOperation.js`: Owns backend-bound operation polling, answers, and cancellation.
 - `src/composables/useLiveTurnProjection.js`: Owns optimistic and live transcript state.
+- `src/composables/useSubagentPreview.js`: Observes the selected child through read-only detail requests and its own runtime socket, with queued refreshes and recovery.
 - `src/composables/useRuntimeEvents.js`: Adapts runtime WebSocket events to frontend callbacks, trace subscribers, and the event log.
 - `src/composables/useMemoryInspector.js`: Owns Memory Inspector requests and optimistic state.
 - `src/composables/useProjectBrowser.js`: Owns project picker and folder-browser visibility.

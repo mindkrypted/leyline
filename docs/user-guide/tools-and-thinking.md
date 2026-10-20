@@ -90,7 +90,9 @@ Select the row again when it shows **hide**.
 
 A subagent call stays compact inside Activity. If it is the card's only tool call, select either the header or row to open its inspector directly. This includes parallel calls with several child tasks. For cards with several tool calls, expand the card first.
 
-Select a task inside the inspector to read its prompt, status, and Markdown result. **Open child session** opens its transcript. The inspector uses a side sheet on desktop and a bottom sheet on mobile; it does not expand the transcript.
+Select a task inside the inspector to read its prompt, status, and Markdown result. Running children also show [live messages and tool output](./subagents#follow-an-active-child). Scroll up to pause following, then select **New output** or **Jump to latest** to resume.
+
+**Open child session** opens the full child transcript. The inspector uses a side sheet on desktop and a bottom sheet on mobile; it does not expand the parent transcript.
 
 **Stopped** means cancellation. **Failed** means a task error. Missing outcomes show **Unknown**, and unavailable task results retain the original response under **Call output**. See [Subagents](./subagents#read-a-subagent-card) for details.
 

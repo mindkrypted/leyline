@@ -150,6 +150,13 @@ supply its own `cwd`, `model`, and `thinking` value.
 ## Leyline rendering
 
 Subagent tool calls appear in compact Activity rows. Select a subagent row to
-open the inspector. Select a task. Select **Open child session** to open its
-transcript. Children also open directly from nested sidebar rows. A child
-workbench with a valid parent path shows the **parent session** control.
+open the inspector, then select a task to read its live activity or result.
+
+A running child shows assistant messages and tool output without changing the
+parent selection. Closing the inspector does not stop the child run. See
+[Follow an active child](../../../docs/user-guide/subagents.md#follow-an-active-child)
+for preview and scroll controls.
+
+Select **Open child session** to open the full transcript. Children also open
+directly from nested sidebar rows. A child workbench with a valid parent path
+shows the **parent session** control.

@@ -806,6 +806,83 @@ const subagentSidebarEntries = [
   }),
 ]
 
+const subagentLiveResult = {
+  agent: 'explore',
+  title: 'Verify release safeguards',
+  task: 'Review the release workflow and script. Confirm that verification runs before tagging and publication, and that a failed check stops the release.',
+  status: 'running',
+  exitCode: -1,
+  childSession: { id: 'release-live-check', path: '/workspace/harbor/sessions/release-live-check.jsonl', cwd: '/workspace/harbor' },
+  messages: [],
+}
+const subagentLiveEntries = [
+  messageEntry({
+    id: 'subagent-live-user',
+    role: 'user',
+    label: 'You',
+    text: 'Review the release workflow and report whether a failed verification stops publication.',
+    timestamp: '2026-08-06T15:58:00.000Z',
+  }),
+  messageEntry({
+    id: 'subagent-live-assistant',
+    role: 'assistant',
+    label: 'Agent',
+    text: 'I will check the workflow and release script in a separate child session.',
+    timestamp: '2026-08-06T15:58:10.000Z',
+  }),
+]
+const subagentLiveChildEntries = projectTranscriptEntries([
+  {
+    id: 'live-child-prompt', type: 'message', timestamp: '2026-08-06T15:58:15.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: subagentLiveResult.task }] },
+  },
+  {
+    id: 'live-child-first', type: 'message', timestamp: '2026-08-06T15:58:25.000Z',
+    message: { role: 'assistant', content: [
+      { type: 'thinking', thinking: 'Trace verification, tagging, and publication in order.' },
+      { type: 'text', text: '**Verification** runs before release. I am checking the failure path.' },
+    ] },
+  },
+  {
+    id: 'live-child-file-calls', type: 'message', timestamp: '2026-08-06T15:58:30.000Z',
+    message: { role: 'assistant', content: [
+      { type: 'toolCall', id: 'live-read-workflow', name: 'read', arguments: { path: '.github/workflows/release.yml' } },
+      { type: 'toolCall', id: 'live-read-script', name: 'read', arguments: { path: 'scripts/release.js' } },
+      { type: 'toolCall', id: 'live-search-order', name: 'grep', arguments: { path: 'scripts/release.js', pattern: 'verify|tag|publish' } },
+    ] },
+  },
+  {
+    id: 'live-child-workflow', type: 'message', timestamp: '2026-08-06T15:58:31.000Z',
+    message: { role: 'toolResult', toolCallId: 'live-read-workflow', toolName: 'read', content: [{ type: 'text', text: 'steps:\n  - run: npm run verify\n  - run: node scripts/release.js' }] },
+  },
+  {
+    id: 'live-child-script', type: 'message', timestamp: '2026-08-06T15:58:32.000Z',
+    message: { role: 'toolResult', toolCallId: 'live-read-script', toolName: 'read', content: [{ type: 'text', text: 'await verify()\nawait tag()\nawait publish()' }] },
+  },
+  {
+    id: 'live-child-search', type: 'message', timestamp: '2026-08-06T15:58:33.000Z',
+    message: { role: 'toolResult', toolCallId: 'live-search-order', toolName: 'grep', content: [{ type: 'text', text: 'scripts/release.js:4: await verify()\nscripts/release.js:5: await tag()\nscripts/release.js:6: await publish()' }] },
+  },
+  {
+    id: 'live-child-progress', type: 'message', timestamp: '2026-08-06T15:59:50.000Z',
+    message: { role: 'assistant', content: [
+      { type: 'text', text: 'A failed check stops tagging. I am running `npm run verify`.' },
+      { type: 'toolCall', id: 'live-release-verify', name: 'bash', arguments: { command: 'npm run verify' } },
+    ] },
+  },
+])
+const subagentLiveChildDetail = {
+  session: {
+    ...session(subagentLiveResult.childSession.id, subagentLiveResult.title, '2026-08-06T15:58:15.000Z', 7),
+    sessionFile: subagentLiveResult.childSession.path,
+    parentSessionPath: '/workspace/harbor/sessions/demo-session.jsonl',
+    isSubagentSession: true,
+    contextTokens: 3840,
+    created: '2026-08-06T15:58:15.000Z',
+  },
+  entries: subagentLiveChildEntries,
+}
+
 const researchEntries = [
   messageEntry({
     id: 'research-user',
@@ -1031,7 +1108,7 @@ const traceFinalGeneration = primaryTrace.observations.find(item => item.type ==
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
 const pinnedAssetNames = ['pinned-sessions.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
-const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png']
+const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png', 'subagent-live-tail.png', 'subagent-live-tail-mobile.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
@@ -1610,6 +1687,25 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'subagent-live-tail.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    scenario: 'subagent-live',
+    sidebarChildren: true,
+    interact: openLiveSubagentInspector,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-live-tail-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    viewport: { width: 390, height: 844 },
+    scenario: 'subagent-live',
+    sidebarChildren: true,
+    interact: openLiveSubagentInspector,
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'subagent-inspector-export.png'),
     route: '/api/pi/sessions/demo-session/export?disposition=inline',
     ready: '.subagent-card .tool-inspect-button',
@@ -1938,6 +2034,37 @@ async function openSubagentInspector(page, taskCount, exportPage = false) {
   }
 }
 
+async function openLiveSubagentInspector(page) {
+  await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
+  await disableMotion(page)
+  if (page.viewportSize().width > 760) await openSidebarChildren(page, 1)
+  const activity = page.locator('.mobile-activity-card').filter({ has: page.locator('.subagent-card') })
+  await activity.scrollIntoViewIfNeeded()
+  const before = await activity.boundingBox()
+  await activity.locator('.mobile-activity-summary').click()
+  const inspector = page.locator('.subagent-inspector')
+  const output = inspector.locator('.subagent-tail-tool-output pre').filter({ hasText: 'Checking publication safeguards…' })
+  await output.waitFor()
+  await inspector.locator('.subagent-tail-message').filter({ hasText: 'A failed check stops tagging.' }).waitFor()
+  if (await inspector.locator('h2').innerText() !== subagentLiveResult.title) throw new Error('Live preview lost its supplied title')
+  await inspector.locator('.subagent-inspector-content').evaluate(element => { element.scrollTop = 0 })
+  await inspector.locator('.subagent-inspector-prompt > summary').click()
+  if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentLiveResult.task) throw new Error('Live preview changed the full task prompt')
+  await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
+  await inspector.waitFor({ state: 'detached' })
+  const closed = await page.evaluate(id => window.__docsEventSockets.every(socket => new URL(socket.url).searchParams.get('sessionId') !== id || socket.readyState === WebSocket.CLOSED), subagentLiveResult.childSession.id)
+  if (!closed) throw new Error('Closed live inspector retained its child subscription')
+  await activity.locator('.tool-inspect-button').click()
+  await output.waitFor()
+  await inspector.locator('.subagent-tail-following').filter({ hasText: 'Following live' }).waitFor()
+  await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
+  const open = await page.evaluate(id => window.__docsEventSockets.filter(socket => new URL(socket.url).searchParams.get('sessionId') === id && socket.readyState === WebSocket.OPEN).length, subagentLiveResult.childSession.id)
+  if (open !== 1 || new URL(page.url()).pathname !== '/sessions/demo-session') throw new Error('Live preview must observe only its child without navigation')
+  if (await inspector.evaluate(element => element.scrollWidth > element.clientWidth)) throw new Error('Live preview overflows horizontally')
+  const after = await activity.boundingBox()
+  if (before.height !== after.height || before.y !== after.y || await activity.evaluate(element => element.classList.contains('is-expanded'))) throw new Error('Live inspection moved or expanded the parent Activity card')
+}
+
 async function waitForResearchSources(page) {
   const pane = page.locator('aside[aria-label="Research sources"].open')
   await pane.waitFor()
@@ -2069,7 +2196,8 @@ function runtimeFor(scenario) {
   const held = scenario === 'queue-held'
   const research = scenario === 'research'
   const sidebar = scenario === 'subagent-sidebar'
-  const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar'].includes(scenario)
+  const live = scenario === 'subagent-live'
+  const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar', 'subagent-live'].includes(scenario)
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
@@ -2083,11 +2211,19 @@ function runtimeFor(scenario) {
       availableModels,
       thinkingLevel: 'high',
       availableThinkingLevels: selectedModel.availableThinkingLevels,
-      isStreaming: (queued && !held) || activity || sidebar,
+      isStreaming: (queued && !held) || activity || sidebar || live,
       isCompacting: false,
-      pendingToolCalls: sidebar ? ['subagent-sidebar-tool']
+      pendingToolCalls: live ? ['subagent-live-tool'] : sidebar ? ['subagent-sidebar-tool']
         : activity ? ['activity-selected-tool'] : [],
-      pendingTools: sidebar ? [{
+      pendingTools: live ? [{
+        toolCallId: 'subagent-live-tool',
+        toolName: 'subagent',
+        args: { agent: subagentLiveResult.agent, title: subagentLiveResult.title, task: subagentLiveResult.task },
+        partialResult: {
+          content: [{ type: 'text', text: 'The release safeguard check is running.' }],
+          details: { mode: 'single', background: true, results: [subagentLiveResult] },
+        },
+      }] : sidebar ? [{
         toolCallId: 'subagent-sidebar-tool',
         toolName: 'subagent',
         args: {
@@ -2144,6 +2280,33 @@ function runtimeFor(scenario) {
 }
 
 function runtimeFixturesFor(scenario, runtime) {
+  if (scenario === 'subagent-live') {
+    const child = runtimeFor('default')
+    return {
+      runtimeSessions: [runtime, {
+        ...child,
+        ...subagentLiveResult.childSession,
+        session: subagentLiveChildDetail.session,
+        state: {
+          ...child.state,
+          isStreaming: true,
+          pendingToolCalls: ['live-release-verify'],
+          pendingTools: [{ toolCallId: 'live-release-verify', toolName: 'bash', args: { command: 'npm run verify' } }],
+          activeToolCount: 3,
+          activeToolNames: ['read', 'grep', 'bash'],
+        },
+      }],
+      runtimeEvents: [{
+        activeSessionId: subagentLiveResult.childSession.id,
+        event: {
+          type: 'tool_execution_update',
+          toolCallId: 'live-release-verify',
+          toolName: 'bash',
+          partialResult: { content: [{ type: 'text', text: '> harbor@1.0.0 verify\n> node scripts/verify-release.js\n\nChecking release inputs…\nChecking publication safeguards…' }] },
+        },
+      }],
+    }
+  }
   if (scenario !== 'activity') {
     return { runtimeSessions: [runtime], runtimeEvents: [] }
   }
@@ -2205,6 +2368,7 @@ function detailFor(scenario) {
     'subagent-outcomes': subagentOutcomeEntries,
     'subagent-mobile': subagentMobileEntries,
     'subagent-sidebar': subagentSidebarEntries,
+    'subagent-live': subagentLiveEntries,
     markdown: markdownPreviewEntries,
     tools: toolActivityEntries,
     shell: shellEntries,
@@ -2232,9 +2396,10 @@ function detailFor(scenario) {
 function sidebarFixtureFor(scenario, parent) {
   const results = scenario === 'research'
     ? researchEntries.find((entry) => entry.toolName === 'subagent').subagentDetails.results
-    : scenario === 'subagent-sidebar' ? subagentSidebarResults
-      : scenario === 'subagent-outcomes' ? subagentOutcomeResults
-        : subagentOutcomeResults.slice(0, 2)
+    : scenario === 'subagent-live' ? [subagentLiveResult]
+      : scenario === 'subagent-sidebar' ? subagentSidebarResults
+        : scenario === 'subagent-outcomes' ? subagentOutcomeResults
+          : subagentOutcomeResults.slice(0, 2)
   const children = results.map((result, index) => ({
     ...session(
       result.childSession.id,
@@ -2354,6 +2519,7 @@ async function capture({
     .concat(sidebar?.children || [])
   const runtimeFixtures = runtimeFixturesFor(scenario, runtime)
   for (const child of sidebar?.liveChildren || []) {
+    if (runtimeFixtures.runtimeSessions.some(runtime => runtime.id === child.id)) continue
     const childRuntime = runtimeFor('default')
     runtimeFixtures.runtimeSessions.push({
       ...childRuntime,
@@ -2378,7 +2544,7 @@ async function capture({
     runtimeSessions: runtimeFixtures.runtimeSessions,
     runtimeEvents: runtimeFixtures.runtimeEvents,
     terminal,
-    emitRuntimeEvents: scenario !== 'home',
+    emitRuntimeEvents: !['home', 'subagent-live'].includes(scenario),
   })
   const page = await context.newPage()
   const unexpected = []
@@ -2491,8 +2657,9 @@ async function capture({
     if (key === 'GET /api/pi/fs') return json(projectDirectory)
     if (key === 'GET /api/pi/sessions') return json({ sessions: captureSessions })
     if (key === 'GET /api/pi/state') return json({ active: runtime })
-    if (key === 'POST /api/pi/active-session') return json({ active: runtime })
+    if (key === 'POST /api/pi/active-session' && (scenario !== 'subagent-live' || req.postDataJSON()?.id === runtime.id)) return json({ active: runtime })
     if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detail)
+    if (scenario === 'subagent-live' && key === `GET /api/pi/sessions/${subagentLiveResult.childSession.id}`) return json(subagentLiveChildDetail)
     if (key === 'GET /api/pi/review') {
       return json(scenario === 'review' ? reviewPayload : cleanReviewPayload)
     }
@@ -2863,6 +3030,7 @@ function initBrowser({
   window.webkitSpeechRecognition = MockSpeechRecognition
 
   const NativeWebSocket = window.WebSocket
+  window.__docsEventSockets = []
   class MockWebSocket extends EventTarget {
     static CONNECTING = 0
     static OPEN = 1
@@ -2873,7 +3041,9 @@ function initBrowser({
       if ([protocols].flat().includes('vite-hmr')) return new NativeWebSocket(url, protocols)
       this.url = String(url)
       this.readyState = MockWebSocket.CONNECTING
-      const pathname = new URL(url, window.location.href).pathname
+      const target = new URL(url, window.location.href)
+      const pathname = target.pathname
+      if (pathname === '/api/pi/events') window.__docsEventSockets.push(this)
       setTimeout(() => {
         if (this.readyState !== MockWebSocket.CONNECTING) return
         if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal'].includes(pathname)
@@ -2909,10 +3079,10 @@ function initBrowser({
               ]
             : []),
         ]
-        if (emitRuntimeEvents) {
-          for (const data of [...events, ...runtimeEvents]) {
-            this.emit({ type: 'runtime_event', data })
-          }
+        for (const data of [...(emitRuntimeEvents ? events : []), ...runtimeEvents]) {
+          if (['message_update', 'tool_execution_update'].includes(data.event?.type)
+            && data.activeSessionId !== target.searchParams.get('sessionId')) continue
+          this.emit({ type: 'runtime_event', data })
         }
         this.emit({ type: 'active_session', data: { ...runtime, snapshotRevision: now + 1 } })
       }, pathname === '/api/pi/terminal' ? 20 : 0)

@@ -48,7 +48,7 @@ const views = [
 
 const capabilities = [
   { title: 'Memory', text: 'Inspect and edit global, project, and session memory.' },
-  { title: 'Subagents', text: 'Choose subagent models and open child sessions from the sidebar.' },
+  { title: 'Subagents', text: 'Follow live subagent activity without leaving the parent session.' },
   { title: 'Tracing', text: 'Record runs, then inspect model calls, tools, and usage.' },
   { title: 'Images and vision', text: 'Attach images, or let a vision model describe them.' },
   { title: 'Models and MCP', text: 'Configure providers, custom models, and MCP servers.' },

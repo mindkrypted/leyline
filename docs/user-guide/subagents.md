@@ -1,6 +1,6 @@
 # Manage subagents
 
-Subagents run delegated tasks in child sessions with separate context. Open [child transcripts from the sidebar](./sessions#open-a-subagent-session), or inspect task results from an Activity card.
+Subagents run delegated tasks in child sessions with separate context. Open [child transcripts from the sidebar](./sessions#open-a-subagent-session), or inspect live activity and task results from an Activity card.
 
 ![Agent defaults with global subagent model choices](../assets/screenshots/subagents.png)
 
@@ -83,7 +83,7 @@ If the card contains only one subagent call, select its header or row to open th
 
 The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
 
-1. Select a task to read its status and result.
+1. Select a task to read its status, live activity, or result.
 2. Expand **Full task prompt** to read the original instructions.
 3. Select **Open child session** to open the child transcript, when available.
 
@@ -96,6 +96,20 @@ The task list stays in its original order. Live updates and saved results preser
 **Stopped** means cancellation. **Failed** means a task error. **Not started** means the task did not run. Missing final outcomes show **Unknown**. Completed results remain available when another task stops or fails. If task results are unavailable, **Call output** preserves the original tool response or error.
 
 Resolve pending extension confirmations before opening the inspector. A new confirmation closes it so the **Confirm** and **Cancel** controls remain accessible.
+
+## Follow an active child
+
+![Live subagent inspector with assistant messages, collapsed completed tools, and running verification output](../assets/screenshots/subagent-live-tail.png)
+
+Select a running task in the inspector to follow its child session. The preview shows recent assistant messages and live tool output.
+
+Thoughts and completed tools start collapsed. Expand a row to inspect it. Active tools show their current output, with up to 14 recent lines for long results.
+
+Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity. The selected task and expanded content remain in place during saved-entry updates and reconnects.
+
+Reading the preview keeps the parent session selected. Closing the inspector releases the preview connection without stopping the child run. If the connection drops, the preview keeps its last received activity until updates resume.
+
+Use **Open child session** for the full transcript and tool image results. Live child previews are available in Leyline, not in HTML exports.
 
 ## Inspect delegated runs
 

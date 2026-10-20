@@ -48,9 +48,13 @@ The live controller matches new persisted entries to visible live rows. It remov
 
 For subagent calls, `TranscriptEntry.vue` renders only a compact row and emits `inspect-subagent`. `SubagentInspector.vue` keeps tasks in their original order, with a bounded task list and reader. It shows full prompts, Markdown output, per-task errors, and explicit unknown outcomes. It retains call output when `resultsUnavailable` is true. **Open child session**, **Copy result**, and **Copy tool output** are separate actions.
 
+For a running child, `useSubagentPreview.js` supplies a separate shared live projection to the inspector. It renders the latest 80 assistant/tool entries. `SubagentTailEntry.vue` groups consecutive child tools, keeps thoughts and completed tools compact, and shows live tool output. This does not add child tools to the parent Activity card.
+
+Long tool output shows a recent tail, limited to 14 lines and 8,000 characters. Tool image results remain in the full child transcript. Final output still appears when the preview does not already contain it, including errors returned after a disconnect.
+
 `lib/subagent-view.js` supplies shared task, title, output, and fallback helpers. `lib/subagent-status.js` supplies status semantics and task counts, including separate stopped, failed, not-started, and unknown outcomes. `useFileLinks.js` reads `data-file-session-id` from the selected task reader to resolve child-result files against the child session. Without that attribute, it uses the selected session.
 
-HTML export uses the same grouping and presentation helpers. `renderExportSubagent()` pre-renders templates. `subagentInspectorJs()` creates a native dialog only when opened and handles Activity expansion, task selection, copy, close, and focus restoration. These controls work without network access or Pierre. Offline export has no navigation to live child sessions.
+HTML export uses the same grouping and presentation helpers. `renderExportSubagent()` pre-renders templates. `subagentInspectorJs()` creates a native dialog only when opened and handles Activity expansion, task selection, copy, close, and focus restoration. These controls work without network access or Pierre. The exported inspector shows recorded task results without subscribing to live child activity. Offline export has no navigation to live child sessions.
 
 See [Subagent inspector state](./frontend-state#subagent-inspector-state) for selection and lifecycle ownership. This surface is separate from the System prompt inspector and trace Inspector.
 

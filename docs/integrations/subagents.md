@@ -71,4 +71,12 @@ Children with an isolated custom system prompt retain output-budget and inline E
 
 Bundled requests include `parentSessionId` and `_toolCallId` for trace linkage. The child marker retains available parent trace and observation anchors. Proven committed child usage can reconcile parent totals after the tool result. Unknown attribution remains explicit. See [Elune integration](./elune#usage-and-child-accounting).
 
-The child route waits for the child run to finish. If the caller disconnects before the response finishes, the server aborts the child run. See the [API reference](../reference/api#subagent-routes).
+The child execution route waits for the child run to finish. If its caller disconnects before the response finishes, the server aborts the child run. See the [API reference](../reference/api#subagent-routes).
+
+## Live child inspection
+
+The inspector reads the selected child through `GET /api/pi/sessions/:id?compact=1&path=...` and a separate `WS /api/pi/events?sessionId=<child-id>` connection. These reads do not activate the child or submit work. The parent session and its runtime subscription stay selected.
+
+Closing the inspector releases this observer without canceling the execution request. Live previews retain recent messages and tool output; the full transcript remains available through **Open child session**. HTML exports show recorded task results without a live connection.
+
+See [Subagent inspector state](../developer-guide/frontend-state#subagent-inspector-state) for request ordering, reconnect recovery, and disclosure ownership.

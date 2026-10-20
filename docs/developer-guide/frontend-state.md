@@ -25,7 +25,9 @@
 | `useProjectBrowser.js` | Project picker state, folder expansion, and project-browser visibility |
 | `useToolExpansion.js` | Tool and skill expansion, copy state, and fullscreen previews |
 | `SystemPromptInspector.vue` | Tabs, raw view, event actions, and rendering for the System event selected by `App.vue` |
-| `SubagentInspector.vue` | Selected task and reader position for the subagent call selected by `App.vue` |
+| `SubagentInspector.vue` | Selected task, reader following, scroll anchors, and child-scoped tool disclosure state |
+| `SubagentTailEntry.vue` | Compact child messages, thoughts, and tool groups; thought expansion stays with each message |
+| `useSubagentPreview.js` | Child-scoped detail reads, event subscription, refresh queue, recovery, and stable preview identities |
 | `useWorkbenchScroll.js` | Bottom following, composer space, new-output state, and Jump to latest |
 | `useTerminal.js` | xterm, WebSocket, PTY status, focus, fit, and drawer height |
 | `useDictation.js` | Browser speech-recognition state inside both composer components |
@@ -270,9 +272,15 @@ Expansion state resets when the selected session changes. Preview content remain
 
 ## Subagent inspector state
 
-`App.vue` owns `subagentSelection`, the opener, and the modal focus scope. It resolves the selected call across persisted and live Activity projections by `toolCallId`, with `id` as the fallback. The component key stays stable during live updates and saved-entry reconciliation, preserving task selection and reader position. `SubagentInspector.vue` resets reader position when the user selects a task.
+`App.vue` owns `subagentSelection`, the opener, and the modal focus scope. It resolves the selected call across persisted and live Activity projections by `toolCallId`, with `id` as the fallback. The component key stays stable during live updates and saved-entry reconciliation, preserving task selection and reader position. Selecting another task resets its reader. An active child preview then follows its latest output.
 
 `singleSubagentEntry()` bypasses Activity expansion when the group's only top-level tool call is `subagent`. Both its header and compact row open the inspector directly, including calls with parallel tasks. Multi-call groups still expand before individual subagent rows open the inspector. `useToolExpansion.js` does not own subagent inspector selection.
+
+`useSubagentPreview.js` observes only the selected active child. It uses a separate child-scoped runtime WebSocket and `fetchSessionDetail()` on the selected backend. It reuses `useLiveTurnProjection.js` without activating the child or changing the parent selection. Task changes and unmount close the observer and cancel its outstanding reads. Completion or runtime removal closes the child socket and refreshes the saved activity.
+
+Detail reads run one at a time, with the next refresh queued behind the current request. Response epochs reject reads from before reconnect or settlement. Recovery reconciles finished messages before resetting the projection, retains rendered-ID aliases, and replays events received after socket open. Snapshots alone cannot restore in-flight assistant content.
+
+`SubagentInspector.vue` owns bounded, child-scoped tool and group disclosure models. `SubagentTailEntry.vue` uses these models when tool groups split or merge. Unique group keys and stable message aliases preserve open tools, thought components, and reader anchors. Scroll up to pause following; **New output** and **Jump to latest** return to the tail.
 
 `useModalFocus()` contains focus and restores the opener on close. Opening the subagent inspector pauses transcript auto-follow. Escape, the close button, or the backdrop closes it. Session or backend changes, removal of the selected call, and new pending extension confirmations also close it. An existing pending confirmation prevents it from opening.
 

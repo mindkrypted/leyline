@@ -50,7 +50,9 @@ Activity cards retain full message width and assistant-message colors. The colla
 
 The subagent inspector floats on the right, with a 660-pixel width cap and 16-pixel desktop margins. At 760 pixels or less, it becomes a full-width bottom sheet at roughly 90 percent of the available viewport height. Its bounded task list and reader scroll independently. Task selection and focus use neutral colors. Opening the inspector does not expand the transcript layout.
 
-`tools.css` owns these styles, including research-thread results in the subagent inspector. `research.css` no longer contains legacy subagent result-row styles. Export uses matching rules in `exportCss()` for its native dialog. Keep this layout separate from the System prompt inspector and trace Inspector layouts.
+Single-task inspectors use the task title directly, without a duplicate summary strip. Live tail uses the same bounded reader. Thoughts and completed tool groups stay compact; active tools show plain-text output. The follow control stays in the footer. New output must not move a paused reader.
+
+`tools.css` owns these styles, including research-thread results in the subagent inspector. `research.css` no longer contains legacy subagent result-row styles. Export uses matching shell and result rules in `exportCss()` for its native dialog. Keep this layout separate from the System prompt inspector and trace Inspector layouts.
 
 ## Settings layout
 
@@ -114,7 +116,7 @@ When transcript visuals change, compare and update both implementations. Check t
 - syntax colors
 - System dividers and prompt inspectors
 - Activity cards, outcome counts, compact tool rows, and skill rows
-- subagent inspector layout, task selection, and Markdown results
+- subagent inspector layout, task selection, live-tail following, and Markdown results
 - research reports, threads, citations, and source ledgers
 - image, file, patch, and diff previews
 - responsive and reduced-motion behavior
