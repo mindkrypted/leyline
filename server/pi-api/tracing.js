@@ -5,9 +5,10 @@ import { leylineDataDir } from './leyline-db.js'
 
 const { createElune } = await import(import.meta.resolve('@elune/embedded').replace(/\.asar\//, '.asar.unpacked/'))
 const SETTING = 'tracing.enabled'
-// TRC-1: Elune's worker cannot run on Windows (NTFS dir modes); soft-disable.
-const IS_WINDOWS = process.platform === 'win32'
-const WINDOWS_ERROR = 'Tracing is not available on Windows yet'
+// Tracing runs on Windows since the Elune pin moved to 91e0c903
+// ("fix: support windows trace storage": ACL-based private storage
+// instead of POSIX 0700 directory modes). This reverses the former
+// TRC-1 soft-disable, whose premise no longer holds upstream.
 export const TRACING_EXTENSION_PATH = '<inline:leyline-elune>'
 const emptyUsage = () => ({ inputTokens: 0, outputTokens: 0, cost: 0, cacheRead: 0, cacheWrite: 0 })
 
@@ -44,7 +45,6 @@ export function createTracing({ broadcastEvent, getChildMarker }) {
   }
 
   function config() {
-    if (IS_WINDOWS) return { enabled: false, error: WINDOWS_ERROR }
     if (enabled === undefined) {
       try {
         enabled = readBackendSettings([SETTING])[SETTING] !== 'false'
@@ -71,7 +71,6 @@ export function createTracing({ broadcastEvent, getChildMarker }) {
   }
 
   function publicError(cause) {
-    if (IS_WINDOWS && cause?.message === WINDOWS_ERROR) return { error: WINDOWS_ERROR, status: 503 }
     if (cause?.message === 'Trace not found') return { error: 'Trace not found', status: 404 }
     if (['TypeError', 'URIError', 'SyntaxError'].includes(cause?.name)) {
       log(cause)
@@ -101,7 +100,6 @@ export function createTracing({ broadcastEvent, getChildMarker }) {
   }
 
   function getStore() {
-    if (IS_WINDOWS) throw new Error(WINDOWS_ERROR)
     config()
     if (!store) {
       store = createElune({
@@ -147,15 +145,6 @@ export function createTracing({ broadcastEvent, getChildMarker }) {
   }
 
   function createBinding() {
-    if (IS_WINDOWS) {
-      // No-op binding, same shape as the POSIX return below; never spawns a worker.
-      return {
-        factory: () => {},
-        bindSession: () => {},
-        checkpoint: () => new Set(),
-        dispose: () => Promise.allSettled([]),
-      }
-    }
     config()
     let session
     let capture
@@ -310,17 +299,14 @@ export function createTracing({ broadcastEvent, getChildMarker }) {
     parentContext: (session, toolCallId) => sessionCaptures.get(session)?.getParentContext(toolCallId) || null,
     async list(options) {
       if (closing) throw new Error('Tracing is shutting down')
-      if (IS_WINDOWS) throw new Error(WINDOWS_ERROR)
       return getStore().list(options)
     },
     async get(id, options = {}) {
       if (closing) throw new Error('Tracing is shutting down')
-      if (IS_WINDOWS) throw new Error(WINDOWS_ERROR)
       return getStore().get(id, { observationLimit: 200, scoreLimit: 200, ...options })
     },
     async setBookmarked(id, bookmarked) {
       if (closing) throw new Error('Tracing is shutting down')
-      if (IS_WINDOWS) throw new Error(WINDOWS_ERROR)
       const current = getStore()
       await current.setBookmarked(id, bookmarked)
       return current.get(id, { observationLimit: 200, scoreLimit: 200 })
