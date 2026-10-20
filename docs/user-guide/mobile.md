@@ -91,6 +91,8 @@ Subagent calls open a bottom sheet instead of expanding the transcript. If an Ac
 
 Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and reader scroll separately. The footer keeps the child-session link and the current follow or copy action.
 
+The current reader stays visible until the next task preview is ready. The task highlight, reader, and footer then change together without moving the sheet. Reduced motion removes the animation.
+
 A running child shows live messages and tool output in the same reader. Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity.
 
 ![Mobile live subagent preview with compact tool history and running verification output](../assets/screenshots/subagent-live-tail-mobile.png)

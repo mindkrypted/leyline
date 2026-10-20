@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import CopyIcon from './CopyIcon.vue'
 import SubagentTailEntry from './SubagentTailEntry.vue'
 import { activityEntry, activitySummary } from '../../lib/tool-activity.js'
@@ -20,29 +20,51 @@ const selectedIndex = ref(0)
 const tasks = computed(() => subagentTasks(props.entry))
 const outcome = computed(() => subagentSummary(props.entry, props.toolStatus))
 const fallback = computed(() => subagentFallback(props.entry, props.toolStatus))
-const selected = computed(() => tasks.value[selectedIndex.value])
-const status = computed(() => selected.value ? taskStatus(selected.value) : fallback.value.status)
-const output = computed(() => selected.value ? subagentOutput(selected.value) : '')
+const target = computed(() => tasks.value[selectedIndex.value])
+const targetStatus = computed(() => target.value ? taskStatus(target.value) : fallback.value.status)
+const preview = useSubagentPreview(computed(() => target.value?.childSession), targetStatus)
+const targetViews = shallowRef(new Map())
+const requestedView = computed(() => ({
+  index: selectedIndex.value,
+  task: target.value,
+  status: targetStatus.value,
+  output: target.value ? subagentOutput(target.value) : '',
+  activity: preview.activity.value,
+  compacting: preview.compacting.value,
+  connection: preview.connection.value,
+  error: preview.error.value,
+  items: preview.items.value.map(item => ({ item, key: preview.itemKey(item) })),
+  ready: preview.ready.value,
+  runtimeError: preview.runtimeError.value,
+  started: preview.started.value,
+  views: targetViews.value,
+}))
+const presentation = shallowRef(requestedView.value)
+const waiting = computed(() => requestedView.value.index !== presentation.value.index)
+const selected = computed(() => presentation.value.task)
+const status = computed(() => presentation.value.status)
+const output = computed(() => presentation.value.output)
 const outputHtml = computed(() => renderedText(output.value))
-const copyId = computed(() => `subagent-${props.entry.toolCallId || props.entry.id}-${selectedIndex.value}`)
+const copyId = computed(() => `subagent-${props.entry.toolCallId || props.entry.id}-${presentation.value.index}`)
 const title = computed(() => tasks.value.length > 1 ? subagentCallTitle(props.entry)
   : selected.value ? subagentTaskTitle(selected.value) : 'Task details')
-const {
-  activity: previewActivity,
-  compacting: previewCompacting,
-  connection: previewConnection,
-  error: previewError,
-  items: previewItems,
-  itemKey: previewItemKey,
-  loading: previewLoading,
-  refresh: refreshPreview,
-  runtimeError: previewRuntimeError,
-  started: previewStarted,
-} = useSubagentPreview(computed(() => selected.value?.childSession), status)
+const previewActivity = computed(() => presentation.value.activity)
+const previewCompacting = computed(() => presentation.value.compacting)
+const previewConnection = computed(() => presentation.value.connection)
+const previewError = computed(() => presentation.value.error)
+const previewItems = computed(() => presentation.value.items.map(row => row.item))
+const previewReady = computed(() => presentation.value.ready)
+const previewRuntimeError = computed(() => presentation.value.runtimeError)
+const previewStarted = computed(() => presentation.value.started)
+const refreshPreview = () => preview.refresh()
 const following = ref(true)
 const hasNewOutput = ref(false)
 const tailContent = ref(null)
-const tailViews = new Map()
+const tailViews = computed(() => presentation.value.views)
+const taskList = ref(null)
+const taskMarker = ref(null)
+const hasTaskMarker = ref(false)
+const motions = new Map()
 const previewLabel = computed(() => ({
   connecting: 'Connecting…',
   reconnecting: 'Reconnecting…',
@@ -62,19 +84,47 @@ let scrollFrame
 let scrollRevision = 0
 let pinning = false
 let resizeObserver
+let taskObserver
 
 watch(() => tasks.value.length, length => {
   if (selectedIndex.value >= length) selectTask(0)
 })
-watch([() => selected.value?.childSession?.id, () => selected.value?.childSession?.path], () => tailViews.clear())
-watch([previewItems, previewActivity, previewConnection, previewError, output, status], () => {
+watch([() => target.value?.childSession?.id, () => target.value?.childSession?.path], () => {
+  targetViews.value = new Map()
+}, { flush: 'sync' })
+watch(requestedView, view => {
+  if (view.index === presentation.value.index || !view.started || view.ready) presentation.value = view
+}, { flush: 'post' })
+watch(() => presentation.value.index, () => {
+  const revision = ++scrollRevision
+  cancelAnimationFrame(scrollFrame)
+  pinning = true
+  following.value = true
+  hasNewOutput.value = false
+  nextTick(() => {
+    if (revision !== scrollRevision || !body.value) return
+    body.value.scrollTop = previewStarted.value && previewReady.value ? body.value.scrollHeight : 0
+    scrollFrame = requestAnimationFrame(() => {
+      if (revision === scrollRevision) pinning = false
+    })
+  })
+})
+watch([selectedIndex, () => tasks.value.length], positionTaskMarker, { flush: 'post' })
+watch(taskList, element => {
+  taskObserver?.disconnect()
+  if (!element) return
+  taskObserver = new ResizeObserver(positionTaskMarker)
+  taskObserver.observe(element)
+  positionTaskMarker()
+}, { flush: 'post' })
+watch([previewItems, previewReady, previewActivity, previewConnection, previewError, output, status], () => {
   const retainedViews = new Set()
   for (const item of previewItems.value) {
     if (item.type !== 'tool-activity') continue
     retainedViews.add(`group:${item.id}`)
     for (const call of item.items) retainedViews.add(`tool:${call.toolCallId || activityEntry(call).toolCallId || call.id}`)
   }
-  for (const key of tailViews.keys()) if (!retainedViews.has(key)) tailViews.delete(key)
+  for (const key of tailViews.value.keys()) if (!retainedViews.has(key)) tailViews.value.delete(key)
   if (!previewStarted.value) return
   if (following.value) {
     followLatest()
@@ -108,33 +158,90 @@ watch([previewItems, previewActivity, previewConnection, previewError, output, s
     })
   })
 })
-watch(tailContent, element => {
+watch([tailContent, () => selected.value?.childSession?.id, previewReady], ([element]) => {
   resizeObserver?.disconnect()
-  if (!element) return
-  resizeObserver = new ResizeObserver(() => {
-    if (following.value) followLatest()
+  resizeObserver = null
+  if (!element || !previewReady.value) return
+  const observer = new ResizeObserver(() => {
+    if (resizeObserver === observer && element.isConnected && following.value) followLatest()
   })
-  resizeObserver.observe(element)
-  if (body.value) resizeObserver.observe(body.value)
+  resizeObserver = observer
+  observer.observe(element)
+  if (body.value) observer.observe(body.value)
 }, { flush: 'post' })
 onBeforeUnmount(() => {
   scrollRevision++
   cancelAnimationFrame(scrollFrame)
   resizeObserver?.disconnect()
+  resizeObserver = null
+  taskObserver?.disconnect()
+  for (const animation of motions.values()) animation.cancel()
+  motions.clear()
 })
+
+function positionTaskMarker() {
+  const task = taskList.value?.querySelector('[aria-pressed="true"]')
+  if (!task || !taskMarker.value) return
+  Object.assign(taskMarker.value.style, {
+    transform: `translateY(${task.offsetTop}px)`,
+    left: `${task.offsetLeft}px`,
+    width: `${task.offsetWidth}px`,
+    height: `${task.offsetHeight}px`,
+  })
+  hasTaskMarker.value = true
+}
+
+function prepareEnter(element) {
+  element.style.opacity = '0'
+  element.style.transform = `translateY(${element.classList.contains('subagent-inspector-content') ? 14 : 4}px)`
+}
+
+function interruptMotion(element) {
+  const animation = motions.get(element)
+  if (!animation) return
+  const style = getComputedStyle(element)
+  element.style.opacity = style.opacity
+  element.style.transform = style.transform
+  animation.cancel()
+  motions.delete(element)
+}
+
+function animateContent(element, done, entering) {
+  const reader = element.classList.contains('subagent-inspector-content')
+  if (entering && reader) element.scrollTop = previewStarted.value && previewReady.value ? element.scrollHeight : 0
+  if (!entering) {
+    element.inert = true
+    element.setAttribute('aria-hidden', 'true')
+  }
+  interruptMotion(element)
+  const style = getComputedStyle(element)
+  const animation = element.animate([
+    { opacity: style.opacity, transform: style.transform },
+    { opacity: entering ? 1 : 0, transform: entering ? 'translateY(0)' : `translateY(${reader ? -8 : -4}px)` },
+  ], {
+    duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : reader ? entering ? 420 : 280 : 260,
+    easing: style.getPropertyValue(entering ? '--ease-dock' : '--ease-accelerate').trim() || 'ease',
+    fill: 'both',
+  })
+  motions.set(element, animation)
+  animation.finished.then(() => {
+    if (motions.get(element) !== animation) return
+    motions.delete(element)
+    if (entering) {
+      element.style.opacity = ''
+      element.style.transform = ''
+    }
+    done()
+    animation.cancel()
+  }).catch(() => {})
+}
 
 function taskStatus(task) {
   return subagentStatus(task, outcome.value.active)
 }
 
 function selectTask(index) {
-  scrollRevision++
-  cancelAnimationFrame(scrollFrame)
-  pinning = false
-  following.value = true
-  hasNewOutput.value = false
-  selectedIndex.value = index
-  body.value?.scrollTo({ top: 0 })
+  if (index !== selectedIndex.value) selectedIndex.value = index
 }
 
 function followLatest() {
@@ -142,14 +249,11 @@ function followLatest() {
   cancelAnimationFrame(scrollFrame)
   pinning = true
   nextTick(() => {
-    if (revision !== scrollRevision || !following.value) return
+    if (revision !== scrollRevision || !body.value || !following.value) return
+    body.value.scrollTop = body.value.scrollHeight
+    hasNewOutput.value = false
     scrollFrame = requestAnimationFrame(() => {
-      if (revision !== scrollRevision || !body.value || !following.value) return
-      body.value.scrollTop = body.value.scrollHeight
-      hasNewOutput.value = false
-      scrollFrame = requestAnimationFrame(() => {
-        if (revision === scrollRevision) pinning = false
-      })
+      if (revision === scrollRevision) pinning = false
     })
   })
 }
@@ -225,7 +329,8 @@ defineExpose({ element: pane })
       <span v-else class="subagent-task-status" :class="`status-${fallback.status}`">{{ fallback.label }}</span>
     </div>
 
-    <nav v-if="tasks.length > 1" class="subagent-inspector-tasks" aria-label="Subagent tasks">
+    <nav v-if="tasks.length > 1" ref="taskList" class="subagent-inspector-tasks" :class="{ 'has-selection-marker': hasTaskMarker }" aria-label="Subagent tasks">
+      <span ref="taskMarker" class="subagent-inspector-task-marker" :hidden="!hasTaskMarker" aria-hidden="true"></span>
       <button
         v-for="(task, index) in tasks"
         :key="index"
@@ -244,92 +349,125 @@ defineExpose({ element: pane })
       </button>
     </nav>
 
-    <div
-      ref="body"
-      class="subagent-inspector-content"
-      tabindex="0"
-      aria-label="Selected task details"
-      :data-file-session-id="selected?.childSession?.id"
-      @scroll="handleScroll"
-      @wheel.passive="$event.deltaY < 0 && pauseFollowing()"
-      @touchmove.passive="pauseFollowing"
-      @pointerdown="contentPointerDown"
-      @keydown="['ArrowUp', 'PageUp', 'Home'].includes($event.key) && pauseFollowing()"
-      @click="contentClick"
-    >
-      <template v-if="selected">
-        <div class="subagent-inspector-meta">
-          <span>Agent <code>{{ selected.agent }}</code></span>
-          <span v-if="selected.research">{{ selected.research.sources?.length || 0 }} sources</span>
-          <span class="subagent-task-status" :class="`status-${status}`">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path :d="subagentStatuses[status].path" /></svg>
-            {{ subagentStatuses[status].label }}
-          </span>
+    <div class="subagent-inspector-reader-stack" :aria-busy="waiting">
+      <Transition
+        :css="false"
+        @before-enter="prepareEnter"
+        @enter="(element, done) => animateContent(element, done, true)"
+        @leave="(element, done) => animateContent(element, done, false)"
+        @enter-cancelled="interruptMotion"
+        @leave-cancelled="interruptMotion"
+      >
+        <div
+          :key="`${presentation.index}:${previewStarted && !previewReady ? 'loading' : 'content'}`"
+          ref="body"
+          class="subagent-inspector-content"
+          :inert="waiting"
+          :aria-hidden="waiting || undefined"
+          tabindex="0"
+          aria-label="Selected task details"
+          :data-file-session-id="selected?.childSession?.id"
+          @scroll="handleScroll"
+          @wheel.passive="$event.deltaY < 0 && pauseFollowing()"
+          @touchmove.passive="pauseFollowing"
+          @pointerdown="contentPointerDown"
+          @keydown="['ArrowUp', 'PageUp', 'Home'].includes($event.key) && pauseFollowing()"
+          @click="contentClick"
+        >
+          <template v-if="selected">
+            <div class="subagent-inspector-meta">
+              <span>Agent <code>{{ selected.agent }}</code></span>
+              <span v-if="selected.research">{{ selected.research.sources?.length || 0 }} sources</span>
+              <span class="subagent-task-status" :class="`status-${status}`">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" /><path :d="subagentStatuses[status].path" /></svg>
+                {{ subagentStatuses[status].label }}
+              </span>
+            </div>
+            <details v-if="selected.task" class="subagent-inspector-prompt">
+              <summary><span aria-hidden="true">›</span> Full task prompt</summary>
+              <pre>{{ selected.task }}</pre>
+            </details>
+            <section v-if="previewStarted" ref="tailContent" class="subagent-tail" aria-label="Child session activity">
+              <div class="subagent-tail-heading">
+                <h3>{{ status === 'running' ? 'Live activity' : 'Task activity' }}</h3>
+                <span>{{ previewLabel }}</span>
+              </div>
+              <div v-if="previewError || previewConnection === 'reconnecting'" class="subagent-tail-notice" role="status">
+                <span>{{ previewError ? 'Child activity could not be loaded.' : 'Reconnecting. Showing the last received activity.' }}</span>
+                <button v-if="previewError" type="button" @click="refreshPreview">Retry</button>
+              </div>
+              <template v-if="previewReady">
+                <SubagentTailEntry
+                  v-for="row in presentation.items"
+                  :key="row.key"
+                  :item="row.item"
+                  :following="following"
+                  :views="tailViews"
+                />
+                <p v-if="showActivity" class="subagent-tail-activity" role="status">
+                  <span class="live-tool-spinner" aria-hidden="true"></span>
+                  {{ previewCompacting ? 'Compacting context…' : previewActivity }}
+                </p>
+                <p v-else-if="!previewItems.length && !previewError && status === 'running'" class="subagent-inspector-empty">Waiting for child activity.</p>
+                <pre v-if="previewRuntimeError && previewRuntimeError !== selected.error && previewRuntimeError !== output" class="subagent-inspector-error">{{ previewRuntimeError }}</pre>
+              </template>
+              <p v-else class="subagent-tail-activity" role="status">
+                <span class="live-tool-spinner" aria-hidden="true"></span>
+                Loading child activity…
+              </p>
+            </section>
+            <template v-if="showResult">
+              <h3>{{ output ? (status === 'completed' ? 'Result' : 'Output') : 'Task outcome' }}</h3>
+              <div v-if="output" class="subagent-inspector-output markdown-body" v-html="outputHtml"></div>
+              <p v-else class="subagent-inspector-empty">{{ subagentEmptyText(status) }}</p>
+            </template>
+            <pre v-if="selected.error && selected.error !== output" class="subagent-inspector-error">{{ selected.error }}</pre>
+          </template>
+          <p v-else class="subagent-inspector-empty">{{ fallback.status === 'running' ? 'Waiting for task updates.' : 'Individual task details are unavailable.' }}</p>
+          <template v-if="entry.text && (!selected || entry.subagentDetails?.resultsUnavailable)">
+            <h3 v-if="selected">Call output</h3>
+            <pre class="subagent-inspector-raw">{{ entry.text }}</pre>
+          </template>
         </div>
-        <details v-if="selected.task" :key="selectedIndex" class="subagent-inspector-prompt">
-          <summary><span aria-hidden="true">›</span> Full task prompt</summary>
-          <pre>{{ selected.task }}</pre>
-        </details>
-        <section v-if="previewStarted" ref="tailContent" class="subagent-tail" aria-label="Child session activity">
-          <div class="subagent-tail-heading">
-            <h3>{{ status === 'running' ? 'Live activity' : 'Task activity' }}</h3>
-            <span>{{ previewLabel }}</span>
-          </div>
-          <div v-if="previewError || previewConnection === 'reconnecting'" class="subagent-tail-notice" role="status">
-            <span>{{ previewError ? 'Child activity could not be loaded.' : 'Reconnecting. Showing the last received activity.' }}</span>
-            <button v-if="previewError" type="button" @click="refreshPreview">Retry</button>
-          </div>
-          <SubagentTailEntry
-            v-for="item in previewItems"
-            :key="previewItemKey(item)"
-            :item="item"
-            :following="following"
-            :views="tailViews"
-          />
-          <p v-if="showActivity || (previewLoading && !previewItems.length)" class="subagent-tail-activity" role="status">
-            <span class="live-tool-spinner" aria-hidden="true"></span>
-            {{ previewCompacting ? 'Compacting context…' : previewActivity || 'Loading child activity…' }}
-          </p>
-          <p v-else-if="!previewItems.length && !previewError && status === 'running'" class="subagent-inspector-empty">Waiting for child activity.</p>
-          <pre v-if="previewRuntimeError && previewRuntimeError !== selected.error && previewRuntimeError !== output" class="subagent-inspector-error">{{ previewRuntimeError }}</pre>
-        </section>
-        <template v-if="showResult">
-          <h3>{{ output ? (status === 'completed' ? 'Result' : 'Output') : 'Task outcome' }}</h3>
-          <div v-if="output" class="subagent-inspector-output markdown-body" v-html="outputHtml"></div>
-          <p v-else class="subagent-inspector-empty">{{ subagentEmptyText(status) }}</p>
-        </template>
-        <pre v-if="selected.error && selected.error !== output" class="subagent-inspector-error">{{ selected.error }}</pre>
-      </template>
-      <p v-else class="subagent-inspector-empty">{{ fallback.status === 'running' ? 'Waiting for task updates.' : 'Individual task details are unavailable.' }}</p>
-      <template v-if="entry.text && (!selected || entry.subagentDetails?.resultsUnavailable)">
-        <h3 v-if="selected">Call output</h3>
-        <pre class="subagent-inspector-raw">{{ entry.text }}</pre>
-      </template>
+      </Transition>
     </div>
 
-    <footer class="subagent-inspector-footer">
-      <button
-        v-if="selected?.childSession"
-        class="subagent-inspector-session"
-        type="button"
-        @click="emit('navigate-child-session', selected.childSession, $event)"
-        @auxclick.middle.prevent="emit('navigate-child-session', selected.childSession, $event)"
+    <footer class="subagent-inspector-footer has-motion-footer">
+      <Transition
+        :css="false"
+        @before-enter="prepareEnter"
+        @enter="(element, done) => animateContent(element, done, true)"
+        @leave="(element, done) => animateContent(element, done, false)"
+        @enter-cancelled="interruptMotion"
+        @leave-cancelled="interruptMotion"
       >
-        Open child session
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" /></svg>
-      </button>
-      <span v-else>{{ ['running', 'queued', 'not-started'].includes(status) ? 'No child session yet' : 'Child session unavailable' }}</span>
-      <button v-if="previewStarted && !following" class="subagent-tail-jump" type="button" @click="jumpToLatest">
-        {{ hasNewOutput ? 'New output' : 'Jump to latest' }}
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6" /></svg>
-      </button>
-      <span v-else-if="previewStarted && status === 'running'" class="subagent-tail-following">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6" /></svg>
-        {{ previewConnection === 'settled' ? 'Live feed ended' : 'Following live' }}
-      </span>
-      <button v-else-if="output" type="button" @click="emit('copy', copyId, output)">
-        <CopyIcon :copied="copiedEntryId === copyId" />{{ copiedEntryId === copyId ? 'Copied' : 'Copy result' }}
-      </button>
+        <div :key="`${presentation.index}:${waiting}`" class="subagent-inspector-footer-content">
+          <button
+            v-if="selected?.childSession"
+            class="subagent-inspector-session"
+            type="button"
+            :disabled="waiting"
+            @click="emit('navigate-child-session', selected.childSession, $event)"
+            @auxclick.middle.prevent="emit('navigate-child-session', selected.childSession, $event)"
+          >
+            Open child session
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" /></svg>
+          </button>
+          <span v-else>{{ ['running', 'queued', 'not-started'].includes(status) ? 'No child session yet' : 'Child session unavailable' }}</span>
+          <span v-if="waiting" class="subagent-tail-following" role="status">Preparing preview…</span>
+          <button v-else-if="previewStarted && !following" class="subagent-tail-jump" type="button" @click="jumpToLatest">
+            {{ hasNewOutput ? 'New output' : 'Jump to latest' }}
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6" /></svg>
+          </button>
+          <span v-else-if="previewStarted && status === 'running'" class="subagent-tail-following">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16m-6-6 6 6 6-6" /></svg>
+            {{ !previewReady ? 'Loading preview…' : previewConnection === 'settled' ? 'Live feed ended' : 'Following live' }}
+          </span>
+          <button v-else-if="output" type="button" @click="emit('copy', copyId, output)">
+            <CopyIcon :copied="copiedEntryId === copyId" />{{ copiedEntryId === copyId ? 'Copied' : 'Copy result' }}
+          </button>
+        </div>
+      </Transition>
     </footer>
   </section>
 </template>

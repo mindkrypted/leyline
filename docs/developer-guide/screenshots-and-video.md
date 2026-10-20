@@ -100,7 +100,15 @@ DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,suba
 
 The fixtures give every child an explicit `title`, separate from its full `task` prompt. Research children use their planned thread titles.
 
-The inspector helpers open a single-call Activity card from its header, check task titles and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. The export capture blocks the external preview renderer to verify that the inspector works offline.
+The inspector helpers open a single-call Activity card from its header, check task titles and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. They wait for one active reader with no outgoing reader or footer layers before capture. The export capture blocks the external preview renderer to verify that the inspector works offline.
+
+For task-switch layout changes, refresh only the five inspector images:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,subagent-outcomes.png,subagent-inspector-mobile.png,subagent-inspector-export.png npm run docs:screenshots
+```
+
+PNG captures show the settled layout with reduced motion enabled. Use separate fixture-based visual checks with motion enabled for cold previews, overlapping reader transitions, and rapid task changes. Also check manual scrollback, reduced motion, and closure during a handoff. Do not infer smooth motion from a static capture.
 
 Live captures use a synthetic release-review child. Saved messages pass through `projectTranscriptEntries()`, and a child-scoped `tool_execution_update` supplies the running command output. The helper waits for saved history and current output, checks that closing releases the child socket, then reopens the preview. Exactly one child subscription may remain open, and the parent route must stay selected. No child activation or model request reaches the backend.
 

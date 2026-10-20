@@ -72,7 +72,7 @@ The current base colors are neutral. The primary accent is `--accent: #8a78ff`.
 
 ## Motion
 
-Motion must explain state change. Use short opacity and transform changes for entry, drawer, picker, and handoff states.
+Motion must explain state change. Coordinate opacity and transform changes for entry, drawer, picker, and handoff states.
 
 Use explicit transition properties. Do not use `transition: all`.
 
@@ -92,6 +92,16 @@ The current motion families include:
 The prompt inspector uses short opacity and horizontal transform transitions in `tools.css`. Its local reduced-motion rule removes those transitions.
 
 The subagent inspector uses opacity and horizontal transforms on desktop, with vertical transforms for the mobile bottom sheet. Its local reduced-motion rules remove transitions. Export uses corresponding dialog entry animations and disables them for reduced motion.
+
+### Subagent task changes
+
+`SubagentInspector.vue` uses the Web Animations API for reader and footer handoffs. The outgoing reader remains visible until the next preview is ready. Its 280 ms exit overlaps the incoming reader's 420 ms entrance. The incoming reader starts 14 pixels below its final position, while the outgoing reader moves upward by 8 pixels. Entry uses `--ease-dock`. Exit uses `--ease-accelerate`.
+
+The task-selection background moves between rows over 420 ms with `--ease-emphasized`. Footer changes take 260 ms. Grid layers keep the modal frame and reader viewport fixed during each handoff.
+
+Rapid selections target the latest task without waiting for prior exits. An interrupted entrance starts its exit from its current opacity and transform. Live text updates do not restart the handoff. They preserve paused scrollback within the displayed task.
+
+Reduced motion sets the scripted animation duration to zero and removes the selection-background transition. HTML exports keep the same settled layout without the app's staged live-preview handoff.
 
 ## Reduced motion
 

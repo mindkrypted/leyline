@@ -1997,6 +1997,20 @@ async function openSidebarChildren(page, count) {
   }
 }
 
+async function waitForSubagentReader(page) {
+  await page.waitForFunction(() => {
+    const inspector = document.querySelector('.subagent-inspector')
+    const readers = inspector?.querySelectorAll('.subagent-inspector-content')
+    if (readers?.length !== 1 || inspector.querySelectorAll('.subagent-inspector-footer-content').length > 1) return false
+    const reader = readers[0]
+    const stack = inspector.querySelector('.subagent-inspector-reader-stack')
+    return reader.getClientRects().length > 0 && !reader.inert
+      && reader.getAttribute('aria-hidden') !== 'true'
+      && stack?.getAttribute('aria-busy') !== 'true'
+      && getComputedStyle(reader).opacity === '1'
+  })
+}
+
 async function openSubagentInspector(page, taskCount, exportPage = false) {
   if (!exportPage) await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
   await disableMotion(page)
@@ -2015,8 +2029,10 @@ async function openSubagentInspector(page, taskCount, exportPage = false) {
   await inspector.locator('.subagent-summary').filter({ hasText: `${taskCount - 1} completed` }).waitFor()
   await inspector.locator('.subagent-summary').filter({ hasText: '1 stopped' }).waitFor()
   await tasks.nth(2).click()
+  await waitForSubagentReader(page)
   await inspector.locator('.subagent-inspector-empty').filter({ hasText: 'This task was stopped.' }).waitFor()
   await tasks.first().click()
+  await waitForSubagentReader(page)
   await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
   await inspector.locator('.subagent-inspector-prompt > summary').click()
   if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentOutcomeResults[0].task) {
@@ -2045,6 +2061,7 @@ async function openLiveSubagentInspector(page) {
   const inspector = page.locator('.subagent-inspector')
   const output = inspector.locator('.subagent-tail-tool-output pre').filter({ hasText: 'Checking publication safeguards…' })
   await output.waitFor()
+  await waitForSubagentReader(page)
   await inspector.locator('.subagent-tail-message').filter({ hasText: 'A failed check stops tagging.' }).waitFor()
   if (await inspector.locator('h2').innerText() !== subagentLiveResult.title) throw new Error('Live preview lost its supplied title')
   await inspector.locator('.subagent-inspector-content').evaluate(element => { element.scrollTop = 0 })
@@ -2701,6 +2718,7 @@ async function capture({
       })
     }
     if (interact) await interact(page)
+    if (await page.locator('.subagent-inspector').count()) await waitForSubagentReader(page)
     await sanitizeNativeBackendAddress(page)
     await page.evaluate(async () => {
       await document.fonts.ready

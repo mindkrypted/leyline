@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { activityEntry, groupToolActivity } from '../../lib/tool-activity.js'
 import { openEventSocket } from '../lib/event-socket'
 import { fetchSessionDetail } from '../lib/pi-api'
@@ -10,6 +10,10 @@ export function useSubagentPreview(session, status) {
   const connection = ref('')
   const error = ref('')
   const runtimeError = ref('')
+  const ready = ref(false)
+  const cached = shallowRef(null)
+  const cache = new Map()
+  const cacheLimit = 4 * 1024 * 1024
   const projection = useLiveTurnProjection({
     onIntent(intent) {
       if (intent.type === 'surface-error') runtimeError.value = intent.message
@@ -18,7 +22,8 @@ export function useSubagentPreview(session, status) {
   const toolGroups = new Map()
   const messageIds = new Map()
   let groupSequence = 0
-  const items = computed(() => {
+  let assistantSequence = 0
+  const projectedItems = computed(() => {
     const tail = [
       ...projection.entries.value,
       ...projection.liveItems.value,
@@ -59,7 +64,44 @@ export function useSubagentPreview(session, status) {
     for (const key of toolGroups.keys()) if (!retainedTools.has(key)) toolGroups.delete(key)
     return rows
   })
+  const items = computed(() => ready.value ? projectedItems.value : cached.value?.items || [])
+  const available = computed(() => ready.value || Boolean(cached.value))
   let refresh = () => {}
+
+  function savePreview(key, detail, events, anchor) {
+    if (!ready.value || !started.value) return
+    const snapshot = {
+      items: projectedItems.value,
+      messages: [...messageIds],
+      groups: [...toolGroups],
+      sequence: groupSequence,
+      detail: { entries: (detail?.entries || []).filter(entry => entry.type === 'tool' || entry.role === 'assistant').slice(-80) },
+      events,
+      anchor,
+    }
+    if (!snapshot.items.length) return
+    let bytes = 0
+    try {
+      bytes = JSON.stringify(snapshot, (_, value) => {
+        if (typeof value === 'string') bytes += value.length * 2
+        if (bytes > cacheLimit) throw new RangeError('Preview cache limit')
+        return value
+      }).length * 2
+    } catch {
+      return
+    }
+    if (bytes > cacheLimit) return
+    cache.delete(key)
+    cache.set(key, { snapshot, bytes })
+    let total = [...cache.values()].reduce((sum, entry) => sum + entry.bytes, 0)
+    while (cache.size > 4 || total > cacheLimit) {
+      const oldest = cache.keys().next().value
+      total -= cache.get(oldest).bytes
+      cache.delete(oldest)
+    }
+  }
+
+  onScopeDispose(() => cache.clear())
 
   function rememberMessage(item) {
     const id = activityEntry(item).id
@@ -68,8 +110,10 @@ export function useSubagentPreview(session, status) {
     messageIds.set(id, key)
   }
 
-  watch([() => session.value?.id, () => session.value?.path], ([id], previous, onCleanup) => {
+  watch([() => session.value?.id, () => session.value?.path], ([id, path], previous, onCleanup) => {
     projection.clearSession()
+    ready.value = false
+    cached.value = null
     started.value = false
     loading.value = false
     connection.value = ''
@@ -82,6 +126,16 @@ export function useSubagentPreview(session, status) {
     if (!id) return
 
     const child = { ...session.value }
+    const cacheKey = JSON.stringify([id, path])
+    const previousPreview = status.value === 'running' ? cache.get(cacheKey) : null
+    if (previousPreview) {
+      cached.value = previousPreview.snapshot
+      cache.delete(cacheKey)
+      cache.set(cacheKey, previousPreview)
+      for (const [key, value] of cached.value.messages) messageIds.set(key, value)
+      for (const [key, value] of cached.value.groups) toolGroups.set(key, value)
+      groupSequence = cached.value.sequence
+    }
     let disposed = false
     let socket
     let controller
@@ -95,7 +149,41 @@ export function useSubagentPreview(session, status) {
     let rebase = false
     let replay = []
     let snapshot
+    let detail = previousPreview?.snapshot.detail
+    let anchor = previousPreview?.snapshot.anchor
+    let events = [...(previousPreview?.snapshot.events || [])]
+    let restored = Boolean(previousPreview)
+    let assistantId = ''
+    let restoreFrame
     projection.selectSession(id)
+    if (restored) {
+      projection.setPersistedDetail(detail)
+      for (const frame of events) {
+        if (frame.type === 'active_session') projection.setRuntimeState(frame.data.state, frame.data.snapshotRevision)
+        else {
+          projection.handle({ kind: 'runtime', ...frame.data })
+          const event = frame.data.event
+          if (event?.message?.role === 'assistant') assistantId = event.type === 'message_end' ? '' : event.message.entryId || ''
+        }
+      }
+      projection.setPersistedDetail(detail)
+      restoreFrame = requestAnimationFrame(() => {
+        if (disposed) return
+        ready.value = true
+        cached.value = null
+      })
+    }
+
+    function rememberEvent(type, data) {
+      const previous = events.at(-1)
+      if (previous?.type === type && (type === 'active_session'
+        || (['message_update', 'tool_execution_update'].includes(data.event?.type)
+          && previous.data.event?.type === data.event.type
+          && previous.data.event.toolCallId === data.event.toolCallId
+          && previous.data.event.message?.timestamp === data.event.message?.timestamp))) events.pop()
+      events.push({ type, data })
+      if (events.length > 128) events.shift()
+    }
 
     async function load() {
       if (disposed) return
@@ -111,8 +199,16 @@ export function useSubagentPreview(session, status) {
       lastRefresh = Date.now()
       loading.value = true
       try {
-        const detail = await fetchSessionDetail(child, { signal: controller.signal })
+        const freshDetail = await fetchSessionDetail(child, { signal: controller.signal })
         if (disposed || revision !== requestRevision) return
+        if (restored) {
+          const index = anchor ? freshDetail.entries.findIndex(entry => entry.id === anchor) : -1
+          if ((anchor && index < 0)
+            || freshDetail.entries.slice(index + 1).some(entry => entry.type === 'message' && entry.role === 'assistant')) rebase = true
+        }
+        detail = freshDetail
+        anchor = detail.entries.at(-1)?.id
+        restored = false
         if (rebase) {
           projection.setPersistedDetail(detail)
           for (const item of projection.liveItems.value.filter(item => item.persistedEntry?.role === 'assistant').slice(-80)) rememberMessage(item)
@@ -120,6 +216,8 @@ export function useSubagentPreview(session, status) {
           projection.setPersistedDetail(detail)
           if (snapshot) projection.setRuntimeState(snapshot.state, snapshot.snapshotRevision)
           for (const data of replay) projection.handle({ kind: 'runtime', ...data })
+          events = snapshot ? [{ type: 'active_session', data: snapshot }] : []
+          for (const data of replay) rememberEvent('runtime_event', data)
           replay = []
           rebase = false
           if (connection.value === 'settled') {
@@ -128,10 +226,21 @@ export function useSubagentPreview(session, status) {
           }
         }
         projection.setPersistedDetail(detail)
+        const savedIds = new Set(detail.entries.map(entry => entry.id))
+        for (const item of projection.liveItems.value) {
+          if (item.type === 'assistant' && item.persistedEntry) savedIds.add(item.id)
+        }
+        events = events.filter(frame => frame.type !== 'runtime_event'
+          || frame.data.event?.message?.role !== 'assistant'
+          || !savedIds.has(frame.data.event.message.entryId))
+        ready.value = true
+        cached.value = null
         error.value = ''
       } catch (failure) {
         if (disposed || revision !== requestRevision || failure.name === 'AbortError') return
         error.value = failure.message
+        ready.value = true
+        cached.value = null
       } finally {
         controller = undefined
         if (!disposed) {
@@ -175,6 +284,7 @@ export function useSubagentPreview(session, status) {
     function start() {
       if (started.value || disposed) return
       started.value = true
+      loading.value = true
       connection.value = 'connecting'
       const params = new URLSearchParams({ sessionId: id })
       socket = openEventSocket(`/api/pi/events?${params}`, {
@@ -202,9 +312,20 @@ export function useSubagentPreview(session, status) {
               snapshotRevision = data.snapshotRevision
             }
             snapshot = data
+            rememberEvent(type, data)
             projection.setRuntimeState(data.state, data.snapshotRevision)
           } else if (type === 'runtime_event' && data.activeSessionId === id) {
-            if (rebase) {
+            const event = data.event
+            if (event?.message?.role === 'assistant'
+              && ['message_start', 'message_update', 'message_end'].includes(event.type)) {
+              const nativeId = event.message.entryId || event.entryId || event.message.id || event.id
+              if (event.type === 'message_start') assistantId = ''
+              assistantId = nativeId || assistantId || `subagent-assistant-${++assistantSequence}`
+              data = { ...data, event: { ...event, message: { ...event.message, entryId: assistantId } } }
+              if (event.type === 'message_end') assistantId = ''
+            }
+            rememberEvent(type, data)
+            if (rebase || restored) {
               const previous = replay.at(-1)?.event
               const event = data.event
               if (['message_update', 'tool_execution_update'].includes(event?.type)
@@ -233,7 +354,9 @@ export function useSubagentPreview(session, status) {
     }, { immediate: true })
 
     onCleanup(() => {
+      savePreview(cacheKey, detail, [...events], anchor)
       disposed = true
+      cancelAnimationFrame(restoreFrame)
       stopStatus()
       closeSocket()
       clearTimeout(refreshTimer)
@@ -250,6 +373,7 @@ export function useSubagentPreview(session, status) {
     items,
     itemKey: item => `${session.value?.id || ''}:${messageIds.get(activityEntry(item).id) || item.id}`,
     loading,
+    ready: available,
     refresh: () => refresh(),
     runtimeError,
     started,

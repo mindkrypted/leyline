@@ -2219,6 +2219,7 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-tasks {
+  position: relative;
   flex: 0 1 auto;
   min-height: 0;
   max-height: 31%;
@@ -2228,6 +2229,8 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-task {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
@@ -2256,6 +2259,24 @@ dialog.subagent-inspector:not([open]) {
   background: #2a2a2d;
 }
 
+.subagent-inspector-task-marker {
+  position: absolute;
+  top: 0;
+  border: 1px solid #3a3a40;
+  border-radius: 6px;
+  background: #2a2a2d;
+  pointer-events: none;
+  transition: transform 420ms var(--ease-emphasized),
+    height 420ms var(--ease-emphasized),
+    left 420ms var(--ease-emphasized),
+    width 420ms var(--ease-emphasized);
+}
+
+.has-selection-marker .subagent-inspector-task[aria-pressed="true"] {
+  border-color: transparent;
+  background: transparent;
+}
+
 .subagent-inspector-index {
   color: #93939b;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -2268,6 +2289,21 @@ dialog.subagent-inspector:not([open]) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.subagent-inspector-reader-stack {
+  display: grid;
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.subagent-inspector-reader-stack > .subagent-inspector-content {
+  grid-area: 1 / 1;
+  min-width: 0;
+  background: #191919;
 }
 
 .subagent-inspector-content {
@@ -2460,7 +2496,23 @@ dialog.subagent-inspector:not([open]) {
   font-size: 11px;
 }
 
-.subagent-inspector-footer > span {
+.subagent-inspector-footer.has-motion-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.subagent-inspector-footer-content {
+  display: flex;
+  grid-area: 1 / 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  background: #191919;
+}
+
+.subagent-inspector-footer > span,
+.subagent-inspector-footer-content > span {
   min-width: 0;
 }
 
@@ -2598,6 +2650,7 @@ dialog.subagent-inspector[open] {
 
 @media (prefers-reduced-motion: reduce) {
   .subagent-inspector-task,
+  .subagent-inspector-task-marker,
   .subagent-inspector-prompt summary > span {
     transition: none;
   }

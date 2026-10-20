@@ -93,6 +93,8 @@ Use Command-click, Ctrl-click, or middle-click on **Open child session** to open
 
 The task list stays in its original order. Live updates and saved results preserve the selected task and reading position.
 
+On a task change, the current reader stays visible until the next preview is ready. The reader, task highlight, and footer then change together. The sheet stays in place. Reduced motion removes the animation.
+
 **Stopped** means cancellation. **Failed** means a task error. **Not started** means the task did not run. Missing final outcomes show **Unknown**. Completed results remain available when another task stops or fails. If task results are unavailable, **Call output** preserves the original tool response or error.
 
 Resolve pending extension confirmations before opening the inspector. A new confirmation closes it so the **Confirm** and **Cancel** controls remain accessible.
@@ -107,7 +109,9 @@ Thoughts and completed tools start collapsed. Expand a row to inspect it. Active
 
 Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity. The selected task and expanded content remain in place during saved-entry updates and reconnects.
 
-Reading the preview keeps the parent session selected. Closing the inspector releases the preview connection without stopping the child run. If the connection drops, the preview keeps its last received activity until updates resume.
+Recently viewed active tasks can reopen from a temporary preview cache. If a saved-history refresh fails, live text and tool output can continue. Select **Retry** to request saved history again.
+
+Reading the preview keeps the parent session selected. Closing the inspector clears its temporary previews and releases the connection without stopping the child run. If the connection drops, the preview keeps its last received activity until updates resume.
 
 Use **Open child session** for the full transcript and tool image results. Live child previews are available in Leyline, not in HTML exports.
 
