@@ -71,7 +71,7 @@ For expanded tool previews:
 DOCS_SCREENSHOT_FILTER=tool-activity.png,vision-tool-call.png,preview-fullscreen.png npm run docs:screenshots
 ```
 
-`tool-activity.png` shows a short skill-file preview and **Open full screen** above a collapsed shell call. The helper checks their alignment with the tool label, keeps the action above the composer, and rejects a duplicate desktop path line.
+`tool-activity.png` shows an integrated skill-prompt header, an expanded skill read with **Loaded**, and a collapsed shell call. The skill row uses a plain name without a path pill. The helper checks that the file preview and **Open full screen** align with the skill name. It also keeps the action above the composer and rejects a duplicate desktop path line.
 
 For the settings overview and connection-test captures:
 

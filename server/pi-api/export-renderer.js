@@ -12,6 +12,7 @@ import {
   imageBlocksFor,
   messageBlocksFor,
   parseSkillPrompt,
+  skillReadName,
   skillSummaries,
 } from '../../lib/transcript-projection.js'
 
@@ -229,6 +230,10 @@ function renderExportModelChange(entry) {
 </div>`
 }
 
+function skillIcon() {
+  return '<svg class="skill-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5-4 7 4 7m8-14 4 7-4 7M14 4l-4 16" /></svg>'
+}
+
 function toolStatusMark(tone) {
   if (tone === 'running') return '<span class="tool-status-spinner" aria-hidden="true"></span>'
   if (tone === 'stopped') return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 5h6v6H5z" /></svg>'
@@ -245,13 +250,17 @@ function renderExportTool(entry, index) {
   }
   const status = mobileToolStatus(entry)
   const tone = toolStatusTone(status)
-  return `<details class="tool-card transcript-tool${['error', 'failed'].includes(status) ? ' error-card' : ''}">
+  const skill = skillReadName(entry)
+  const skillStatus = { completed: 'Loaded', running: 'Loading', error: 'Failed', stopped: 'Stopped', unknown: 'Unknown' }[tone]
+  const statusLabel = skill ? skillStatus : status
+  return `<details class="tool-card transcript-tool${skill ? ' skill-tool-card' : ''}${['error', 'failed'].includes(status) ? ' error-card' : ''}">
 <summary class="tool-card-header">
-<span class="chevron tool-chevron">›</span>
-<span>${escapeHtml(entry.label)}</span>
-${entry.code ? `<code>${escapeHtml(entry.code)}</code>` : ''}
+${skill ? skillIcon() : '<span class="chevron tool-chevron">›</span>'}
+<span class="tool-label"${skill ? ` title="${escapeHtml(entry.preview?.path || entry.code || '')}"` : ''}>${escapeHtml(skill || entry.label)}</span>
+${skill ? '<svg class="chevron skill-tool-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>' : ''}
+${entry.code && !skill ? `<code>${escapeHtml(entry.code)}</code>` : ''}
 ${entry.contextLabel ? renderToolContext(entry) : ''}
-<span class="tool-status-mark status-${tone}" title="${escapeHtml(status)}" role="img" aria-label="${escapeHtml(status)}">${toolStatusMark(tone)}</span>
+<span class="tool-status-mark status-${tone}" title="${escapeHtml(statusLabel)}" role="img" aria-label="${escapeHtml(statusLabel)}">${toolStatusMark(tone)}${skill ? `<span class="skill-tool-status" aria-hidden="true">${skillStatus}</span>` : ''}</span>
 </summary>
 ${entry.code && !['bash', 'search_memory'].includes(entry.toolName) ? `<div class="mobile-tool-target"><code>${escapeHtml(entry.preview?.path || entry.code)}</code></div>` : ''}
 <div class="tool-expanded-body" data-tool-index="${index}">
@@ -485,15 +494,18 @@ function highlightExportJson(json) {
 }
 
 function renderExportMessage(entry) {
+  const skills = skillSummaries(entry)
   const classes = [
     'message compact-message transcript-message',
     entry.role === 'user' ? 'user-message' : '',
     entry.role === 'assistant' ? 'assistant-message' : '',
     entry.type === 'summary' ? 'summary-message' : '',
     entry.researchReport ? 'research-report-message' : '',
+    skills.length ? 'skill-message' : '',
   ].filter(Boolean).join(' ')
 
   return `<article class="${classes}">
+${skills.length ? renderSkillSummaries(entry, skills) : ''}
 <div class="message-meta message-meta-row"><span>${escapeHtml(entry.label)}</span></div>
 ${renderExportResearchReportHeading(entry)}
 ${renderMessageBody(entry)}
@@ -532,8 +544,10 @@ function renderMessageBody(entry) {
     return messageBlocksFor(entry).map(renderMessageBlock).join('\n')
   }
 
-  const skills = skillSummaries(entry)
-  if (skills.length) return renderSkillSummaries(entry, skills)
+  if (skillSummaries(entry).length) {
+    const userMessage = parseSkillPrompt(entry.text)?.userMessage
+    return userMessage ? `<div class="entry-text markdown-body">${renderMarkdown(userMessage)}</div>` : ''
+  }
 
   return `<div class="entry-text markdown-body">${renderMarkdown(entry.text)}</div>`
 }
@@ -560,19 +574,15 @@ ${renderMarkdown(block.text || '')}
 
 function renderSkillSummaries(entry, skills) {
   const rows = skills.map((skill) => {
-    return `<div class="skill-summary"><span>[skill]</span><strong>${escapeHtml(skill.name)}</strong><em>expand</em></div>`
+    return `<span class="skill-summary" title="${escapeHtml(skill.location || '')}">${skillIcon()}<strong>${escapeHtml(skill.name)}</strong><span class="skill-kind">Skill</span><svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg></span>`
   }).join('')
-  const prompt = parseSkillPrompt(entry.text)
-  const content = prompt?.content || entry.text || ''
-  const userMessage = prompt?.userMessage
-    ? `<div class="entry-text markdown-body">${renderMarkdown(prompt.userMessage)}</div>`
-    : ''
+  const content = parseSkillPrompt(entry.text)?.content || entry.text || ''
 
-  return `<div class="skill-summary-list"><details><summary>${rows}</summary>
+  return `<div class="skill-message-header"><details><summary>${rows}</summary>
 <div class="skill-expanded entry-text markdown-body">
 ${renderMarkdown(content)}
 </div>
-</details>${userMessage}</div>`
+</details></div>`
 }
 
 function renderMessageImages(entry) {
@@ -1866,54 +1876,81 @@ button, input, textarea { color: inherit; font: inherit; }
 .hljs-bullet { color: var(--syntax-keyword); }
 .hljs-addition { color: var(--syntax-string); }
 .hljs-deletion { color: var(--syntax-variable); }
-.skill-summary-list {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(0, 1fr);
+.user-message.skill-message {
+  --skill-message-inset: 14px;
+  padding-top: 0;
 }
-.skill-summary-list summary { list-style: none; cursor: pointer; }
-.skill-summary-list summary::-webkit-details-marker { display: none; }
+.skill-message-header {
+  overflow: hidden;
+  margin: 0 calc(-1 * var(--skill-message-inset)) 10px;
+  border-radius: 14px 14px 0 0;
+}
+.skill-message-header summary { list-style: none; cursor: pointer; }
+.skill-message-header summary::-webkit-details-marker { display: none; }
+.skill-message-header summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .skill-summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 100%;
+  gap: 10px;
+  width: 100%;
   min-width: 0;
-  width: fit-content;
-  border: 1px solid rgb(124 92 255 / 22%);
-  border-radius: 9px;
-  background: rgb(124 92 255 / 10%);
-  padding: 7px 9px;
-  color: #d9d5e8;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  min-height: 42px;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 2%);
+  background: #2d2a31;
+  padding: 0 var(--skill-message-inset);
+  color: #ddd8e5;
+  font: inherit;
   font-size: 13px;
+  text-align: left;
   cursor: pointer;
-  transition:
-    border-color var(--motion-base) var(--ease-decelerate),
-    background-color var(--motion-base) var(--ease-decelerate),
-    transform var(--motion-base) var(--ease-decelerate);
+  transition: background-color var(--motion-base) var(--ease-decelerate);
 }
-.skill-summary:hover {
-  border-color: rgb(124 92 255 / 40%);
-  background: rgb(124 92 255 / 14%);
-  transform: translateY(-0.5px);
-  transition-duration: var(--motion-quick);
-  transition-timing-function: var(--ease-accelerate);
+.skill-summary:hover { background: #35303c; }
+.skill-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #a89bbf;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
-.skill-summary span { color: #9d7dff; font-weight: 800; }
-.skill-summary strong { color: #e4e2ec; font-weight: 700; }
-.skill-summary em { color: var(--muted); font-style: normal; }
+.skill-summary strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.skill-summary .skill-kind {
+  flex: none;
+  margin-left: auto;
+  color: #978da3;
+  font-size: 11px;
+}
+.skill-summary .chevron {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: #a79caf;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform var(--motion-base) var(--ease-emphasized);
+}
+.skill-message-header details[open] .chevron { transform: rotate(90deg); }
 .skill-expanded {
   max-height: 520px;
   overflow: auto;
-  margin-top: 8px;
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: #111217;
-  padding: 10px 12px;
-  transition:
-    border-color var(--motion-base) var(--ease-decelerate),
-    opacity var(--motion-base) var(--ease-decelerate);
+  border-top: 1px solid rgb(255 255 255 / 5%);
+  background: #1a191c;
+  padding: 12px var(--skill-message-inset);
+}
+@media (max-width: 820px) {
+  .user-message.skill-message { --skill-message-inset: 10px; }
 }
 .empty-workbench {
   width: min(var(--content-max), 100%);
@@ -1946,6 +1983,9 @@ button, input, textarea { color: inherit; font: inherit; }
   .transcript-message,
   .tool-card,
   .skill-summary,
+  .skill-summary .chevron,
+  .skill-tool-card .skill-tool-chevron,
+  .mobile-activity-list .skill-tool-card .skill-tool-chevron,
   .thinking-block,
   .thinking-trigger .chevron,
   .tool-chevron,
@@ -2720,6 +2760,37 @@ dialog.subagent-inspector[open] {
 .mobile-activity-list .subagent-header .tool-inspect-button { height: var(--activity-row-height); min-height: var(--activity-row-height); }
 .mobile-activity-card.has-subagents .mobile-activity-state { flex: 1; justify-content: flex-end; }
 .mobile-activity-summary:focus-visible { outline: 2px solid #aaa; outline-offset: -2px; }
+.tool-card.skill-tool-card .tool-label,
+.mobile-activity-list .tool-card.skill-tool-card:not(.subagent-card) .tool-label {
+  flex: 0 1 auto;
+  max-width: none;
+  color: #c5bbcf;
+  font-weight: 550;
+}
+.skill-tool-card .skill-tool-chevron,
+.mobile-activity-list .skill-tool-card .skill-tool-chevron {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  fill: none;
+  stroke: #8e839b;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.skill-tool-card .tool-status-mark {
+  gap: 5px;
+  width: auto;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+.skill-tool-card .tool-status-mark.status-completed { color: #929a93; }
+.skill-tool-card .status-completed svg { color: #8fbc9b; }
+.mobile-activity-list .skill-tool-card .tool-expanded-body { padding-left: 23px; }
+.mobile-activity-list .skill-tool-card[open] > .mobile-tool-target { margin-left: 23px; }
 @media (max-width: 760px) {
   .export-tool-activity { --activity-row-height: 44px; }
   .mobile-activity-heading { min-height: 46px; padding: 0 11px; }

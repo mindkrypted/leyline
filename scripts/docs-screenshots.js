@@ -689,7 +689,7 @@ const toolActivityEntries = [
     id: 'tools-user',
     role: 'user',
     label: 'You',
-    text: 'Use the release-review skill to check the release flow.',
+    text: `<skill name="release-review" location=".pi/skills/release-review/SKILL.md">\n${skillPreviewContent}\n</skill>\n\nCheck the release flow before publication.`,
     timestamp: '2026-08-06T15:43:00.000Z',
   }),
   toolEntry({
@@ -1587,12 +1587,16 @@ try {
     ready: '.transcript-tool',
     scenario: 'tools',
     interact: async (page) => {
+      await page.locator('.skill-message-header').waitFor()
       const activity = page.locator('.mobile-activity-card')
       await activity.locator('.mobile-activity-summary').click()
-      const tool = activity.locator('.transcript-tool').filter({ hasText: 'Skill · release-review' })
+      const tool = activity.locator('.skill-tool-card').filter({ hasText: 'release-review' })
       await tool.locator('.tool-expand-button').click()
       await tool.locator('.pierre-diffs-container [data-line]').filter({ hasText: 'Confirm that a failed check stops the release.' }).waitFor()
       await disableMotion(page)
+      await page.locator('.workbench').hover({ position: { x: 10, y: 10 } })
+      await page.mouse.wheel(0, -1000)
+      await page.waitForFunction(() => document.querySelector('.workbench')?.scrollTop === 0)
       const label = await tool.locator('.tool-label').boundingBox()
       const preview = await tool.locator('.tool-preview-clip').boundingBox()
       const action = await tool.locator('.tool-preview-cta').boundingBox()

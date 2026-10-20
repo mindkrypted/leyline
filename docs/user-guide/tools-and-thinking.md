@@ -20,7 +20,7 @@ Saved assistant text appears as rendered Markdown. Raw HTML is disabled.
 
 ## Expand a tool row
 
-![Activity card with an expanded skill-file preview, Open full screen, and a collapsed shell call](../assets/screenshots/tool-activity.png)
+![Skill prompt header above an Activity card with an expanded skill read and a collapsed shell call](../assets/screenshots/tool-activity.png)
 
 Tool calls appear in Activity cards. A collapsed card shows its outcome summary and newest call. Select the card header to show the call list, then select a tool row to show its output or preview.
 
@@ -80,11 +80,11 @@ Select **×** or the backdrop to close the fullscreen view.
 
 ## Expand a skill row
 
-A call that reads a `SKILL.md` file appears as **Skill · name** in an Activity card. Expand it to read the file preview, or select **Open full screen** for the full content.
+A skill included with your prompt appears in a muted header at the top of your message. The header shows the skill glyph, name, **Skill** label, and disclosure arrow. Select the header to read the recorded instructions. Select it again to collapse them.
 
-A loaded skill prompt appears as a compact row with `[skill]`, the skill name, and **expand**. Select it to show the skill prompt payload.
+When the agent reads a skill, its Activity row shows the same glyph, the skill name, and a status. **Loaded** means the read completed successfully. Other states show **Loading**, **Failed**, **Stopped**, or **Unknown**.
 
-Select the row again when it shows **hide**.
+The collapsed row omits the file path. Expand it to read the file preview, or select **Open full screen** for the full content. Both `read-skill` calls and recognized skill-file reads use this presentation.
 
 ## Read a subagent card
 

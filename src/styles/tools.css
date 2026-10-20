@@ -2502,7 +2502,7 @@ dialog.subagent-inspector:not([open]) {
   border-top-color: transparent;
 }
 
-.mobile-activity-list.is-tail .tool-card:not(:has(.status-running)) .chevron {
+.mobile-activity-list.is-tail .tool-card:not(.skill-tool-card):not(:has(.status-running)) .chevron {
   visibility: hidden;
 }
 
@@ -2568,7 +2568,7 @@ dialog.subagent-inspector:not([open]) {
   min-height: 30px;
 }
 
-.mobile-activity-list .tool-card:has(.status-running):not(.is-expanded) .chevron {
+.mobile-activity-list .tool-card:has(.status-running):not(.skill-tool-card):not(.is-expanded) .chevron {
   display: inline-block;
   width: 10px;
   height: 10px;
@@ -2717,4 +2717,46 @@ dialog.subagent-inspector:not([open]) {
     font-size: 11px;
     overflow-wrap: anywhere;
   }
+}
+
+.tool-card.skill-tool-card .tool-label,
+.mobile-activity-list .tool-card.skill-tool-card:not(.subagent-card) .tool-label {
+  flex: 0 1 auto;
+  max-width: none;
+  color: #c5bbcf;
+  font-weight: 550;
+}
+
+.skill-tool-card .skill-tool-chevron,
+.mobile-activity-list .skill-tool-card .skill-tool-chevron {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  fill: none;
+  stroke: #8e839b;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.skill-tool-card .tool-status-mark {
+  gap: 5px;
+  width: auto;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.skill-tool-card .tool-status-mark.status-completed {
+  color: #929a93;
+}
+
+.skill-tool-card .status-completed svg {
+  color: #8fbc9b;
+}
+
+.mobile-activity-list .skill-tool-card .tool-expanded-body {
+  padding-left: 23px;
 }

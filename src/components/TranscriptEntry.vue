@@ -21,6 +21,7 @@ import {
   renderedMessage,
   renderedText,
   renderedToolJson,
+  skillReadName,
   skillSummaries,
   toolCommandCode,
 } from '../lib/transcript'
@@ -70,6 +71,8 @@ const noteOpen = ref(false)
 const thinkingExpanded = ref(props.thinkingInitiallyExpanded)
 const toolContentMounted = ref(props.toolExpanded)
 const systemInfo = computed(() => systemPromptInfo(props.entry))
+const skills = computed(() => skillSummaries(props.entry))
+const skillName = computed(() => skillReadName(props.entry))
 
 watch(() => props.toolExpanded, (expanded) => {
   if (expanded) toolContentMounted.value = true
@@ -163,6 +166,13 @@ function entryToolStatus(entry) {
 }
 
 const toolTone = computed(() => toolStatusTone(entryToolStatus(props.entry)))
+const skillStatus = computed(() => ({
+  completed: 'Loaded',
+  running: 'Loading',
+  error: 'Failed',
+  stopped: 'Stopped',
+  unknown: 'Unknown',
+})[toolTone.value])
 
 function citationTarget(value) {
   try {
@@ -300,7 +310,7 @@ function openMarkdownContent(event) {
   <article
     v-else-if="entry.type === 'tool'"
     class="tool-card transcript-tool"
-    :class="{ 'is-expanded': toolExpanded, 'error-card': ['error', 'failed'].includes(entryToolStatus(entry)) }"
+    :class="{ 'is-expanded': toolExpanded, 'skill-tool-card': skillName, 'error-card': ['error', 'failed'].includes(entryToolStatus(entry)) }"
   >
     <div class="tool-card-header">
       <button
@@ -309,9 +319,15 @@ function openMarkdownContent(event) {
         :aria-expanded="toolExpanded"
         @click="emit('toggle-tool', entry)"
       >
-        <span class="chevron">›</span>
-        <span class="tool-label">{{ entry.label }}</span>
-        <code v-if="entry.code" :title="entry.code">{{ entry.code }}</code>
+        <svg v-if="skillName" class="skill-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m8 5-4 7 4 7m8-14 4 7-4 7M14 4l-4 16" />
+        </svg>
+        <span v-else class="chevron">›</span>
+        <span class="tool-label" :title="skillName ? entry.preview?.path || entry.code : undefined">{{ skillName || entry.label }}</span>
+        <svg v-if="skillName" class="chevron skill-tool-chevron" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 5 7 7-7 7" />
+        </svg>
+        <code v-if="entry.code && !skillName" :title="entry.code">{{ entry.code }}</code>
         <span
           v-if="entry.contextLabel"
           class="tool-context-pill"
@@ -322,9 +338,9 @@ function openMarkdownContent(event) {
         <span
           class="tool-status-mark"
           :class="`status-${toolTone}`"
-          :title="entryToolStatus(entry)"
+          :title="skillName ? skillStatus : entryToolStatus(entry)"
           role="img"
-          :aria-label="entryToolStatus(entry)"
+          :aria-label="skillName ? skillStatus : entryToolStatus(entry)"
         >
           <span v-if="toolTone === 'running'" class="tool-status-spinner" aria-hidden="true"></span>
           <svg v-else-if="toolTone === 'completed'" viewBox="0 0 16 16" aria-hidden="true">
@@ -337,6 +353,7 @@ function openMarkdownContent(event) {
             <path d="M5 5h6v6H5z" />
           </svg>
           <span v-else class="tool-status-question" aria-hidden="true">?</span>
+          <span v-if="skillName" class="skill-tool-status" aria-hidden="true">{{ skillStatus }}</span>
         </span>
       </button>
       <button
@@ -454,8 +471,37 @@ function openMarkdownContent(event) {
   <article
     v-else
     class="message compact-message transcript-message"
-    :class="entryClass(entry)"
+    :class="[entryClass(entry), { 'skill-message': skills.length }]"
   >
+    <div v-if="skills.length" class="skill-message-header">
+      <button
+        v-for="skill in skills"
+        :key="skill.name"
+        class="skill-summary"
+        type="button"
+        :title="skill.location"
+        :aria-expanded="skillExpanded"
+        @click="emit('toggle-skill', entry)"
+      >
+        <svg class="skill-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m8 5-4 7 4 7m8-14 4 7-4 7M14 4l-4 16" />
+        </svg>
+        <strong>{{ skill.name }}</strong>
+        <span class="skill-kind">Skill</span>
+        <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 5 7 7-7 7" />
+        </svg>
+      </button>
+      <div class="skill-expand-wrapper" :class="{ 'is-expanded': skillExpanded }">
+        <div class="skill-expand-inner">
+          <div
+            class="skill-expanded entry-text markdown-body"
+            v-html="renderedText(skillContent(entry))"
+            @click="openMarkdownContent"
+          ></div>
+        </div>
+      </div>
+    </div>
     <div class="message-meta message-meta-row">
       <span>{{ entry.label }}</span>
       <div
@@ -613,28 +659,7 @@ function openMarkdownContent(event) {
         ></div>
       </template>
     </template>
-    <div v-else-if="skillSummaries(entry).length" class="skill-summary-list">
-      <button
-        v-for="skill in skillSummaries(entry)"
-        :key="skill.name"
-        class="skill-summary"
-        type="button"
-        :title="skill.location"
-        @click="emit('toggle-skill', entry)"
-      >
-        <span>[skill]</span>
-        <strong>{{ skill.name }}</strong>
-        <em>{{ skillExpanded ? 'hide' : 'expand' }}</em>
-      </button>
-      <div class="skill-expand-wrapper" :class="{ 'is-expanded': skillExpanded }">
-        <div class="skill-expand-inner">
-          <div
-            class="skill-expanded entry-text markdown-body"
-            v-html="renderedText(skillContent(entry))"
-            @click="openMarkdownContent"
-          ></div>
-        </div>
-      </div>
+    <div v-else-if="skills.length">
       <div
         v-if="skillUserMessage(entry)"
         class="entry-text markdown-body"

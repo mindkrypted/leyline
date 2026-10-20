@@ -40,6 +40,14 @@ A valid report citation emits a source-open event only when its numeric label an
 
 The live controller matches new persisted entries to visible live rows. It removes duplicate persisted rows until the handoff settles.
 
+## Skill presentation
+
+`parseSkillPrompt()` and `skillSummaries()` identify skills recorded with a user prompt. `TranscriptEntry.vue` places their names and disclosure controls in a full-width header joined to the user message. Expansion shows the recorded instructions, not the current file on disk.
+
+`skillReadName()` identifies `read-skill` calls and recognized `read` calls from the preview path, tool target, or existing skill annotation. Activity rows show the skill glyph, plain name, disclosure, and status instead of the repeated **Skill ·** prefix and path pill. The original target and content remain available for previews and copying.
+
+Completed reads show **Loaded**. Running, failed, stopped, and unknown reads retain distinct labels. HTML export uses the same name helper and presentation. Prompt headers live in `transcript.css`; Activity skill rows live in `tools.css`.
+
 ## Tool Activity and subagent inspector
 
 `lib/tool-activity.js` owns consecutive tool grouping and status counts for the app and export. All top-level tools stay in shared Activity cards, regardless of count, status, or live versus saved state. Nested child tools do not create separate rows. Non-tool entries separate groups.

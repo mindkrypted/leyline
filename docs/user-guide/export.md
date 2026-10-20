@@ -29,7 +29,7 @@ The token value is the latest available context usage. It is not a total of all 
 
 ## Read export content
 
-The export includes rendered Markdown, assistant thoughts, Activity cards, skill rows, subagent results, and attached images.
+The export includes rendered Markdown, assistant thoughts, Activity cards, skills, subagent results, and attached images. Skills retain the app's prompt headers, expandable read rows, and status labels.
 
 System events use the same muted dividers as the app. Select **System prompt** or **System updated** to open the prompt inspector.
 

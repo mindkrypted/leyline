@@ -21,8 +21,8 @@ Avoid decorative glow, gradients, and extra panels. Existing gradients serve fad
 | `shell.css` | App grid, header, sidebar, and start shell |
 | `topbar.css` | Runtime chrome and workbench header |
 | `workbench.css` | Workbench layout, loading, start, and empty states |
-| `transcript.css` | Messages, System dividers, Markdown, thinking, feedback, and entry actions |
-| `tools.css` | Prompt and subagent inspectors, Activity cards, compact tool rows, skills, files, diffs, and fullscreen previews |
+| `transcript.css` | Messages, skill-prompt headers, System dividers, Markdown, thinking, feedback, and entry actions |
+| `tools.css` | Prompt and subagent inspectors, Activity cards, compact tool and skill-read rows, files, diffs, and fullscreen previews |
 | `composer.css` | Composer, menus, attachments, context, and send states |
 | `memory.css` | Memory Inspector |
 | `review.css` | Git review rail, file list, diff states, resizing, and expanded layout |
