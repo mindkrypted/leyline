@@ -1210,6 +1210,10 @@ watch(activeRuntimeSession, (session) => {
   liveTurn.setRuntimeState(session.state, session.snapshotRevision)
 })
 
+watch(compactingContext, (compacting) => {
+  if (compacting) scheduleLiveScroll(selectedSessionId.value)
+}, { flush: 'post' })
+
 watch(reviewAvailable, (available) => {
   if (available) return
   reviewReady.value = false
@@ -4514,13 +4518,6 @@ function closePickerMenus() {
             v-for="(item, itemIndex) in persistedTranscriptItems"
             :key="`${selectedSession.id}:${item.id}`"
           >
-            <CompactionBoundary
-              v-if="compactionBoundary?.index === itemIndex"
-              :reason="compaction?.reason || ''"
-              :started-at="compaction?.startedAt || 0"
-              :tokens="contextUsage?.tokens ?? null"
-            />
-
             <MobileToolActivity
               v-if="item.type === 'tool-activity'"
               :class="{ 'is-frozen': compactionBoundary?.resolved && itemIndex < compactionBoundary.index }"
@@ -4600,13 +4597,6 @@ function closePickerMenus() {
                 && persistedTranscriptItems.length + itemIndex < compactionBoundary.index,
             }]"
           >
-            <CompactionBoundary
-              v-if="compactionBoundary?.index === persistedTranscriptItems.length + itemIndex"
-              :reason="compaction?.reason || ''"
-              :started-at="compaction?.startedAt || 0"
-              :tokens="contextUsage?.tokens ?? null"
-            />
-
             <MobileToolActivity
               v-if="item.type === 'tool-activity'"
               :group="item"
@@ -4680,8 +4670,7 @@ function closePickerMenus() {
         </TransitionGroup>
 
         <CompactionBoundary
-          v-if="!startupRun && !inProjectNewSessionRun
-            && compactionBoundary?.index === persistedTranscriptItems.length + liveTranscriptItems.length"
+          v-if="!startupRun && !inProjectNewSessionRun && compactingContext"
           :reason="compaction?.reason || ''"
           :started-at="compaction?.startedAt || 0"
           :tokens="contextUsage?.tokens ?? null"

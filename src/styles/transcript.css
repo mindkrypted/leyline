@@ -660,10 +660,6 @@
   animation: compaction-boundary-in 420ms var(--ease-emphasized) both;
 }
 
-.live-item:has(.compaction-boundary) {
-  content-visibility: visible;
-}
-
 .compaction-boundary-row {
   display: flex;
   align-items: center;
