@@ -11,6 +11,7 @@ import {
 } from '../lib/research-state.js'
 import { renderSessionExportHtml } from '../server/pi-api/export-renderer.js'
 import { subagentTaskTitle } from '../lib/subagent-view.js'
+import { docsDictation, docsDictationClient, docsDictationMeters } from './fixtures/docs-dictation.js'
 
 const baseUrl = process.env.DOCS_SCREENSHOT_URL || 'http://localhost:5173/'
 const screenshotFilter = (process.env.DOCS_SCREENSHOT_FILTER || '')
@@ -1139,6 +1140,9 @@ const allowedNames = new Set([
   ...networkAssetNames,
   ...subagentAssetNames,
   'tool-activity.png',
+  'dictation.png',
+  'dictation-settings.png',
+  'dictation-mobile.png',
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1226,6 +1230,41 @@ try {
     viewport: { width: 1503, height: 818 },
     scenario: 'trace',
     interact: openTraceWorkspace,
+    macWindow: true,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'dictation.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'dictation',
+    interact: startDictationCapture,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'dictation-settings.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'dictation-settings',
+    interact: openDictationSettings,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'dictation-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    viewport: { width: 390, height: 844 },
+    scenario: 'dictation',
+    interact: startDictationCapture,
+  })
+  await capture({
+    browser,
+    file: path.join(readmeOutputDir, 'dictation.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    viewport: { width: 1503, height: 818 },
+    scenario: 'dictation',
+    interact: startDictationCapture,
     macWindow: true,
   })
   await capture({
@@ -1958,6 +1997,35 @@ try {
 
 console.log('Screenshot capture complete')
 
+async function startDictationCapture(page) {
+  await page.locator('.dictation-button[aria-label^="Start local dictation"]').click()
+  await page.locator('.dictation-status-listening').waitFor()
+  const result = await page.evaluate(() => window.__docsFeedDictation())
+  const heights = await page.locator('.dictation-wave rect').evaluateAll(bars => bars.map(bar => Number(bar.style.transform.match(/scaleY\(([\d.]+)\)/)?.[1] || 0)))
+  if (result.count !== 31 || result.time !== 1000 || result.acknowledged !== 31 || heights.length !== 30 || Math.max(...heights) - Math.min(...heights) < 0.2
+    || heights.filter(value => value > 0.2).length < 20
+    || new Set(heights.map(value => value.toFixed(2))).size < 8
+    || ![0, 10, 20].every(start => heights.slice(start, start + 10).some(value => value > 0.2))) {
+    throw new Error(`Deterministic dictation waveform did not fill the capture width: ${JSON.stringify({ result, heights })}`)
+  }
+  await page.waitForFunction(() => document.querySelector('.dictation-timer')?.textContent.trim() === '0:01')
+  const source = await page.locator('.dictation-status-source').getAttribute('aria-label')
+  const timer = await page.locator('.dictation-timer').textContent()
+  if (source !== 'Local-model speech processing · Leyline server' || timer !== '0:01') {
+    throw new Error(`Deterministic dictation status changed: ${JSON.stringify({ source, timer })}`)
+  }
+}
+
+async function openDictationSettings(page) {
+  await page.evaluate(() => window.dispatchEvent(new Event('leyline:open-settings')))
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.getByRole('button', { name: 'Dictation', exact: true }).click()
+  await dialog.locator('.dictation-settings').waitFor()
+  await dialog.getByRole('heading', { name: 'Speech model', exact: true }).waitFor()
+  await dialog.getByText('Downloaded on Leyline server', { exact: true }).waitFor()
+}
+
 async function waitForTrace(page) {
   await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: primaryTrace.name }).waitFor()
   await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).waitFor()
@@ -2626,6 +2694,9 @@ async function capture({
     runtimeEvents: runtimeFixtures.runtimeEvents,
     terminal,
     emitRuntimeEvents: !['home', 'subagent-live'].includes(scenario),
+    dictation: ['dictation', 'dictation-settings'].includes(scenario) ? docsDictation : null,
+    dictationClient: ['dictation', 'dictation-settings'].includes(scenario) ? docsDictationClient : null,
+    dictationMeters: scenario === 'dictation' ? docsDictationMeters : null,
   })
   const page = await context.newPage()
   const unexpected = []
@@ -3089,6 +3160,9 @@ function initBrowser({
   runtimeEvents,
   terminal,
   emitRuntimeEvents,
+  dictation,
+  dictationClient,
+  dictationMeters,
 }) {
   const NativeDate = Date
   let tick = 0
@@ -3112,8 +3186,78 @@ function initBrowser({
   }
   window.SpeechRecognition = MockSpeechRecognition
   window.webkitSpeechRecognition = MockSpeechRecognition
+  if (dictationClient) {
+    window.localStorage.setItem('leyline.dictation.client.v1', JSON.stringify(dictationClient))
+    let fixtureNow = 0
+    Object.defineProperty(Performance.prototype, 'now', { configurable: true, value: () => fixtureNow })
+    const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = callback => nativeRequestAnimationFrame(() => callback(fixtureNow))
+    const tracks = [{ onended: null, stop() {} }]
+    const stream = { getTracks: () => tracks, getAudioTracks: () => tracks }
+    const emptyNode = () => ({ connect() {}, disconnect() {} })
+    let workletNode
+    class DocsAudioContext {
+      state = 'suspended'
+      destination = {}
+      audioWorklet = { addModule: async () => {} }
+      async resume() { this.state = 'running' }
+      async close() { this.state = 'closed' }
+      createMediaStreamSource() { return emptyNode() }
+      createGain() { return { ...emptyNode(), gain: { value: 1 } } }
+    }
+    class DocsAudioWorkletNode {
+      constructor() {
+        workletNode = this
+        this.port = {
+          onmessage: null,
+          postMessage: value => {
+            if (value === 'flush') this.port.onmessage?.({ data: { type: 'flushed' } })
+          },
+        }
+        this.onprocessorerror = null
+      }
+      connect() {}
+      disconnect() {}
+    }
+    window.AudioContext = DocsAudioContext
+    window.webkitAudioContext = DocsAudioContext
+    window.AudioWorkletNode = DocsAudioWorkletNode
+    Object.defineProperty(navigator.mediaDevices, 'enumerateDevices', {
+      configurable: true,
+      value: async () => [{ deviceId: 'demo-microphone', groupId: 'demo-group', kind: 'audioinput', label: 'Demo microphone', toJSON() {} }],
+    })
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+      configurable: true,
+      value: async () => stream,
+    })
+    window.__docsDictationAcknowledged = 0
+    window.__docsFeedDictation = async () => {
+      if (!workletNode?.port.onmessage || !dictationMeters?.length) throw new Error('Mock dictation audio worklet is not ready')
+      let previousDrawing = ''
+      for (let index = 0; index < dictationMeters.length; index++) {
+        fixtureNow = index * 1000 / (dictationMeters.length - 1)
+        const meter = dictationMeters[index]
+        workletNode.port.onmessage({ data: { type: 'meter', ...meter } })
+        const pcm = new Float32Array(1600)
+        for (let sample = 0; sample < pcm.length; sample++) {
+          pcm[sample] = Math.sin((index * pcm.length + sample) * 0.071) * meter.rms * 1.4
+        }
+        workletNode.port.onmessage({ data: { type: 'audio', pcm } })
+        await new Promise(resolve => setTimeout(resolve, 0))
+        const drawing = [...document.querySelectorAll('.dictation-wave rect')].map(bar => bar.style.transform).join('|')
+        if (!drawing || drawing === previousDrawing) throw new Error(`Dictation meter ${index + 1} did not update the production waveform`)
+        if (window.__docsDictationAcknowledged !== index + 1) throw new Error(`Dictation PCM packet ${index + 1} was not acknowledged`)
+        previousDrawing = drawing
+      }
+      return { count: dictationMeters.length, time: fixtureNow, acknowledged: window.__docsDictationAcknowledged }
+    }
+    window.addEventListener('pagehide', () => {
+      if (workletNode) workletNode.port.onmessage = null
+    }, { once: true })
+  }
 
   const NativeWebSocket = window.WebSocket
+  let docsCaptureSequence = 0
   window.__docsEventSockets = []
   class MockWebSocket extends EventTarget {
     static CONNECTING = 0
@@ -3130,7 +3274,7 @@ function initBrowser({
       if (pathname === '/api/pi/events') window.__docsEventSockets.push(this)
       setTimeout(() => {
         if (this.readyState !== MockWebSocket.CONNECTING) return
-        if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal'].includes(pathname)
+        if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal', ...(dictation ? ['/api/leyline/dictation'] : [])].includes(pathname)
           || (pathname === '/api/pi/terminal' && !terminal)) {
           this.close()
           return
@@ -3139,6 +3283,12 @@ function initBrowser({
         const event = new Event('open')
         this.onopen?.(event)
         this.dispatchEvent(event)
+        if (pathname === '/api/leyline/dictation') {
+          this.dictationState = structuredClone(dictation)
+          this.dictationCapture = null
+          this.dictationOwner = true
+          return
+        }
         if (pathname === '/api/pi/terminal') {
           this.emit({ type: 'ready', cwd: '/workspace/harbor', shell: '/bin/zsh', pty: true })
           this.emit({ type: 'data', data: '$ npm run docs:build\r\n✓ documentation build complete\r\n' })
@@ -3177,7 +3327,69 @@ function initBrowser({
       this.onmessage?.(event)
       this.dispatchEvent(event)
     }
-    send() {}
+    send(data) {
+      if (!dictation || new URL(this.url).pathname !== '/api/leyline/dictation') return
+      if (typeof data === 'string') {
+        const request = JSON.parse(data)
+        try {
+          const value = this.dictationCommand(request.method, request.input)
+          this.emit({ id: request.id, ok: true, value })
+        } catch (error) {
+          this.emit({ id: request.id, ok: false, error: error.message })
+        }
+        return
+      }
+      if (!(data instanceof ArrayBuffer) || data.byteLength < 48 || (data.byteLength - 44) % 4) return
+      const frame = new DataView(data)
+      const id = frame.getUint32(0, true)
+      const sequence = frame.getUint32(4, true)
+      const captureId = new TextDecoder().decode(new Uint8Array(data, 8, 36))
+      if (!this.dictationOwner || !this.dictationCapture || this.dictationCapture.captureId !== captureId || this.dictationCapture.sequence !== sequence) {
+        this.emit({ id, ok: false, error: 'Invalid dictation audio sequence' })
+        return
+      }
+      for (let offset = 44; offset < data.byteLength; offset += 4) {
+        const sample = frame.getFloat32(offset, true)
+        if (!Number.isFinite(sample) || Math.abs(sample) > 1) {
+          this.emit({ id, ok: false, error: 'Invalid dictation audio sample' })
+          return
+        }
+      }
+      this.dictationCapture.sequence++
+      window.__docsDictationAcknowledged++
+      this.emit({ id, ok: true, value: { accepted: true } })
+    }
+    dictationCommand(method, input) {
+      if (method === 'getState') return structuredClone(this.dictationState)
+      if (method === 'updateSettings') {
+        this.dictationState.settings = { ...this.dictationState.settings, ...input }
+        return structuredClone(this.dictationState)
+      }
+      if (method === 'start') {
+        if (!this.dictationOwner || this.dictationCapture) throw new Error('Dictation capture is busy')
+        const sequence = ++docsCaptureSequence
+        const captureId = `${String(Date.now()).slice(-8).padStart(8, '0')}-0000-4000-8000-${sequence.toString(16).padStart(12, '0')}`
+        this.dictationCapture = { captureId, sequence: 0, requestId: input.requestId }
+        this.dictationState.busy = true
+        this.dictationState.owned = true
+        return { captureId, sampleRate: 16000 }
+      }
+      if (method === 'finish') {
+        if (!this.dictationOwner || !this.dictationCapture || this.dictationCapture.captureId !== input) throw new Error('Dictation capture is not owned')
+        this.dictationCapture = null
+        this.dictationState.busy = false
+        this.dictationState.owned = false
+        return { text: 'The release notes are ready for review.' }
+      }
+      if (method === 'cancel') {
+        if (input?.requestId && this.dictationCapture?.requestId !== input.requestId) throw new Error('Dictation capture is not owned')
+        this.dictationCapture = null
+        this.dictationState.busy = false
+        this.dictationState.owned = false
+        return structuredClone(this.dictationState)
+      }
+      throw new Error(`Unknown dictation method: ${method}`)
+    }
     close() {
       if (this.readyState === MockWebSocket.CLOSED) return
       this.readyState = MockWebSocket.CLOSED
