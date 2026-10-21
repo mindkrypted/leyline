@@ -1,5 +1,6 @@
 import { backendConnectionsHandler, readNetworkAccessSettings } from '../backend-connections.js'
 import { configureNetworkAccess, localServerUrl } from '../network-access.js'
+import { configureDictationWebSocketServer } from '../dictation-sockets.js'
 import { createPiRuntimeApi } from './runtime.js'
 import { createPiApiHandler } from './router.js'
 import { configureEventWebSocketServer } from './event-sockets.js'
@@ -12,12 +13,14 @@ const eventServers = new Set()
 
 export function piApi() {
   let closeNetworkAccess
+  let closeDictation
   return {
     name: 'pi-api',
-    closeBundle: () => Promise.all([closeNetworkAccess?.(), shutdownPiRuntime()]),
+    closeBundle: () => Promise.all([closeDictation?.(), closeNetworkAccess?.(), shutdownPiRuntime()]),
     configureServer(server) {
       configurePiWebSocketServer(server.httpServer)
       const protocol = server.config.server.https ? 'https' : 'http'
+      closeDictation = configureDictationWebSocketServer(server.httpServer, { protocol })
       server.httpServer.once('listening', () => {
         const url = localServerUrl(server.httpServer, protocol)
         const owner = JSON.stringify(['vite', server.config.root, url])

@@ -5,6 +5,7 @@ import { extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { backendConnectionsHandler, readNetworkAccessSettings } from './backend-connections.js'
 import { configureNetworkAccess } from './network-access.js'
+import { configureDictationWebSocketServer } from './dictation-sockets.js'
 import {
   configurePiWebSocketServer,
   piApiHandler,
@@ -36,6 +37,7 @@ export async function startLeylineServer(options = {}) {
   })
 
   configurePiWebSocketServer(server)
+  const closeDictation = configureDictationWebSocketServer(server)
   const owner = options.networkAccessOwner || JSON.stringify(['server', root, host, port])
   const closeNetworkAccess = configureNetworkAccess(server, readNetworkAccessSettings(owner))
 
@@ -57,7 +59,7 @@ export async function startLeylineServer(options = {}) {
     url,
     close: async () => {
       try {
-        await Promise.all([closeNetworkAccess(), shutdownPiRuntime()])
+        await Promise.all([closeDictation(), closeNetworkAccess(), shutdownPiRuntime()])
       } finally {
         await new Promise((resolveClose) => server.close(resolveClose))
       }
