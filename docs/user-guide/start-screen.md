@@ -87,9 +87,9 @@ Leyline accepts PNG, JPEG, GIF, and WebP image data. The current composer has no
 
 ## Use dictation
 
-Select **Start dictation** to add recognized speech to the draft. Select **Stop dictation** to stop.
+Select the composer microphone button to record speech. Select **Finish** to add recognized text to the draft, or **Cancel** to discard the recording. Sending a draft finishes dictation first and then uses the normal send or queue behavior.
 
-Dictation uses the browser Web Speech API. The control is disabled in Electron and in unsupported browsers.
+See [Dictation](./dictation) for method choices, local model setup, and shortcut details.
 
 ## Select a slash command
 

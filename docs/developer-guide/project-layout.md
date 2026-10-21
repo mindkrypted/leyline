@@ -40,7 +40,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/composables/useFileLinks.js`: Resolves file actions, including child-result origins from `data-file-session-id`.
 - `src/composables/useWorkbenchScroll.js`: Owns transcript following and Jump to latest.
 - `src/composables/useTerminal.js`: Owns xterm and terminal WebSocket state.
-- `src/composables/useDictation.js`: Wraps browser speech recognition.
+- `src/composables/useDictation.js`: Supplies the shared dictation controller, which routes browser speech recognition or local dictation through the preload bridge or same-origin speech WebSocket.
 - `src/composables/useSmoothStreamingText.js`: Controls incremental live text display.
 - `src/lib/backend.js`: Builds runtime HTTP and WebSocket URLs for the active backend.
 - `src/lib/event-socket.js`: Supplies the shared runtime/review WebSocket client with reconnect backoff, timeouts, heartbeat replies, stale-socket guards, and cleanup.

@@ -112,6 +112,7 @@ export default defineConfig({
           { text: 'Tracing', link: '/user-guide/tracing' },
           { text: 'Git review', link: '/user-guide/git-review' },
           { text: 'Composer', link: '/user-guide/composer' },
+          { text: 'Dictation', link: '/user-guide/dictation' },
           { text: 'Deep research', link: '/user-guide/deep-research' },
           { text: 'Runtime controls', link: '/user-guide/runtime-controls' },
           {

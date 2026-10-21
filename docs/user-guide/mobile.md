@@ -105,7 +105,11 @@ Select the close button or backdrop to return to the transcript. See [Subagents]
 
 ## Use the mobile composer
 
-The composer stays above the bottom edge. Its action row contains **Add to message**, the model capsule, dictation, and Send.
+The composer stays above the bottom edge. Its action row contains **Add to message**, the model capsule, dictation, and Send. During dictation, a compact waveform and gray **Finish** chip appear above the composer.
+
+![Mobile dictation with a compact waveform and gray Finish chip](../assets/screenshots/dictation-mobile.png)
+
+Browser dictation is the default in normal web browsers. It is browser-managed and may use an online service. Select **Local models** in Settings to use Parakeet or Whisper Turbo. In a browser, local-model speech runs on the Leyline server that serves the app. In Electron, local-model speech runs on this device. Dictation requires a secure context: use HTTPS or localhost, not ordinary LAN HTTP. See [Dictation](./dictation) for setup and processing details.
 
 Select the gray model capsule to open **Session options**. The capsule shows the model's display name. The sheet contains model selection, **Thinking**, and **Service tier**.
 

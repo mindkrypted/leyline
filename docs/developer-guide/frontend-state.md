@@ -30,7 +30,7 @@
 | `useSubagentPreview.js` | Selected saved or active child detail, runtime subscription, refresh queue, recovery, and stable preview identities |
 | `useWorkbenchScroll.js` | Bottom following, composer space, new-output state, and Jump to latest |
 | `useTerminal.js` | xterm, WebSocket, PTY status, focus, fit, and drawer height |
-| `useDictation.js` | Browser speech-recognition state inside both composer components |
+| `App.vue` / `useDictation.js` | One shared dictation controller for both composers; routes browser speech recognition or local dictation through the preload bridge or same-origin speech WebSocket |
 | `useSmoothStreamingText.js` | Incremental text reveal for live Markdown blocks |
 
 ## App composition
@@ -45,7 +45,7 @@
 
 Runtime summary merges preserve existing `subagentChildren` when a snapshot omits it. Children stay in creation order, independent of runtime activity. Sidebar search keeps parent context and shows only matching children. Children remain outside regular session counts, pin controls, and the **Activity** navigator.
 
-`SessionComposer.vue` and `StartComposer.vue` own local input mechanics and dictation adapters.
+`SessionComposer.vue` and `StartComposer.vue` own local input mechanics. `App.vue` creates one dictation controller and passes it to both composers.
 
 `PromptQueue.vue` displays backend queue state. It does not schedule model work. Its attached tab opens a bounded corner tray, with a measured full-width layout when the composer is narrow. Opening it leaves the input and footer fixed.
 

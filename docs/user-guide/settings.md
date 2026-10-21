@@ -12,12 +12,19 @@ The modal has these categories:
 | --- | --- |
 | **Display** | Transcript display across Leyline windows. |
 | **Connections** | Network access for the native backend, saved connections, and the default connection. Each window selects its own active backend. |
+| **Dictation** | Dictation method and client preferences. Local speech model settings belong to the speech host. |
 | **Files** | File actions on the selected backend. |
 | **Agent defaults** | Global subagent and vision defaults on the selected backend. |
 | **Models & providers** | Pi provider credentials, custom providers, model definitions, and catalog overrides on the selected backend. |
 | **MCP servers** | Pi's global MCP configuration on the selected backend. |
 
 **Files**, **Models & providers**, and **MCP servers** appear only when the selected backend supports them. On narrow screens, use **Category** to select a page.
+
+Dictation is available in the browser and Electron. Browser dictation stays the default in normal web browsers. **Local models** is also available in normal web browsers and Electron. See [Dictation](./dictation) for setup and processing details.
+
+In **Dictation**, choose **Browser dictation** or **Local models**. Browser speech recognition is managed by the browser and may use an online service. Local models run on this computer in Electron, or on the Leyline server in a browser. In a browser, microphone audio goes to the server that serves the app, independent of the selected agent backend.
+
+For local models, select and download a model explicitly. Parakeet supports English. Whisper Turbo is multilingual, with English or language detection in Settings. Model, language, and keep-warm settings belong to the speech host. Microphone, method, and shortcut preferences stay on the client. The microphone opens only for dictation or an explicit test. **Keep model ready** keeps the model in memory, not the microphone.
 
 Trace capture has no category in this modal. Open **Session traces** or the sidebar **Trace explorer** button, then expand **Capture new runs** in the footer. See [Tracing](./tracing#control-capture).
 

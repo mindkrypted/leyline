@@ -12,11 +12,18 @@ an optional desktop shell around the same Vue app and API.
 | Terminal | Separate WebSocket connection to the selected backend | Separate WebSocket connection to the selected backend |
 | Tracing | Embedded Elune storage and views on the selected backend | Same trace views, with the library and worker included in the package |
 | Windows | Browser-managed tabs and windows | Foreground native windows with saved state |
-| Dictation | Available when the browser supports the Web Speech API | Not supported |
+| Dictation | Browser speech recognition by default; optional local models run on the Leyline server | Optional local models run on this device |
 
 Use the browser for normal development and visual changes. Use Electron to test
 packaging, desktop shortcuts, shell environment loading, multiple windows, and
 saved window state.
+
+Browser speech recognition is the default in a normal web browser. Its
+availability and processing depend on the browser. Electron uses local models
+on this device and does not offer browser speech recognition. Local models are
+also available in a browser. Browser audio for local models goes to the Leyline
+server that serves the app, independent of the selected agent backend. See
+[Dictation](../user-guide/dictation) for setup and processing details.
 
 ## Open another window
 

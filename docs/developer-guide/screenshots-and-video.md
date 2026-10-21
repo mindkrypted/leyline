@@ -51,7 +51,7 @@ The registry contains the native backend and a fictional saved connection. The t
 
 The visible native address is `localhost:5173`, even when the capture uses another server URL. The command does not change local data or model configuration.
 
-The command writes product images to `docs/assets/screenshots/`. It also refreshes the four README images in `assets/readme/`, including `tracing.png`.
+The command writes product images to `docs/assets/screenshots/`. It also refreshes the README images in `assets/readme/`, including `tracing.png`.
 
 Set a different app URL with:
 
@@ -220,6 +220,25 @@ Each state uses a new browser context. The script uses a fixed date with increas
 The capture disables remaining motion.
 
 The script blocks unrecognized `/api/` requests instead of sending them to a live backend. Before capture, it checks visible text and form values for home paths, usernames, repository paths, email addresses, and common credential prefixes.
+
+## Dictation captures
+
+Refresh the dictation images with:
+
+```bash
+DOCS_SCREENSHOT_FILTER=dictation.png,dictation-settings.png,dictation-mobile.png npm run docs:screenshots
+```
+
+| Output | Captured state |
+| --- | --- |
+| `docs/assets/screenshots/dictation.png` | Desktop composer showing local dictation in progress, the responsive audio waveform, and the Finish control. |
+| `docs/assets/screenshots/dictation-settings.png` | Desktop Dictation settings showing the local speech model, language, and microphone controls. |
+| `docs/assets/screenshots/dictation-mobile.png` | Mobile composer showing local dictation in progress and its recording controls. |
+| `assets/readme/dictation.png` | Composer dictation state in the README frame. |
+
+Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844. The README uses 1503 by 818. All captures use device scale factor 2.
+
+Use a mock dictation host and test audio or meter data. Keep the chat model at `local/minimax-m2.7`, separate from the Parakeet speech model. Do not request microphone access, download model files, or send a live model request during capture.
 
 ## Trace captures
 

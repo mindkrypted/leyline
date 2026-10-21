@@ -26,6 +26,7 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - [Linux installation](docs/getting-started/linux-installation.md)
 - [Sessions](docs/user-guide/sessions.md)
 - [Composer](docs/user-guide/composer.md)
+- [Dictation](docs/user-guide/dictation.md)
 - [Deep research](docs/user-guide/deep-research.md)
 - [Git review](docs/user-guide/git-review.md)
 - [Images and vision](docs/user-guide/images-and-previews.md)
@@ -61,6 +62,14 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
   session or traces across projects on the selected backend. Traces can
   contain private prompts and tool results. See
   [Tracing](docs/user-guide/tracing.md).
+
+## Dictation
+
+In ordinary browsers, browser-managed dictation is the default; Electron uses local Parakeet or Whisper models. Local browser audio is processed on the Leyline-serving host, while Electron processes audio on-device. The responsive waveform appears only during local capture; see the [Dictation guide](docs/user-guide/dictation.md) for setup and controls.
+
+<a href="assets/readme/dictation.png"><img alt="Composer showing local dictation in progress, with an audio waveform and Finish control" src="assets/readme/dictation.png" /></a>
+
+*Local dictation in the composer. See the [Dictation guide](docs/user-guide/dictation.md) for setup and controls.*
 
 Read [Motivations](docs/motivations.md) for the project direction.
 

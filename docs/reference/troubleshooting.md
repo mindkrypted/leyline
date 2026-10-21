@@ -355,12 +355,23 @@ Bash, confirm that `~/.bash_profile`, `~/.bash_login`, or `~/.profile` sources
 Electron keeps existing process variables, except `PATH`. It replaces `PATH`
 with the login-shell value.
 
-## Dictation is unavailable in Electron
+## Dictation does not start or finish
 
-This is expected. Leyline disables dictation in Electron because Electron does
-not provide the required speech-recognition service.
+Open **Settings → Dictation** and check the selected method. Browser dictation is the default in a normal web browser. It depends on browser support and may use an online service. Leyline does not switch to browser dictation when a selected local model fails.
 
-Use a compatible browser, such as Chrome, for dictation.
+For local dictation, select a model and use **Download** before recording. Parakeet supports English. Whisper Turbo is multilingual, with English or language detection in Settings. In Electron, local speech runs on this device. In a browser, it runs on the computer that serves the Leyline app, even when the selected agent backend is elsewhere. See [Dictation](../user-guide/dictation).
+
+Check these items:
+
+- Allow microphone access in the browser or operating system.
+- Open the browser app over HTTPS or `localhost`. Browsers require a secure context for microphone access.
+- Confirm that the chosen browser supports its browser-managed speech recognition method. Vendor support can vary.
+- Check that the recording contains speech and that the microphone is not muted.
+- If local dictation disconnects, retry from **Dictation** settings. A disconnected recording is cancelled.
+
+If dictation finishes but does not change the draft, check whether the draft changed during recording. Leyline leaves the draft unchanged in that case and can show recognized text for recovery. Copy that text before you dismiss it.
+
+For an Electron app, install the latest rebuilt package and restart it after a dictation bridge update. If the method is **Browser dictation**, Electron does not provide that browser-managed service. Select **Local models** instead.
 
 ## macOS cannot verify Leyline
 
