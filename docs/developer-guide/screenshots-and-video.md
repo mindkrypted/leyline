@@ -40,7 +40,7 @@ This command intercepts Leyline API calls and supplies sanitized fixtures. Mock 
 - Projects, folder browsing, session lists, detail, activation, and runtime state
 - Git status and selected-file diffs
 - Memory records, subagent configuration, and vision configuration
-- Saved child transcripts and child-scoped runtime events for live subagent previews
+- Saved child transcripts, tool arguments, and child-scoped runtime events for subagent ledgers
 - Queue, research, shell, and image-delegation transcript states
 - Runtime snapshots and events, Git review notices, and terminal traffic through mock WebSockets, plus exported HTML
 - Trace summaries, paged detail, bookmarks, capture configuration, and trace capability data
@@ -89,18 +89,18 @@ DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,suba
 
 | Asset | Captured state |
 | --- | --- |
-| `docs/assets/screenshots/subagent-live-tail.png` | Desktop live preview with one running child, collapsed history, and native tool-output events. |
-| `docs/assets/screenshots/subagent-live-tail-mobile.png` | The same active child in a mobile bottom sheet with the follow control and child-session link. |
-| `docs/assets/screenshots/subagent-outcomes.png` | Desktop subagent inspector with four completed tasks, one stopped task, and a selected Markdown result. |
-| `docs/assets/screenshots/subagent-inspector-mobile.png` | Mobile bottom sheet with two completed tasks, one stopped task, and the child-session control. |
-| `docs/assets/screenshots/subagent-inspector-export.png` | Offline HTML inspector with the five-task fixture and no live child-session navigation. |
+| `docs/assets/screenshots/subagent-live-tail.png` | Desktop action ledger with one running child, saved file reads, a search, and live command output. |
+| `docs/assets/screenshots/subagent-live-tail-mobile.png` | The same ledger in a mobile bottom sheet with the follow control and child-session link. |
+| `docs/assets/screenshots/subagent-outcomes.png` | Desktop action ledger with four completed tasks, one stopped task, and saved verification activity. |
+| `docs/assets/screenshots/subagent-inspector-mobile.png` | Mobile entry reader with two completed tasks, one stopped task, and a formatted result. |
+| `docs/assets/screenshots/subagent-inspector-export.png` | Offline entry reader with the five-task fixture and no child-session navigation. |
 | `docs/assets/screenshots/deep-research.png` | Completed report with the compact Research threads row in Activity. |
 | `docs/assets/screenshots/deep-research-mobile.png` | The same report with a mobile citation preview. |
 | `assets/readme/deep-research.png` | The research view in the README frame. |
 
 The fixtures give every child an explicit `title`, separate from its full `task` prompt. Research children use their planned thread titles.
 
-The inspector helpers open a single-call Activity card from its header, check task titles and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. They wait for one active reader with no outgoing reader or footer layers before capture. The export capture blocks the external preview renderer to verify that the inspector works offline.
+The inspector helpers open a single-call Activity card from its header, check task titles, stopped outcomes, and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. Desktop captures show the ledger; mobile and export captures open a full result. The helpers wait for one active reader with no outgoing reader or footer layers. The export capture blocks the external preview renderer to verify that the inspector works offline.
 
 For task-switch layout changes, refresh only the five inspector images:
 
@@ -110,7 +110,7 @@ DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,suba
 
 PNG captures show the settled layout with reduced motion enabled. Use separate fixture-based visual checks with motion enabled for cold previews, overlapping reader transitions, and rapid task changes. Also check manual scrollback, reduced motion, and closure during a handoff. Do not infer smooth motion from a static capture.
 
-Live captures use a synthetic release-review child. Saved messages pass through `projectTranscriptEntries()`, and a child-scoped `tool_execution_update` supplies the running command output. The helper waits for saved history and current output, checks that closing releases the child socket, then reopens the preview. Exactly one child subscription may remain open, and the parent route must stay selected. No child activation or model request reaches the backend.
+Live captures use a synthetic release-review child. Saved messages pass through `projectTranscriptEntries()` with tool arguments retained. A child-scoped `tool_execution_update` supplies the running command output. The helper opens that row to check full output and arguments, checks the task prompt, and verifies that closing releases the child socket. It then reopens the ledger for capture. Exactly one child subscription may remain open, and the parent route must stay selected. No child activation or model request reaches the backend.
 
 For sidebar child sessions:
 
@@ -181,8 +181,8 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Git review captures: `release-safety` with four sanitized changed files
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
-- Settled subagent captures: compact Activity rows and separate task inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group
-- Live subagent captures: one running explorer, two reads and one search in collapsed history, active verification output, and **Following live** in the footer
+- Settled subagent captures: compact Activity rows and separate Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
+- Live subagent captures: one running explorer, two reads and one search in the ledger, active verification output, and **Following live** in the footer
 - Sidebar child captures: an inset guide with hollow nodes, a parent-only chevron column, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation

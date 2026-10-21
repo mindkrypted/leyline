@@ -90,7 +90,7 @@ The collapsed row omits the file path. Expand it to read the file preview, or se
 
 A subagent call stays compact inside Activity. If it is the card's only tool call, select either the header or row to open its inspector directly. This includes parallel calls with several child tasks. For cards with several tool calls, expand the card first.
 
-Select a task inside the inspector to read its prompt, status, and Markdown result. Running children also show [live messages and tool output](./subagents#follow-an-active-child). Scroll up to pause following, then select **New output** or **Jump to latest** to resume.
+Select a task inside the inspector to see its action ledger and status. Select a row for the full entry, or **Full task prompt** for its instructions. Running children also show [live messages and tool output](./subagents#follow-an-active-child). Scroll up to pause following, then select **New output** or **Jump to latest** to resume.
 
 **Open child session** opens the full child transcript. The inspector uses a side sheet on desktop and a bottom sheet on mobile; it does not expand the parent transcript.
 
@@ -100,7 +100,7 @@ Select a task inside the inspector to read its prompt, status, and Markdown resu
 
 Select **Copy** in a message or tool header. Leyline copies the message text or available tool output.
 
-The action changes to **Copied** for a short time. The fullscreen tool view also has a **Copy** action. For subagents, use **Copy tool output** or **Copy result** inside the inspector.
+The action changes to **Copied** for a short time. The fullscreen tool view also has a **Copy** action. For subagents, **Copy tool output** copies the parent response. Open a ledger row and select **Copy full text** to copy its text or arguments.
 
 ## Add rollout feedback
 

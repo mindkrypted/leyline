@@ -85,17 +85,17 @@ Tool targets can shorten to fit the row. User messages and tool cards use the fu
 
 ## Inspect subagent tasks
 
-![Mobile subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-mobile.png)
+![Mobile subagent entry reader with task outcomes and a formatted result](../assets/screenshots/subagent-inspector-mobile.png)
 
 Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
 
-Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and reader scroll separately. The footer keeps the child-session link and the current follow or copy action.
+Select a task to see its action ledger, then select a row to read the full entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger. The task list and reader scroll separately. **Copy full text** copies the open entry, and **Open child session** opens the complete transcript.
 
 The current reader stays visible until the next task preview is ready. The task highlight, reader, and footer then change together without moving the sheet. Reduced motion removes the animation.
 
-A running child shows live messages and tool output in the same reader. Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity.
+A running child updates the ledger with messages and tool activity. Select a running call for its current output and arguments. Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity.
 
-![Mobile live subagent preview with compact tool history and running verification output](../assets/screenshots/subagent-live-tail-mobile.png)
+![Mobile live subagent action ledger with a running verification call](../assets/screenshots/subagent-live-tail-mobile.png)
 
 Closing the sheet leaves the child run active. See [Follow an active child](./subagents#follow-an-active-child) for preview limits and reconnect behavior.
 

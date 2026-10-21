@@ -870,7 +870,7 @@ const subagentLiveChildEntries = projectTranscriptEntries([
       { type: 'toolCall', id: 'live-release-verify', name: 'bash', arguments: { command: 'npm run verify' } },
     ] },
   },
-])
+], { toolArguments: true })
 const subagentLiveChildDetail = {
   session: {
     ...session(subagentLiveResult.childSession.id, subagentLiveResult.title, '2026-08-06T15:58:15.000Z', 7),
@@ -882,6 +882,27 @@ const subagentLiveChildDetail = {
   },
   entries: subagentLiveChildEntries,
 }
+const subagentSavedChildDetails = subagentOutcomeResults.map((result, index) => {
+  const target = ['scripts/release.js', 'package.json', 'scripts/rollback.js', 'CHANGELOG.md', '.github/workflows/release.yml'][index]
+  const content = ['await verify()\nawait tag()\nawait publish()', '{ "scripts": { "package": "node scripts/package.js" } }', 'await restorePreviousRelease()', '## Next release\n\n- Verify before publication.', 'steps:\n  - run: npm run verify\n  - run: node scripts/release.js'][index]
+  const stopped = result.status === 'stopped'
+  return {
+    session: {
+      ...session(result.childSession.id, result.title, '2026-08-06T15:44:00.000Z', 7),
+      sessionFile: result.childSession.path,
+      parentSessionPath: '/workspace/harbor/sessions/demo-session.jsonl',
+      isSubagentSession: true,
+    },
+    entries: projectTranscriptEntries([
+      { id: 'child-prompt', type: 'message', timestamp: '2026-08-06T15:44:00.000Z', message: { role: 'user', content: [{ type: 'text', text: result.task }] } },
+      { id: 'child-plan', type: 'message', timestamp: '2026-08-06T15:44:01.000Z', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'Check the release inputs before publication.' }, { type: 'toolCall', id: 'read-release-input', name: 'read', arguments: { path: target } }] } },
+      { id: 'child-read', type: 'message', timestamp: '2026-08-06T15:44:02.000Z', message: { role: 'toolResult', toolCallId: 'read-release-input', toolName: 'read', content: [{ type: 'text', text: content }] } },
+      { id: 'child-check-call', type: 'message', timestamp: '2026-08-06T15:44:03.000Z', message: { role: 'assistant', content: [{ type: 'toolCall', id: 'run-release-check', name: 'bash', arguments: { command: 'npm run verify' } }] } },
+      { id: 'child-check', type: 'message', timestamp: '2026-08-06T15:44:04.000Z', message: { role: 'toolResult', toolCallId: 'run-release-check', toolName: 'bash', cancelled: stopped, isError: stopped, content: [{ type: 'text', text: stopped ? result.error : 'Release checks passed.\nNo artifacts were published.' }] } },
+      ...result.messages.map((message, messageIndex) => ({ id: `child-result-${messageIndex}`, type: 'message', timestamp: '2026-08-06T15:44:05.000Z', message: { ...message, content: [{ type: 'text', text: message.content }] } })),
+    ], { toolArguments: true }),
+  }
+})
 
 const researchEntries = [
   messageEntry({
@@ -2034,18 +2055,28 @@ async function openSubagentInspector(page, taskCount, exportPage = false) {
   await inspector.locator('.subagent-summary').filter({ hasText: '1 stopped' }).waitFor()
   await tasks.nth(2).click()
   await waitForSubagentReader(page)
-  await inspector.locator('.subagent-inspector-empty').filter({ hasText: 'This task was stopped.' }).waitFor()
+  await tasks.nth(2).locator('.status-stopped').waitFor()
+  await inspector.locator('.subagent-ledger-row').filter({ hasText: 'This operation was aborted' }).waitFor()
   await tasks.first().click()
   await waitForSubagentReader(page)
-  await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
-  await inspector.locator('.subagent-inspector-prompt > summary').click()
-  if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentOutcomeResults[0].task) {
+  await inspector.locator('.subagent-ledger-latest h3').filter({ hasText: 'Verification precedes publication' }).waitFor()
+  await inspector.getByRole('button', { name: 'Full task prompt', exact: true }).click()
+  await waitForSubagentReader(page)
+  if (await inspector.locator('.subagent-entry-raw').innerText() !== subagentOutcomeResults[0].task) {
     throw new Error('Subagent inspector changed the full task prompt')
   }
   await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
   await inspector.waitFor({ state: 'detached' })
   await activity.locator('.tool-inspect-button').click()
-  await inspector.locator('.subagent-inspector-output h2').waitFor()
+  await waitForSubagentReader(page)
+  await inspector.locator('.subagent-ledger-latest h3').waitFor()
+  if (exportPage || page.viewportSize().width <= 760) {
+    await inspector.getByRole('button', { name: /^Read full/ }).click()
+    await waitForSubagentReader(page)
+    await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
+  } else {
+    await inspector.locator('.subagent-ledger-row').filter({ hasText: 'scripts/release.js' }).waitFor()
+  }
   if (exportPage) await inspector.getByText('Child sessions are available in Leyline', { exact: true }).waitFor()
   else await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
   const after = await activity.boundingBox()
@@ -2063,20 +2094,26 @@ async function openLiveSubagentInspector(page) {
   const before = await activity.boundingBox()
   await activity.locator('.mobile-activity-summary').click()
   const inspector = page.locator('.subagent-inspector')
-  const output = inspector.locator('.subagent-tail-tool-output pre').filter({ hasText: 'Checking publication safeguards…' })
-  await output.waitFor()
+  const running = inspector.locator('[data-subagent-tail-entry="tool:live-release-verify"]')
+  await running.locator('.status-running').waitFor()
   await waitForSubagentReader(page)
-  await inspector.locator('.subagent-tail-message').filter({ hasText: 'A failed check stops tagging.' }).waitFor()
+  await inspector.locator('.subagent-ledger-row').filter({ hasText: 'A failed check stops tagging.' }).waitFor()
   if (await inspector.locator('h2').innerText() !== subagentLiveResult.title) throw new Error('Live preview lost its supplied title')
-  await inspector.locator('.subagent-inspector-content').evaluate(element => { element.scrollTop = 0 })
-  await inspector.locator('.subagent-inspector-prompt > summary').click()
-  if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentLiveResult.task) throw new Error('Live preview changed the full task prompt')
+  await running.click()
+  await waitForSubagentReader(page)
+  await inspector.locator('.subagent-entry-raw').filter({ hasText: 'Checking publication safeguards…' }).waitFor()
+  await inspector.getByRole('button', { name: 'Arguments', exact: true }).click()
+  if (JSON.parse(await inspector.locator('.subagent-entry-raw').innerText()).command !== 'npm run verify') throw new Error('Live preview changed the tool arguments')
+  await inspector.getByRole('button', { name: 'Full task prompt', exact: true }).click()
+  await waitForSubagentReader(page)
+  if (await inspector.locator('.subagent-entry-raw').innerText() !== subagentLiveResult.task) throw new Error('Live preview changed the full task prompt')
   await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
   await inspector.waitFor({ state: 'detached' })
   const closed = await page.evaluate(id => window.__docsEventSockets.every(socket => new URL(socket.url).searchParams.get('sessionId') !== id || socket.readyState === WebSocket.CLOSED), subagentLiveResult.childSession.id)
   if (!closed) throw new Error('Closed live inspector retained its child subscription')
   await activity.locator('.tool-inspect-button').click()
-  await output.waitFor()
+  await waitForSubagentReader(page)
+  await running.locator('.status-running').waitFor()
   await inspector.locator('.subagent-tail-following').filter({ hasText: 'Following live' }).waitFor()
   await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
   const open = await page.evaluate(id => window.__docsEventSockets.filter(socket => new URL(socket.url).searchParams.get('sessionId') === id && socket.readyState === WebSocket.OPEN).length, subagentLiveResult.childSession.id)
@@ -2681,6 +2718,8 @@ async function capture({
     if (key === 'POST /api/pi/active-session' && (scenario !== 'subagent-live' || req.postDataJSON()?.id === runtime.id)) return json({ active: runtime })
     if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detail)
     if (scenario === 'subagent-live' && key === `GET /api/pi/sessions/${subagentLiveResult.childSession.id}`) return json(subagentLiveChildDetail)
+    const savedChild = subagentSavedChildDetails.find(child => key === `GET /api/pi/sessions/${child.session.id}`)
+    if (savedChild) return json(savedChild)
     if (key === 'GET /api/pi/review') {
       return json(scenario === 'review' ? reviewPayload : cleanReviewPayload)
     }

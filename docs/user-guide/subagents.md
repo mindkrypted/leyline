@@ -77,19 +77,26 @@ Each subagent call stays in one compact row inside an Activity card. Task detail
 
 If the card contains only one subagent call, select its header or row to open the inspector directly. This also applies to a call with several parallel tasks. If the card contains several tool calls, expand it first, then select the subagent row.
 
-![Subagent inspector with four completed tasks, one stopped task, and a selected Markdown result](../assets/screenshots/subagent-outcomes.png)
+![Subagent action ledger with four completed tasks, one stopped task, and saved tool activity](../assets/screenshots/subagent-outcomes.png)
 
 *The Activity card keeps its outcome counts while the inspector shows one task at a time.*
 
 The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
 
-1. Select a task to read its status, live activity, or result.
-2. Expand **Full task prompt** to read the original instructions.
-3. Select **Open child session** to open the child transcript, when available.
+1. Select a task to see its action ledger and status.
+2. Select a ledger row to read the full entry. **Read full** opens the latest response.
+3. Select **Full task prompt** to read the original instructions.
+4. Select **Open child session** for the complete child transcript, when available.
 
-Use Command-click, Ctrl-click, or middle-click on **Open child session** to open the child in a new tab or window. Selecting a task row only changes the inspector's selected task.
+Each ledger row shows a short preview, a file or command when available, an outcome, and a text size. Thoughts, messages, and tool calls have separate rows.
 
-**Copy result** copies the selected task's text result. **Copy tool output** in the inspector header copies the parent tool output. Press Escape, select the close button, or select the backdrop to close the inspector. Closing it does not stop the child run.
+The entry reader uses the same sheet. Messages have **Formatted** and **Source** views. Tool calls have **Output** and **Arguments** views. Arguments are unavailable when the original call was not recorded. **Copy full text** copies the entry text or the selected arguments. **Back to activity** restores your place in the ledger.
+
+The preview keeps the latest 80 assistant messages and tool results. A message with both thought and text can produce more than one row. Each available entry retains its full text; this limit applies to the history, not the size of an entry. Use **Open child session** to read older activity.
+
+Use Command-click, Ctrl-click, or middle-click on **Open child session** to open the child in a new tab or window. Selecting a task only changes the inspector's selected task.
+
+**Copy tool output** in the inspector header copies the parent tool response. Escape returns from an entry to the ledger. Press it again, select the close button, or select the backdrop to close the inspector. Closing it does not stop the child run.
 
 The task list stays in its original order. Live updates and saved results preserve the selected task and reading position.
 
@@ -101,19 +108,19 @@ Resolve pending extension confirmations before opening the inspector. A new conf
 
 ## Follow an active child
 
-![Live subagent inspector with assistant messages, collapsed completed tools, and running verification output](../assets/screenshots/subagent-live-tail.png)
+![Live subagent action ledger with file reads, a search, and running verification output](../assets/screenshots/subagent-live-tail.png)
 
-Select a running task in the inspector to follow its child session. The preview shows recent assistant messages and live tool output.
+Select a running task in the inspector to follow its child session. The ledger shows recent assistant messages and tool calls. Select a running call to read its full current output.
 
-Thoughts and completed tools start collapsed. Expand a row to inspect it. Active tools show their current output, with up to 14 recent lines for long results.
+New rows move into place, and status changes fade within their rows. During large bursts, only a few rows animate at once. Other rows update immediately. Text updates do not restart the row animation. Reduced motion removes these effects.
 
-Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity. The selected task and expanded content remain in place during saved-entry updates and reconnects.
+Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity. The selected task and open entry remain in place during saved-entry updates and reconnects.
 
-Recently viewed active tasks can reopen from a temporary preview cache. If a saved-history refresh fails, live text and tool output can continue. Select **Retry** to request saved history again.
+Recently viewed tasks can reopen from a temporary preview cache. If a saved-history refresh fails, live text and tool output can continue. Select **Retry** to request saved history again.
 
 Reading the preview keeps the parent session selected. Closing the inspector clears its temporary previews and releases the connection without stopping the child run. If the connection drops, the preview keeps its last received activity until updates resume.
 
-Use **Open child session** for the full transcript and tool image results. Live child previews are available in Leyline, not in HTML exports.
+Use **Open child session** for the full transcript. [HTML exports](./export#inspect-exported-subagents) include only task messages saved with the parent call. They do not fetch the child's full history or show live updates.
 
 ## Inspect delegated runs
 

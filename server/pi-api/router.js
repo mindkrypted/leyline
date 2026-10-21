@@ -810,7 +810,9 @@ async function piApiHandler(req, res) {
         const path = url.searchParams.get('path')
         if (!path) return json(res, { error: 'Session path is required' }, 400)
 
-        const detail = await sessionDetail('', path)
+        const detail = await sessionDetail('', path, {
+          toolArguments: url.searchParams.get('toolArguments') === '1',
+        })
         if (!detail) return json(res, { error: 'Session not found' }, 404)
         return json(res, sessionDetailResponse(detail, url))
       }
@@ -833,7 +835,9 @@ async function piApiHandler(req, res) {
           return json(res, { error: 'Method not allowed' }, 405)
         }
   
-        const detail = await sessionDetail(id, url.searchParams.get('path'))
+        const detail = await sessionDetail(id, url.searchParams.get('path'), {
+          toolArguments: url.searchParams.get('toolArguments') === '1',
+        })
         if (!detail) return json(res, { error: 'Session not found' }, 404)
         return json(res, sessionDetailResponse(detail, url))
       }
@@ -851,7 +855,7 @@ async function piApiHandler(req, res) {
 
 function sessionDetailResponse(detail, url) {
   return url.searchParams.get('compact') === '1'
-    ? compactSessionDetailDto(detail)
+    ? compactSessionDetailDto(detail, { toolArguments: url.searchParams.get('toolArguments') === '1' })
     : detail
 }
 

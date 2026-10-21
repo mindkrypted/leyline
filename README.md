@@ -47,8 +47,9 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - Steer active work or queue **Up next** tasks. Examine tools, System
   changes, local files, and Git changes. Use configured MCP tools and
   respond to extension requests in the workspace.
-- [Preview active subagents](docs/user-guide/subagents.md#follow-an-active-child)
-  without leaving the parent session, or open child sessions from the sidebar.
+- [Read subagent activity](docs/user-guide/subagents.md#read-a-subagent-card)
+  in an action ledger without leaving the parent session. Open rows for full
+  output and arguments, or open child sessions from the sidebar.
   Use memory, HTML export, an embedded terminal, and deep research
   with validated citations. A configured vision model can
   describe images for models that cannot receive images.

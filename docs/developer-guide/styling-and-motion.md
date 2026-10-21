@@ -48,9 +48,11 @@ Explicit chevron toggles unfold or collapse the branch as one unit in up to 180 
 
 Activity cards retain full message width and assistant-message colors. The collapsed card shows only the newest call in a fixed-height row, with outcome counts in its header. When the only top-level call is `subagent`, the header and row open the inspector without expansion, even for parallel tasks. Multi-call groups retain expansion.
 
-The subagent inspector floats on the right, with a 660-pixel width cap and 16-pixel desktop margins. At 760 pixels or less, it becomes a full-width bottom sheet at roughly 90 percent of the available viewport height. Its bounded task list and reader scroll independently. Task selection and focus use neutral colors. Opening the inspector does not expand the transcript layout.
+The subagent inspector floats on the right, with a 700-pixel width cap and 16-pixel desktop margins. At 760 pixels or less, it becomes a full-width bottom sheet at roughly 90 percent of the available viewport height. Its bounded task list and reader scroll independently. Opening the inspector does not expand the transcript layout.
 
-Single-task inspectors use the task title directly, without a duplicate summary strip. Live tail uses the same bounded reader. Thoughts and completed tool groups stay compact; active tools show plain-text output. The follow control stays in the footer. New output must not move a paused reader.
+The refined Graphite treatment uses `#242427` for chrome and `#1c1c1f` for the reading area. Task selection uses a flat neutral background. Action ledger rows use fine separators, without raised cards or inner shadows. Only the outer sheet has a shadow.
+
+Single-task inspectors use the task title directly, without a duplicate summary strip. Each ledger row shows an action, source-derived content or target, outcome, and character count. Full entries and the full task prompt open in the same sheet. The follow control stays in the footer. New output must not move a paused reader.
 
 `tools.css` owns these styles, including research-thread results in the subagent inspector. `research.css` no longer contains legacy subagent result-row styles. Export uses matching shell and result rules in `exportCss()` for its native dialog. Keep this layout separate from the System prompt inspector and trace Inspector layouts.
 
@@ -95,13 +97,21 @@ The subagent inspector uses opacity and horizontal transforms on desktop, with v
 
 ### Subagent task changes
 
-`SubagentInspector.vue` uses the Web Animations API for reader and footer handoffs. The outgoing reader remains visible until the next preview is ready. Its 280 ms exit overlaps the incoming reader's 420 ms entrance. The incoming reader starts 14 pixels below its final position, while the outgoing reader moves upward by 8 pixels. Entry uses `--ease-dock`. Exit uses `--ease-accelerate`.
+`SubagentInspector.vue` uses the Web Animations API for reader and footer handoffs. The outgoing reader remains visible until the next preview is ready. Its 250 ms exit overlaps the incoming reader's 420 ms entrance. Task changes start the incoming reader 8 pixels below its final position and move the outgoing reader upward by 4 pixels. Entry uses `cubic-bezier(.22,1,.36,1)`. Exit uses `cubic-bezier(.2,0,0,1)`.
 
-The task-selection background moves between rows over 420 ms with `--ease-emphasized`. Footer changes take 260 ms. Grid layers keep the modal frame and reader viewport fixed during each handoff.
+Opening a full entry starts the incoming reader 14 pixels to the right and moves the outgoing reader 5 pixels left. **Back to activity** starts the incoming reader 14 pixels to the left and moves the outgoing reader 5 pixels right.
 
-Rapid selections target the latest task without waiting for prior exits. An interrupted entrance starts its exit from its current opacity and transform. Live text updates do not restart the handoff. They preserve paused scrollback within the displayed task.
+Footer changes take 250 ms. The task-selection marker tracks the selected button without a timed transition. Grid layers keep the modal frame and reader viewport fixed during each handoff.
 
-Reduced motion sets the scripted animation duration to zero and removes the selection-background transition. HTML exports keep the same settled layout without the app's staged live-preview handoff.
+Rapid selections target the latest task without waiting for prior exits. An interrupted entrance starts its exit from its current opacity and transform. Live text updates do not restart the handoff. Task selection, saved scroll positions, and paused scrollback remain intact.
+
+Reduced motion sets the scripted animation duration to zero. HTML exports keep the same settled layout without the app's staged live-preview handoff.
+
+### Subagent ledger updates
+
+New and removed rows open or close their space over 300 ms. Neighboring rows move with them. Status changes fade in place, with the outgoing label fading sooner. An excerpt can reveal when it first becomes available. Text changes within an existing excerpt do not replay that reveal.
+
+The inspector shares a six-row motion budget across entrances, removals, status changes, excerpt changes, and small reorders. Other rows update immediately, without an animation queue. Initial history, reloads, task or reader changes, paused scrollback, and reduced motion do not replay row entrances. Live-to-saved reconciliation and late saved results preserve row identity rather than restarting entrances.
 
 ## Reduced motion
 
@@ -126,7 +136,7 @@ When transcript visuals change, compare and update both implementations. Check t
 - syntax colors
 - System dividers and prompt inspectors
 - Activity cards, outcome counts, compact tool rows, and skill rows
-- subagent inspector layout, task selection, live-tail following, and Markdown results
+- subagent inspector layout, Action ledger, full-entry and prompt readers, task selection, following, and Markdown results
 - research reports, threads, citations, and source ledgers
 - image, file, patch, and diff previews
 - responsive and reduced-motion behavior

@@ -3800,8 +3800,9 @@ function handleEscape(event) {
     else if (projectBrowserOpen.value) closeProjectBrowser()
     else if (fullscreenImage.value) closeImageFullscreen()
     else if (fullscreenTool.value) closeToolFullscreen()
-    else if (inspectedSubagent.value) closeSubagentInspector()
-    else sidebarNavigator.value = ''
+    else if (inspectedSubagent.value) {
+      if (!subagentInspector.value?.dismissReader()) closeSubagentInspector()
+    } else sidebarNavigator.value = ''
     return
   }
   if (headerMoreOpen.value || terminalKeysOpen.value || sidebarRef.value?.sessionActionsOpen) {

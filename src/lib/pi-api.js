@@ -17,11 +17,12 @@ export function createPiSession(cwd, kind = 'session') {
   })
 }
 
-export function fetchSessionDetail(session, options = {}) {
+export function fetchSessionDetail(session, { toolArguments = false, ...options } = {}) {
   const id = typeof session === 'string' ? session : session.id
   const path = typeof session === 'string' ? '' : session.path
   const params = new URLSearchParams({ compact: '1' })
   if (path) params.set('path', path)
+  if (toolArguments) params.set('toolArguments', '1')
   return apiRequest(
     `/api/pi/sessions/${encodeURIComponent(id)}?${params}`,
     'Failed to load session',

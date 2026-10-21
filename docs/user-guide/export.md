@@ -49,15 +49,17 @@ Images and transcript data are embedded in the HTML. File, diff, and patch previ
 
 ## Inspect exported subagents
 
-![Exported subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-export.png)
+![Exported subagent entry reader with task outcomes and a formatted result](../assets/screenshots/subagent-inspector-export.png)
 
 Subagent calls stay compact inside Activity. A card containing only one subagent call opens its inspector directly from the header or row, including calls with parallel tasks. Expand cards with several tool calls first.
 
-Select a task to read its Markdown result and **Full task prompt**. Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
+Select a task to see its saved message rows. Select a row or **Read full** to open the entry reader. Use **Formatted** or **Source**, then **Copy full text** to copy the entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger.
 
-The exported inspector shows recorded task results. It does not subscribe to live child activity. Live previews and child-session navigation are available only in Leyline.
+Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
 
-Press Escape, select the close button, or select the backdrop to return to the transcript.
+The export includes only task messages saved with the parent call. It does not fetch the child's full history or subscribe to live activity. Full child transcripts remain available in Leyline.
+
+Escape returns from an entry to the ledger. Press it again, select the close button, or select the backdrop to return to the transcript.
 
 ## Use the responsive layout
 

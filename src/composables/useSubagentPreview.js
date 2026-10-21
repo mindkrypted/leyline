@@ -15,6 +15,7 @@ export function useSubagentPreview(session, status) {
   const cache = new Map()
   const cacheLimit = 4 * 1024 * 1024
   const projection = useLiveTurnProjection({
+    toolArguments: true,
     onIntent(intent) {
       if (intent.type === 'surface-error') runtimeError.value = intent.message
     },
@@ -127,7 +128,7 @@ export function useSubagentPreview(session, status) {
 
     const child = { ...session.value }
     const cacheKey = JSON.stringify([id, path])
-    const previousPreview = status.value === 'running' ? cache.get(cacheKey) : null
+    const previousPreview = cache.get(cacheKey)
     if (previousPreview) {
       cached.value = previousPreview.snapshot
       cache.delete(cacheKey)
@@ -199,7 +200,10 @@ export function useSubagentPreview(session, status) {
       lastRefresh = Date.now()
       loading.value = true
       try {
-        const freshDetail = await fetchSessionDetail(child, { signal: controller.signal })
+        const freshDetail = await fetchSessionDetail(child, {
+          signal: controller.signal,
+          toolArguments: true,
+        })
         if (disposed || revision !== requestRevision) return
         if (restored) {
           const index = anchor ? freshDetail.entries.findIndex(entry => entry.id === anchor) : -1
@@ -282,7 +286,7 @@ export function useSubagentPreview(session, status) {
     }
 
     function start() {
-      if (started.value || disposed) return
+      if (socket || disposed) return
       started.value = true
       loading.value = true
       connection.value = 'connecting'
@@ -351,6 +355,11 @@ export function useSubagentPreview(session, status) {
     const stopStatus = watch(status, value => {
       if (value === 'running') start()
       else if (started.value) settle()
+      else {
+        started.value = true
+        connection.value = 'settled'
+        void load()
+      }
     }, { immediate: true })
 
     onCleanup(() => {

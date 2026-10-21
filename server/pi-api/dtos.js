@@ -225,28 +225,33 @@ function modelThinkingLevels(model) {
   })
 }
 
-export function toSessionDetailDto(session) {
-  return toSessionDetailFromManager(SessionManager.open(session.path), session)
+export function toSessionDetailDto(session, options) {
+  return toSessionDetailFromManager(
+    SessionManager.open(session.path), session, undefined, undefined, options,
+  )
 }
 
-export function toSessionDetailFromPath(id, path) {
+export function toSessionDetailFromPath(id, path, options) {
   const manager = SessionManager.open(path)
   if (id && manager.getSessionId() !== id) {
     throw new Error('Session path does not match session id')
   }
-  return toSessionDetailFromManager(manager, { id, path })
+  return toSessionDetailFromManager(manager, { id, path }, undefined, undefined, options)
 }
 
-export function toActiveSessionDetailDto(handle) {
+export function toActiveSessionDetailDto(handle, options) {
   return toSessionDetailFromManager(
     handle.runtime.session.sessionManager,
     sessionInfo(handle),
     handle.runtime.session.getContextUsage?.(),
     handle.runtime.session.modelRuntime,
+    options,
   )
 }
 
-export function toSessionDetailFromManager(manager, session, contextUsage, modelRuntime) {
+export function toSessionDetailFromManager(
+  manager, session, contextUsage, modelRuntime, options = {},
+) {
   const header = manager.getHeader()
   const entries = manager.getBranch()
   let messageCount = 0
@@ -300,6 +305,7 @@ export function toSessionDetailFromManager(manager, session, contextUsage, model
     },
     entries: applyRolloutFeedback(
       projectTranscriptEntries(entries, {
+        toolArguments: options.toolArguments,
         research,
         modelName: (provider, id) => modelRuntime?.getModel(provider, id)?.name,
       }),
@@ -310,14 +316,14 @@ export function toSessionDetailFromManager(manager, session, contextUsage, model
   }
 }
 
-export function compactSessionDetailDto(detail) {
+export function compactSessionDetailDto(detail, { toolArguments = false } = {}) {
   return {
     ...detail,
     entries: detail.entries.map((entry) => {
       if (entry.type !== 'tool') return entry
       const compact = { ...entry }
       delete compact.copyText
-      if (compact.preview?.fallbackText && !compact.isError) {
+      if (!toolArguments && compact.preview?.fallbackText && !compact.isError) {
         delete compact.text
       }
       return compact

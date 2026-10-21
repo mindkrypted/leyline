@@ -75,8 +75,10 @@ The child execution route waits for the child run to finish. If its caller disco
 
 ## Live child inspection
 
-The inspector reads the selected child through `GET /api/pi/sessions/:id?compact=1&path=...` and a separate `WS /api/pi/events?sessionId=<child-id>` connection. These reads do not activate the child or submit work. The parent session and its runtime subscription stay selected.
+`useSubagentPreview.js` loads a flat, source-derived Action ledger for the selected child, whether saved or active. Rows open full entries in the same sheet. Message readers offer **Formatted**/**Source**, while tool readers offer **Output**/**Arguments**. **Copy full text** copies the selected format. The full task prompt opens another reader view. **Back to activity** restores the ledger scroll position and keeps the selected task.
 
-Closing the inspector releases this observer without canceling the execution request. Live previews retain recent messages and tool output; the full transcript remains available through **Open child session**. HTML exports show recorded task results without a live connection.
+The inspector reads only the selected child through `GET /api/pi/sessions/:id?compact=1&toolArguments=1&path=...`. While that child runs, it also opens a separate `WS /api/pi/events?sessionId=<child-id>` connection. These reads never activate the child or submit work. The parent session and its runtime subscription stay selected. `toolArguments=1` retains original projected tool text and arguments even with `compact=1`, without changing ordinary session payloads. Older records can lack output or arguments, and the reader does not reconstruct them.
 
-See [Subagent inspector state](../developer-guide/frontend-state#subagent-inspector-state) for request ordering, reconnect recovery, and disclosure ownership.
+Closing the inspector releases this observer without canceling the execution request. Previews retain the latest 80 projected assistant/tool entries before ledger block expansion. Full child history remains available through **Open child session**. HTML exports use matching ledger and reader styles for task messages and results already available in the parent result. They do not fetch or embed the full child transcript or subscribe to live updates.
+
+See [Subagent inspector state](../developer-guide/frontend-state#subagent-inspector-state) for request ordering, reconnect recovery, reader identity, and scroll ownership.

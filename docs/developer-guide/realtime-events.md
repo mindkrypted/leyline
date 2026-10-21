@@ -49,7 +49,7 @@ Connection callbacks update the visible stream status. The adapter passes event 
 
 The adapter keeps the latest 100 local log items. The Runtime Events drawer displays the newest 20.
 
-An open subagent inspector uses `useSubagentPreview.js` for a separate child-scoped socket through the same helper. It leaves the parent's subscription and selection unchanged. Preview events do not add another event-log stream. Closing the inspector releases its child observer without aborting the run.
+An open subagent inspector uses `useSubagentPreview.js` to read only the selected child with `toolArguments=1`, including saved children. While that child runs, the preview opens a separate child-scoped socket through the same helper. Observation never activates the child or changes the parent's subscription and selection. Preview events do not add another event-log stream. Closing the inspector releases its child observer without aborting the run.
 
 The adapter logs extension errors. Composer error handling filters expected cancellations without removing their raw event records.
 
@@ -95,7 +95,9 @@ If the snapshot belongs to the selected session, `App.vue` also updates `activeR
 
 Settlement, reconnect, and manual compaction schedule immediate session-detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming message and tool events do not fetch main-transcript detail individually.
 
-The child preview coalesces its own refreshes after message and tool completion. It queues new reads behind an in-flight request. Reconnect recovery reconciles saved messages before resetting the child projection and replaying post-open events. See [Subagent inspector state](./frontend-state#subagent-inspector-state) for identity and disclosure ownership.
+The child preview coalesces its own refreshes after message and tool completion. It queues new reads behind an in-flight request. Reconnect recovery reconciles saved messages before resetting the child projection and replaying post-open events. Its live projection opts into tool arguments for **Output**/**Arguments** readers without changing the main transcript's default projection.
+
+The inspector combines display snapshots into at most one commit per animation frame, after the preview applies authoritative runtime events. This display batch does not delay runtime event handling or discard projected output. The current-rows cache and six-row motion budget affect presentation only. See [Subagent inspector state](./frontend-state#subagent-inspector-state) for reader identity and scroll ownership.
 
 Live user, assistant, System, and tool rows reconcile with projected persisted entries after refresh. The last saved entry ID anchors the merged saved tail. Saved-only rows, including compaction summaries, keep branch order beside matched live rows. The next turn clears matched rows from the previous turn.
 

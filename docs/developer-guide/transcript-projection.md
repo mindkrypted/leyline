@@ -28,6 +28,8 @@ Keep facts in the shared projection when both the app and export need them. Do n
 
 The backend then adds rollout feedback to the projected entries. `GET /api/pi/sessions/:id` returns these entries in `SessionDetail`.
 
+The `toolArguments` projection option adds `args` to tool-result entries from the paired call's `arguments`, `args`, or `input`. It defaults to off. Child-preview detail requests opt in with `toolArguments=1`, while ordinary session-detail responses keep their existing payload. With this option, `compact=1` retains the original projected tool text for the full-entry reader. Missing recorded arguments remain unavailable.
+
 Persisted runtime event entries can exist in a detail response. The current live-turn view filters `event` entries from the transcript.
 
 ## Browser rendering
@@ -54,15 +56,21 @@ Completed reads show **Loaded**. Running, failed, stopped, and unknown reads ret
 
 `MobileToolActivity.vue` renders Activity on desktop and mobile. Collapsed cards show the newest call in a fixed-height row and keep outcome counts visible. `singleSubagentEntry()` identifies a group whose only top-level tool call is `subagent`. Its header and row open the subagent inspector directly, without expansion or a height change, regardless of parallel task count. Multi-call Activity cards still expand to show call history.
 
-For subagent calls, `TranscriptEntry.vue` renders only a compact row and emits `inspect-subagent`. `SubagentInspector.vue` keeps tasks in their original order, with a bounded task list and reader. It shows full prompts, Markdown output, per-task errors, and explicit unknown outcomes. It retains call output when `resultsUnavailable` is true. **Open child session**, **Copy result**, and **Copy tool output** are separate actions.
+For subagent calls, `TranscriptEntry.vue` renders only a compact row and emits `inspect-subagent`. `SubagentInspector.vue` keeps tasks in their original order, with a bounded task list and a flat Action ledger. It retains per-task errors, explicit unknown outcomes, and call output when `resultsUnavailable` is true. The header's **Copy tool output** action copies the parent call output.
 
-For a running child, `useSubagentPreview.js` supplies a separate shared live projection to the inspector. It renders the latest 80 assistant/tool entries. `SubagentTailEntry.vue` groups consecutive child tools, keeps thoughts and completed tools compact, and shows live tool output. This does not add child tools to the parent Activity card.
+`lib/subagent-ledger.js` derives rows from recorded message blocks, tool names, arguments, and output. It flattens child tool groups and uses source text for message titles and excerpts. Its optional current-rows cache reuses unchanged previews and row objects within the displayed set. `SubagentTailEntry.vue` renders one row with an action, content or target, outcome, and character count. Child tools do not enter the parent Activity card.
 
-Long tool output shows a recent tail, limited to 14 lines and 8,000 characters. Tool image results remain in the full child transcript. Final output still appears when the preview does not already contain it, including errors returned after a disconnect.
+Selecting a row opens the full entry in the same sheet. Message readers offer **Formatted** and **Source**. Tool readers offer **Output** and **Arguments**, with **Arguments** disabled when the record has no arguments. **Copy full text** uses the complete text for the selected format, not the bounded ledger excerpt. Older records can lack output or arguments. The reader does not reconstruct missing data.
+
+**Full task prompt** opens another reader view. **Back to activity** restores the ledger scroll position without changing the selected task.
+
+`useSubagentPreview.js` supplies the latest 80 projected assistant/tool entries for both saved and active selected children. The cap applies before ledger block expansion, so it is not an 80-row limit. **Open child session** remains necessary for full child history. Final output still appears when the preview does not already contain it, including errors returned after a disconnect.
 
 `lib/subagent-view.js` supplies shared task, title, output, and fallback helpers. `lib/subagent-status.js` supplies status semantics and task counts, including separate stopped, failed, not-started, and unknown outcomes. `useFileLinks.js` reads `data-file-session-id` from the selected task reader to resolve child-result files against the child session. Without that attribute, it uses the selected session.
 
-HTML export uses the same grouping and presentation helpers. `renderExportSubagent()` pre-renders templates. `subagentInspectorJs()` creates a native dialog only when opened and handles Activity expansion, task selection, copy, close, and focus restoration. These controls work without network access or Pierre. The exported inspector shows recorded task results without subscribing to live child activity. Offline export has no navigation to live child sessions.
+HTML export uses matching Action ledger and reader styles with the shared presentation helpers. `renderExportSubagent()` pre-renders templates from task messages, prompts, results, errors, and fallback output already available in the parent result. It does not fetch or embed the full child transcript or obtain child tool arguments. Export readers offer **Formatted** and **Source** for the available text.
+
+`subagentInspectorJs()` creates a native dialog only when opened. It handles Activity expansion, task selection, full-entry and prompt readers, format changes, copying, scroll restoration, close, and focus restoration. Escape returns to the ledger before closing the dialog. These controls work without network access or Pierre. Export does not subscribe to live child activity or navigate to live child sessions.
 
 See [Subagent inspector state](./frontend-state#subagent-inspector-state) for selection and lifecycle ownership. This surface is separate from the System prompt inspector and trace Inspector.
 

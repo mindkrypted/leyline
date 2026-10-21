@@ -1,150 +1,33 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
-import { activityEntry, activityOperations, activityStatus, activitySummary, toolStatusTone } from '../../lib/tool-activity.js'
-import { messageBlocksFor, renderedBlock } from '../lib/transcript'
+import { computed } from 'vue'
 
 const props = defineProps({
-  item: { type: Object, required: true },
-  following: { type: Boolean, default: true },
-  views: { type: Map, default: () => new Map() },
+  row: { type: Object, required: true },
+  index: { type: Number, required: true },
+  selected: { type: Boolean, default: false },
+  animate: { type: Boolean, default: false },
 })
-const calls = computed(() => props.item.type === 'tool-activity' ? props.item.items : [])
-const entry = computed(() => activityEntry(props.item))
-const blocks = computed(() => messageBlocksFor(entry.value).map(block => ({
-  ...block,
-  html: block.type === 'text' ? renderedBlock(block, { streaming: props.item.streaming === true }) : '',
-})))
-const summary = computed(() => activitySummary(calls.value))
-const groupView = computed(() => {
-  const key = `group:${props.item.id}`
-  if (props.views.has(key)) return props.views.get(key)
-  const source = props.views.get(`group:${props.item.sourceGroupId}`)
-  return view(key, { open: source?.open || false, manual: source?.manual || false })
+const emit = defineEmits(['open'])
+const label = computed(() => ({ running: props.row.kind === 'thought' ? 'Thinking' : 'Running', completed: 'Done', error: 'Failed', stopped: 'Stopped', unknown: 'Unknown', saved: 'Saved' }[props.row.status] || 'Saved'))
+const size = computed(() => props.row.text.length >= 1000 ? `${(props.row.text.length / 1000).toFixed(1)}k` : props.row.text.length)
+const icon = computed(() => {
+  if (props.row.kind === 'thought') return 'M3 11a5.5 5.5 0 1 1 3 2L2 14l1-3ZM5.5 7.5h.1m2.4 0h.1m2.4 0h.1'
+  if (props.row.action === 'Search') return 'M10.5 6.5a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm0 4 3.5 3.5'
+  if (props.row.action === 'Fetch') return 'M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0ZM2 8h12M8 2c-4 3-4 9 0 12 4-3 4-9 0-12Z'
+  if (props.row.action === 'Run') return 'm2 4 4 4-4 4m6 0h6'
+  if (props.row.kind === 'image') return 'M2 2h12v12H2Zm0 10 4-4 3 3 2-2 3 3M10 5h.1'
+  return 'M4 1.5h5l3 3v10H4zM9 1.5v3h3M6 8h4m-4 3h4'
 })
-const expandedThoughts = ref(new Set())
-
-watch([calls, () => props.following], ([items, following]) => {
-  if (!items.length) return
-  for (const item of items) {
-    const state = toolView(item)
-    const tone = toolStatusTone(activityStatus(item))
-    if (following && tone === 'completed' && !state.manual) state.open = false
-    if (state.seen) continue
-    state.seen = true
-    if (tone !== 'running') continue
-    state.open = true
-    groupView.value.open = true
-  }
-  if (following && !groupView.value.manual && items.every(item => toolStatusTone(activityStatus(item)) === 'completed')) groupView.value.open = false
-}, { immediate: true })
-
-function toolKey(item) {
-  return item.toolCallId || activityEntry(item).toolCallId || item.id
-}
-
-function view(key, initial) {
-  if (!props.views.has(key)) props.views.set(key, reactive(initial))
-  return props.views.get(key)
-}
-
-function toolView(item) {
-  return view(`tool:${toolKey(item)}`, { open: false, manual: false, seen: false })
-}
-
-function toggleGroup(event) {
-  if (event.target.isConnected) groupView.value.open = event.target.open
-}
-
-function toggleTool(item, event) {
-  if (event.target.isConnected) toolView(item).open = event.target.open
-}
-
-function markTool(item) {
-  const state = toolView(item)
-  state.manual = !state.open
-}
-
-function toggleThought(index, event) {
-  if (!event.target.isConnected) return
-  const next = new Set(expandedThoughts.value)
-  if (event.target.open) next.add(index)
-  else next.delete(index)
-  expandedThoughts.value = next
-}
-
-function toolOutput(item) {
-  const value = activityEntry(item)
-  const text = value.preview?.fallbackText || value.text || ''
-  const lines = text.slice(-8000).split(/\r?\n/)
-  return {
-    text: lines.slice(-14).join('\n'),
-    clipped: text.length > 8000 || lines.length > 14,
-    image: value.preview?.kind === 'image',
-  }
-}
 </script>
 
 <template>
-  <details
-    v-if="calls.length"
-    class="subagent-tail-tools"
-    :class="{ 'is-single': calls.length === 1 }"
-    :open="calls.length === 1 || groupView.open"
-    @toggle.self="toggleGroup"
-  >
-    <summary v-show="calls.length > 1" class="subagent-tail-group-summary" @click="groupView.manual = !groupView.open">
-      <span class="subagent-tail-chevron" aria-hidden="true">›</span>
-      <span>{{ activityOperations(calls).join(' · ') }}</span>
-      <span class="subagent-tail-group-outcomes">
-        <span v-for="outcome in summary.outcomes" :key="outcome.status" :class="`status-${outcome.status}`">{{ outcome.text }}</span>
-      </span>
-    </summary>
-    <div class="subagent-tail-tool-list">
-      <details
-        v-for="call in calls"
-        :key="toolKey(call)"
-        class="subagent-tail-tool"
-        :data-subagent-tail-entry="`tool:${toolKey(call)}`"
-        :class="`status-${toolStatusTone(activityStatus(call))}`"
-        :open="toolView(call).open"
-        @toggle.self="toggleTool(call, $event)"
-      >
-        <summary @click="markTool(call)">
-          <span class="subagent-tail-chevron" aria-hidden="true">›</span>
-          <span>{{ activityEntry(call).label || activityEntry(call).toolName }}</span>
-          <code v-if="!toolView(call).open" class="subagent-tail-target">{{ activityEntry(call).code }}</code>
-          <span class="subagent-tail-tool-status" :class="`status-${toolStatusTone(activityStatus(call))}`">
-            <span v-if="toolStatusTone(activityStatus(call)) === 'running'" class="live-tool-spinner" aria-hidden="true"></span>
-            <svg v-else-if="toolStatusTone(activityStatus(call)) === 'completed'" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7" /></svg>
-            {{ activityStatus(call) === 'reading result' ? 'Finishing' : activityStatus(call) }}
-          </span>
-        </summary>
-        <template v-if="toolView(call).open">
-          <pre v-if="activityEntry(call).code" class="subagent-tail-command">{{ activityEntry(call).code }}</pre>
-          <div class="subagent-tail-tool-output">
-            <span v-if="toolOutput(call).clipped" class="subagent-tail-clipped">Last 14 lines. Full output is in the child session.</span>
-            <pre v-if="toolOutput(call).text">{{ toolOutput(call).text }}</pre>
-            <p v-else-if="toolOutput(call).image">Image result. Open the child session to view it.</p>
-            <p v-else>{{ toolStatusTone(activityStatus(call)) === 'running' ? 'Waiting for tool output…' : 'No text output.' }}</p>
-          </div>
-        </template>
-      </details>
+  <div class="subagent-ledger-row-slot" :data-row-key="row.key" :data-row-motion="animate || undefined">
+    <div class="subagent-ledger-row-clip">
+      <button class="subagent-ledger-row" type="button" :data-subagent-tail-entry="row.key" :data-last-read="selected || undefined" :title="row.title" @click="emit('open', row)">
+        <span class="subagent-ledger-action"><span class="subagent-ledger-number">{{ String(index + 1).padStart(2, '0') }}<svg viewBox="0 0 16 16" aria-hidden="true"><path :d="icon" /></svg></span>{{ row.action }}</span>
+        <span class="subagent-ledger-body"><span class="subagent-ledger-target">{{ row.title }}</span><Transition name="subagent-excerpt" :css="animate"><span v-if="row.excerpt" class="subagent-ledger-excerpt">{{ row.excerpt }}</span></Transition></span>
+        <span class="subagent-ledger-outcome"><span class="subagent-ledger-status-stack"><Transition name="subagent-status" :css="animate" @before-enter="$event.removeAttribute('aria-hidden')" @before-leave="$event.setAttribute('aria-hidden', 'true')" @leave-cancelled="$event.removeAttribute('aria-hidden')"><span :key="row.status" class="subagent-ledger-status" :class="`status-${row.status}`"><span v-if="row.status === 'running'" class="live-tool-spinner" aria-hidden="true"></span><svg v-else-if="row.status === 'completed'" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7" /></svg>{{ label }}</span></Transition></span><span class="subagent-ledger-size">{{ size }} chars</span></span>
+      </button>
     </div>
-  </details>
-  <article v-else class="subagent-tail-message" :data-subagent-tail-entry="`message:${item.id}`">
-    <div class="subagent-tail-message-meta"><span>Agent</span><span v-if="item.streaming" class="subagent-tail-writing">Writing</span></div>
-    <template v-for="(block, index) in blocks" :key="index">
-      <details
-        v-if="block.type === 'thinking'"
-        class="subagent-tail-thought"
-        :open="expandedThoughts.has(index)"
-        @toggle.self="toggleThought(index, $event)"
-      >
-        <summary><span class="subagent-tail-chevron" aria-hidden="true">›</span>{{ item.streaming ? 'Thinking' : 'Thought' }}</summary>
-        <pre v-if="expandedThoughts.has(index)">{{ block.text }}</pre>
-      </details>
-      <div v-else-if="block.type === 'text'" class="subagent-inspector-output markdown-body" v-html="block.html"></div>
-      <p v-else-if="block.type === 'image'" class="subagent-tail-image-note">Image output is available in the child session.</p>
-    </template>
-  </article>
+  </div>
 </template>
