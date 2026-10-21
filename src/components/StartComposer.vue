@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useDictation } from '../composables/useDictation'
+import DictationStatus from './DictationStatus.vue'
 import ModelPicker from './ModelPicker.vue'
 import MobileComposerControls from './MobileComposerControls.vue'
 import { useMobileComposerInput } from '../composables/useMobileComposerInput'
@@ -8,6 +8,8 @@ import UltrafastToggle from './UltrafastToggle.vue'
 import { formatMode } from '../lib/format'
 
 const props = defineProps({
+  dictation: { type: Object, required: true },
+  dictationSubmitting: Boolean,
   mobile: Boolean,
   settingsError: { type: String, default: '' },
   startProjectTrigger: { default: null },
@@ -161,19 +163,6 @@ const shellModeLabel = computed(() => {
   return hiddenShellMode.value ? 'shell · hidden' : 'shell · context'
 })
 const inputDisabled = computed(() => Boolean(props.creatingSessionCwd))
-const {
-  dictationButtonDisabled,
-  dictationListening,
-  dictationSupported,
-  dictationTitle,
-  toggleDictation,
-} = useDictation({
-  focus: () => textarea.value?.focus(),
-  getDraft: () => props.draft,
-  inputDisabled,
-  onDraftChange: () => emit('show-slash-picker'),
-  setDraft: (value) => emit('update:draft', value),
-})
 
 watch(() => props.startProjectPickerOpen, scheduleProjectMenu, { flush: 'post' })
 watch(() => props.startProjectTrigger, (element, previous) => {
@@ -284,7 +273,23 @@ function openMobileDetails(event) {
   mobileControls.value?.open('details', event)
 }
 
-defineExpose({ form, focus, mobileSheetOpen, dismissMobileSheet, openMobileDetails })
+function getSelection() {
+  const input = textarea.value
+  return input ? { text: input.value, start: input.selectionStart, end: input.selectionEnd } : null
+}
+
+function getTextarea() {
+  return textarea.value
+}
+
+async function restoreSelection(input, value, caret, valid, restoreFocus) {
+  await nextTick()
+  if (!valid() || textarea.value !== input || !input.isConnected || input.disabled || props.draft !== value) return
+  if (restoreFocus?.()) input.focus({ preventScroll: true })
+  input.setSelectionRange(caret, caret)
+}
+
+defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileSheetOpen, dismissMobileSheet, openMobileDetails })
 </script>
 
 <template>
@@ -369,6 +374,7 @@ defineExpose({ form, focus, mobileSheetOpen, dismissMobileSheet, openMobileDetai
     <Transition name="composer-reveal">
       <div v-if="visionDelegationNotice" class="composer-notice">{{ visionDelegationNotice }}</div>
     </Transition>
+    <DictationStatus :dictation="dictation" />
     <div class="start-composer-bar">
       <div class="composer-primary-row">
         <div class="composer-row-spacer"></div>
@@ -449,16 +455,17 @@ defineExpose({ form, focus, mobileSheetOpen, dismissMobileSheet, openMobileDetai
           <button
             class="dictation-button"
             :class="{
-              active: dictationListening,
-              unsupported: !dictationSupported,
+              active: dictation.active,
+              unsupported: !dictation.supported,
             }"
             type="button"
-            :disabled="dictationButtonDisabled"
-            :title="dictationTitle"
-            :aria-label="dictationTitle"
-            :aria-disabled="!dictationSupported"
-            :aria-pressed="dictationListening"
-            @click="toggleDictation"
+            :disabled="dictation.buttonDisabled || inputDisabled || dictationSubmitting"
+            :title="dictation.title"
+            :aria-label="dictation.title"
+            :aria-disabled="!dictation.supported"
+            :aria-pressed="dictation.active"
+            @mousedown.prevent
+            @click="dictation.toggle({ focusFrom: $event.currentTarget })"
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect
@@ -486,8 +493,9 @@ defineExpose({ form, focus, mobileSheetOpen, dismissMobileSheet, openMobileDetai
             :disabled="!newSessionCwd.trim()
               || !!creatingSessionCwd
               || switchingUltrafast
+              || dictationSubmitting
               || !!imageSupportWarning
-              || (shellMode && (!shellCommand || attachedImages.length))"
+              || (!dictation.active && shellMode && (!shellCommand || attachedImages.length))"
           >{{ shellMode ? 'Run' : '↑' }}</button>
         </div>
       </div>

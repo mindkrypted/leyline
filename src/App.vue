@@ -5,6 +5,7 @@ import {
   nextTick,
   onMounted,
   onUnmounted,
+  reactive,
   ref,
   shallowRef,
   watch,
@@ -30,6 +31,7 @@ const AgentSettings = defineAsyncComponent(() => import('./components/AgentSetti
 const GlobalSettingsModal = defineAsyncComponent(() => import('./components/GlobalSettingsModal.vue'))
 const ProviderSettings = defineAsyncComponent(() => import('./components/ProviderSettings.vue'))
 const McpSettings = defineAsyncComponent(() => import('./components/McpSettings.vue'))
+const DictationSettings = defineAsyncComponent(() => import('./components/DictationSettings.vue'))
 import CopyIcon from './components/CopyIcon.vue'
 import CompactionBoundary from './components/CompactionBoundary.vue'
 import ExtensionConfirmations from './components/ExtensionConfirmations.vue'
@@ -40,6 +42,7 @@ import { activityEntry, activityStatus, groupToolActivity, singleSubagentEntry }
 import SessionSidebar from './components/SessionSidebar.vue'
 import { useBackendConnections } from './composables/useBackendConnections'
 import { useComposerMotion } from './composables/useComposerMotion'
+import { useDictation } from './composables/useDictation'
 import { useFileLinks } from './composables/useFileLinks'
 import { useLiveTurnProjection } from './composables/useLiveTurnProjection'
 import { useMemoryInspector } from './composables/useMemoryInspector'
@@ -207,6 +210,11 @@ const queueEditDrafts = new Map()
 const pendingComposerPastes = new Set()
 const startComposerDraftKey = 'start'
 let activeComposerDraftKey = startComposerDraftKey
+const dictationGeneration = ref(0)
+const draftRevision = ref(0)
+const composerComposing = ref(false)
+const dictationSubmissionPending = ref(false)
+let dictationSubmission = null
 const seenEntryIds = ref(new Set())
 const animatingEntryIds = ref(new Set())
 const composerRef = ref(null)
@@ -629,6 +637,90 @@ const startComposerDraft = computed({
   get: () => startupDraftSnapshot.value?.text ?? draft.value,
   set: (value) => { if (!startupDraftSnapshot.value) draft.value = value },
 })
+const dictationOwner = computed(() => JSON.stringify([
+  dictationGeneration.value,
+  activeBackendConnectionId.value,
+  activeBackendConnection.value?.url || '',
+  selectedSessionId.value,
+  activeComposerDraftKey,
+  editingEntry.value?.id || '',
+  homeComposerVisible.value ? newSessionCwd.value : '',
+]))
+const dictation = reactive(useDictation({
+  owner: dictationOwner,
+  submitting: () => dictationSubmissionPending.value,
+  canStart: () => !composerComposing.value && !initializing.value
+    && !sessionLoading.value && !sessionSwitching.value && !sessionActivating.value
+    && !creatingSessionCwd.value && !startupRun.value && !startupDraftSnapshot.value
+    && !promptSubmitting.value && !settingsOpen.value && !extensionConfirmations.value.length
+    && (homeComposerVisible.value || Boolean(selectedSessionId.value)),
+  captureDraft: () => {
+    const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
+    const selection = composer?.getSelection()
+    const input = composer?.getTextarea()
+    if (!input || !selection || selection.text !== draft.value || composerComposing.value) return null
+    return {
+      owner: dictationOwner.value,
+      composer,
+      input,
+      text: draft.value,
+      revision: draftRevision.value,
+      start: selection.start,
+      end: selection.end,
+    }
+  },
+  commitDraft: (captured, text, restoreFocus) => {
+    const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
+    if (captured.owner !== dictationOwner.value || captured.revision !== draftRevision.value
+      || captured.text !== draft.value || composerComposing.value
+      || captured.composer !== composer || captured.input !== composer?.getTextarea()) return false
+    const before = captured.text.slice(0, captured.start)
+    const after = captured.text.slice(captured.end)
+    const left = before && !/\s$/.test(before) && !/^[,.;:!?)}\]]/.test(text) ? ' ' : ''
+    const right = after && !/^\s|^[,.;:!?)}\]]/.test(after) ? ' ' : ''
+    const value = `${before}${left}${text}${right}${after}`
+    draft.value = value
+    const revision = draftRevision.value
+    void composer.restoreSelection(captured.input, value, before.length + left.length + text.length,
+      () => captured.owner === dictationOwner.value && revision === draftRevision.value
+        && !composerComposing.value && !anyEscapeTargetOpen(false, true), restoreFocus)
+    showSlashPicker()
+    return true
+  },
+  openSettings: () => openGlobalSettings('dictation'),
+  focusAllowed: event => {
+    const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
+    return Boolean(composer?.form?.contains(event.target))
+  },
+  shortcutAllowed: event => {
+    if (isComposingInput(event) || composerComposing.value || settingsOpen.value
+      || anyEscapeTargetOpen(false, true) || terminalEl.value?.contains(event.target)) return false
+    const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
+    const target = event.target
+    if (target?.closest?.('input, textarea, [contenteditable="true"], [role="dialog"], [role="menu"]')) {
+      return target === composer?.getTextarea()
+    }
+    return target === document.body || composer?.form?.contains(target)
+  },
+}))
+watch(draft, () => { draftRevision.value++ }, { flush: 'sync' })
+watch([
+  activeBackendConnectionId,
+  () => activeBackendConnection.value?.url,
+  selectedSessionId,
+  newSessionCwd,
+  () => editingEntry.value?.id,
+  resettingEntryId,
+  reloadingSession,
+  sessionActivating,
+  creatingSessionCwd,
+  sessionLoading,
+  sessionSwitching,
+  homeComposerVisible,
+], invalidateDictationOwner, { flush: 'sync' })
+watch([settingsOpen, settingsCategory], () => {
+  if (dictation.active) dictation.cancel()
+}, { flush: 'sync' })
 const startupComposerDocking = computed(() => composerMotionState.value?.kind === 'home'
   && composerMotionState.value.phase !== 'lead')
 const startupRevealHold = computed(() => composerMotionState.value?.kind === 'home'
@@ -1052,7 +1144,8 @@ const visionDelegationNotice = computed(() => {
   return `${modelChip(model)} can't read images directly. The model will call the vision subagent (${visionModel}) to inspect the image${attachedImages.value.length > 1 ? 's' : ''} when the prompt runs.`
 })
 const canSubmitDraft = computed(() => {
-  if (imageSupportWarning.value) return false
+  if (imageSupportWarning.value || dictationSubmissionPending.value) return false
+  if (dictation.active && dictation.phase !== 'testing') return true
   if (shellModeDraft.value) return Boolean(shellDraft.value)
   return draft.value.trim() || attachedImages.value.length > 0
 })
@@ -1813,6 +1906,7 @@ function openMobileSidebar() {
 function prepareRouteChange() {
   if (settingsOpen.value && !confirmPiSettingsLeave()) return false
   if (!confirmDiscardMemoryChanges()) return false
+  invalidateDictationOwner()
   settingsOpen.value = false
   memoryOpen.value = false
   sidebarNavigator.value = ''
@@ -2817,7 +2911,14 @@ function storeComposerDraft(key, state) {
   composerDrafts.delete(key)
 }
 
+function invalidateDictationOwner() {
+  dictationSubmission = null
+  dictationSubmissionPending.value = false
+  dictationGeneration.value++
+}
+
 function applyComposerDraft(state) {
+  invalidateDictationOwner()
   draft.value = state?.text || ''
   attachedImages.value = [...(state?.images || [])]
   editingEntry.value = state?.editingEntry || null
@@ -2846,6 +2947,7 @@ function composerDraftState(key) {
 }
 
 function moveComposerDraft(sourceKey, sessionId) {
+  if (sourceKey === activeComposerDraftKey) invalidateDictationOwner()
   const targetKey = composerDraftKey(sessionId)
   if (imageChooser?.key === sourceKey) imageChooser.key = targetKey
   const state = composerDraftState(sourceKey)
@@ -2891,6 +2993,7 @@ async function settleComposerPastes(key) {
 
 function discardComposerDraft(sessionId) {
   const key = composerDraftKey(sessionId)
+  if (key === activeComposerDraftKey) invalidateDictationOwner()
   if (imageChooser?.key === key) imageChooser = null
   for (const paste of pendingComposerPastes) {
     if (paste.key === key) paste.valid = false
@@ -2929,14 +3032,36 @@ function restoreComposerEdit(key, entry, text, images) {
   storeComposerDraft(key, { ...state, text, images })
 }
 
+async function finishDictationForSubmit() {
+  if (dictationSubmissionPending.value || composerComposing.value) return false
+  const owner = dictationOwner.value
+  const submission = {}
+  dictationSubmission = submission
+  dictationSubmissionPending.value = true
+  try {
+    return Boolean(await dictation.finish() && owner === dictationOwner.value && !composerComposing.value)
+  } catch (error) {
+    if (dictationSubmission === submission && owner === dictationOwner.value) promptError.value = error.message
+    return false
+  } finally {
+    if (dictationSubmission === submission) {
+      dictationSubmission = null
+      dictationSubmissionPending.value = false
+    }
+  }
+}
+
 async function submitDraft(streamingBehavior) {
-  if (composerReadPending.value) return
+  if (composerReadPending.value || dictationSubmissionPending.value) return
+  const submissionOwner = dictationOwner.value
+  if (!await finishDictationForSubmit()) return
+  if (submissionOwner !== dictationOwner.value) return
   const owner = activeComposerDraftKey
   if (hasPendingComposerPastes(owner)) {
     composerReadPending.value = true
     try { await settleComposerPastes(owner) }
     finally { composerReadPending.value = false }
-    if (owner !== activeComposerDraftKey) return
+    if (owner !== activeComposerDraftKey || submissionOwner !== dictationOwner.value) return
   }
   const submittedDraft = draft.value
   const text = submittedDraft.trim()
@@ -2949,7 +3074,9 @@ async function submitDraft(streamingBehavior) {
     || (reloadingSession.value && editingEntry.value)
     || sessionLoading.value
     || sessionSwitching.value
-    || sessionActivating.value) {
+    || sessionActivating.value
+    || !selectedSessionId.value
+    || imageSupportWarning.value) {
     return
   }
 
@@ -3238,6 +3365,7 @@ function isHandledSlashCommand(text) {
 
 function startEditingEntry(entry) {
   if (!entry?.id) return
+  invalidateDictationOwner()
 
   const target = persistedEditingEntry(entry)
   if (!target) {
@@ -3272,6 +3400,7 @@ async function retryEntry(entry) {
     return
   }
   if (target.role !== 'user') return
+  invalidateDictationOwner()
 
   const text = (target.text || textFromBlocks(messageBlocksFor(target))).trim()
   const images = imageBlocksFor(target).map(({ preview, ...image }) => image)
@@ -3361,6 +3490,7 @@ function matchingPersistedUserEntry(entry) {
 }
 
 function cancelEditingEntry() {
+  if (editingEntry.value) invalidateDictationOwner()
   editingEntry.value = null
 }
 
@@ -3523,16 +3653,20 @@ function handleSlashPickerKeydown(event) {
 }
 
 function handleComposerCompositionStart(event) {
+  composerComposing.value = true
+  dictation.cancel()
   compositionInputs.set(event.target, { key: activeComposerDraftKey, composing: true })
 }
 
 function handleComposerCompositionEnd(event) {
+  composerComposing.value = false
   const state = compositionInputs.get(event.target)
   if (!state) return
   setTimeout(() => { if (compositionInputs.get(event.target) === state) state.composing = false }, 0)
 }
 
 function handleComposerInputBlur(event) {
+  composerComposing.value = false
   compositionInputs.delete(event.target)
 }
 
@@ -3648,7 +3782,12 @@ function handleStartComposerKeydown(event) {
 }
 
 async function submitStartDraft() {
-  if (switchingUltrafast.value) return
+  if (switchingUltrafast.value || dictationSubmissionPending.value) return
+  const submissionOwner = dictationOwner.value
+  if (!await finishDictationForSubmit()) return
+  if (submissionOwner !== dictationOwner.value) return
+  if (switchingUltrafast.value || !homeComposerVisible.value || sessionLoading.value
+    || sessionSwitching.value || sessionActivating.value) return
   const text = draft.value.trim()
   const requestedUltrafast = ultrafastEnabled.value
   const model = startSelectedModel.value
@@ -3713,8 +3852,10 @@ async function submitStartDraft() {
 
 function handleGlobalKeydown(event) {
   if (isComposingInput(event)) return
+  if (dictation.handleKeydown(event)) return
   if (settingsOpen.value) {
     if (event.key === 'Escape') {
+      dictation.stopTest()
       if (event.target?.closest?.('.global-settings-modal')) return
       event.preventDefault()
       event.stopPropagation()
@@ -3741,7 +3882,7 @@ function handleGlobalKeydown(event) {
   if (event.key === 'Escape') handleEscape(event)
 }
 
-function anyEscapeTargetOpen(ignoreQueue = false) {
+function anyEscapeTargetOpen(ignoreQueue = false, ignoreEditing = false) {
   return Boolean(
     mobileComposerSheetOpen.value
     || (!ignoreQueue && composerRef.value?.queueUiOpen)
@@ -3763,7 +3904,7 @@ function anyEscapeTargetOpen(ignoreQueue = false) {
     || projectDetailCwd.value
     || memoryOpen.value
     || deleteConfirmActive.value
-    || editingEntry.value
+    || (!ignoreEditing && editingEntry.value)
     || renamingSessionId.value
     || modelPickerOpen.value
     || thinkingPickerOpen.value
@@ -3834,6 +3975,12 @@ function handleEscape(event) {
   if (!anyEscapeTargetOpen(true) && composerRef.value?.dismissQueue?.()) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
+    return
+  }
+  if (dictation.active) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    dictation.cancel()
     return
   }
   if (!anyEscapeTargetOpen()
@@ -4772,6 +4919,8 @@ function closePickerMenus() {
           <StartComposer
             v-if="homeComposerVisible || composerMotionState?.kind === 'home'"
             ref="startComposerRef"
+            :dictation="dictation"
+            :dictation-submitting="dictationSubmissionPending"
             :mobile="systemPromptMobile"
             :settings-error="sessionError"
             v-model:draft="startComposerDraft"
@@ -4841,6 +4990,8 @@ function closePickerMenus() {
           <SessionComposer
             v-if="!initializing && (selectedSession || composerMotionState?.kind === 'home')"
             ref="composerRef"
+            :dictation="dictation"
+            :dictation-submitting="dictationSubmissionPending"
             :mobile="systemPromptMobile"
             :settings-error="sessionError"
             v-model:draft="draft"
@@ -5114,12 +5265,16 @@ function closePickerMenus() {
       v-model:category="settingsCategory"
       :backend-name="activeBackendConnection.name"
       :file-links-available="fileLinksAvailable"
+      :dictation-available="dictation.settingsAvailable"
       :pi-settings-available="piSettingsAvailable"
       :before-navigate="confirmPiSettingsLeave"
       :opener="settingsOpener"
       fallback-selector=".session-details-toggle, [aria-label='Open settings'], [aria-label='Open sessions']"
       @close="closeGlobalSettings"
     >
+      <template #dictation>
+        <DictationSettings :dictation="dictation" />
+      </template>
       <template #connections>
         <NetworkAccessSettings ref="piSettingsPane" :copied-id="copiedEntryId" @copy="copyTranscriptItem" />
         <section class="settings-group backend-settings-group">

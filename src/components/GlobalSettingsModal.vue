@@ -6,6 +6,7 @@ const props = defineProps({
   backendName: { type: String, default: '' },
   fileLinksAvailable: Boolean,
   piSettingsAvailable: Boolean,
+  dictationAvailable: Boolean,
   beforeNavigate: { type: Function, default: null },
   opener: { type: Object, default: null },
   fallbackSelector: { type: String, default: '' },
@@ -15,6 +16,7 @@ const modalEl = ref(null)
 const categories = [
   { id: 'display', label: 'Display', description: 'Choose how transcripts first appear.' },
   { id: 'connections', label: 'Connections', description: 'Each window uses its own backend connection.' },
+  { id: 'dictation', label: 'Dictation', description: 'Choose how speech becomes draft text.' },
   { id: 'files', label: 'Files', description: 'Set the editor for files opened on this backend.' },
   { id: 'agents', label: 'Agent defaults', description: 'Used when a project or session has no override.' },
   { id: 'runtime', label: 'Runtime', description: 'Control cleanup of idle sessions on this backend.' },
@@ -22,23 +24,26 @@ const categories = [
   { id: 'mcp', label: 'MCP servers', description: '' },
 ]
 const availableCategories = computed(() => categories.filter((item) => {
+  if (item.id === 'dictation') return props.dictationAvailable
   if (item.id === 'files') return props.fileLinksAvailable
   if (['runtime', 'providers', 'mcp'].includes(item.id)) return props.piSettingsAvailable
   return true
 }))
 const selected = computed(() => availableCategories.value.find((item) => item.id === props.category) || categories[0])
 const groups = computed(() => [
-  { label: 'Leyline', items: availableCategories.value.filter((item) => ['display', 'connections'].includes(item.id)) },
-  { label: props.backendName, items: availableCategories.value.filter((item) => !['display', 'connections'].includes(item.id)) },
+  { label: 'Leyline', items: availableCategories.value.filter((item) => ['display', 'connections', 'dictation'].includes(item.id)) },
+  { label: props.backendName, items: availableCategories.value.filter((item) => !['display', 'connections', 'dictation'].includes(item.id)) },
 ])
 const workspacePage = computed(() => ['providers', 'mcp'].includes(selected.value.id))
-const backendScope = computed(() => !['display', 'connections'].includes(selected.value.id))
+const backendScope = computed(() => !['display', 'connections', 'dictation'].includes(selected.value.id))
 const scopeLabel = computed(() => backendScope.value
   ? `${props.backendName} · All projects`
-  : selected.value.id === 'connections' ? 'Leyline · Saved connections' : 'Leyline · All windows')
+  : selected.value.id === 'dictation' ? 'Client and speech service'
+    : selected.value.id === 'connections' ? 'Leyline · Saved connections' : 'Leyline · All windows')
 const footerLabel = computed(() => backendScope.value
   ? `All projects on ${props.backendName}`
-  : selected.value.id === 'connections' ? 'Saved in Leyline · Active backend is per window' : 'Leyline display preference')
+  : selected.value.id === 'dictation' ? 'Client preferences · Model settings on the speech host'
+    : selected.value.id === 'connections' ? 'Saved in Leyline · Active backend is per window' : 'Leyline display preference')
 let appRoot = null
 let appRootWasInert = false
 let opener = null
@@ -79,7 +84,7 @@ onUnmounted(() => {
   target?.focus({ preventScroll: true })
 })
 
-watch(() => [props.category, props.fileLinksAvailable, props.piSettingsAvailable], async () => {
+watch(() => [props.category, props.fileLinksAvailable, props.piSettingsAvailable, props.dictationAvailable], async () => {
   if (selected.value.id !== props.category) emit('update:category', 'display')
   const focused = modalEl.value?.contains(document.activeElement) ? document.activeElement : null
   await nextTick()
@@ -173,6 +178,9 @@ function handleKeydown(event) {
                   <template v-else-if="item.id === 'connections'">
                     <rect x="3" y="3" width="18" height="7" rx="1" /><rect x="3" y="14" width="18" height="7" rx="1" /><path d="M7 6.5h.1M7 17.5h.1" />
                   </template>
+                  <template v-else-if="item.id === 'dictation'">
+                    <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" />
+                  </template>
                   <path v-else-if="item.id === 'files'" d="M13 3H5v18h14V9zM13 3v6h6M8 14h8M8 17h5" />
                   <template v-else-if="item.id === 'runtime'">
                     <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
@@ -196,6 +204,9 @@ function handleKeydown(event) {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <template v-if="backendScope">
                   <rect x="3" y="3" width="18" height="7" rx="1" /><rect x="3" y="14" width="18" height="7" rx="1" /><path d="M7 6.5h.1M7 17.5h.1" />
+                </template>
+                <template v-else-if="selected.id === 'dictation'">
+                  <rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" />
                 </template>
                 <template v-else>
                   <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18" />
