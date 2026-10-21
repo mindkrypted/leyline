@@ -1127,7 +1127,7 @@ const primaryTrace = traceFixtures[0]
 const traceEditObservation = primaryTrace.observations.find(item => item.type === 'TOOL' && item.metadata.toolResultEntryId === 'tool-edit')
 const traceFinalGeneration = primaryTrace.observations.find(item => item.type === 'GENERATION' && item.metadata.messageEntryId === 'assistant-2')
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
-const pinnedAssetNames = ['pinned-sessions.png']
+const pinnedAssetNames = ['pinned-sessions.png', 'pinned-only.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
 const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png', 'subagent-live-tail.png', 'subagent-live-tail-mobile.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
@@ -1311,6 +1311,25 @@ try {
     interact: async (page) => {
       await page.locator('.session-time-heading', { hasText: 'Pinned' }).waitFor()
       await page.locator('.session-pinned-icon').nth(1).waitFor()
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'pinned-only.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'pinned',
+    interact: async (page) => {
+      await page.locator('.session-pinned-icon').nth(1).waitFor()
+      await page.getByRole('button', { name: 'Show pinned sessions only', exact: true }).click()
+      await page.locator('.sidebar-pin-filter[aria-pressed="true"]').waitFor()
+      await page.getByRole('textbox', { name: 'Search pinned sessions in this project', exact: true }).waitFor()
+      await page.waitForFunction(() => {
+        const rows = document.querySelectorAll('.project-session-row')
+        const count = document.querySelector('.project-session-heading span:last-child')
+        return rows.length === 2 && [...rows].every(row => row.querySelector('.session-pinned-icon'))
+          && count?.textContent.trim() === '2 of 7'
+      })
     },
   })
   await capture({

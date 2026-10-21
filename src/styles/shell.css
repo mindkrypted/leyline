@@ -305,7 +305,7 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   min-height: 32px;
   margin: 8px 0 0;
-  padding: 6px 9px;
+  padding: 3px 5px 3px 9px;
   font-size: 12px;
 }
 
@@ -316,6 +316,12 @@
   stroke: currentColor;
   stroke-linecap: round;
   stroke-width: 1.6;
+}
+
+.sidebar-session-search-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .sidebar-session-search button {
@@ -334,6 +340,42 @@
 .sidebar-session-search button:hover {
   background: var(--panel-strong);
   color: var(--text);
+}
+
+.sidebar-session-search .sidebar-pin-filter {
+  width: 26px;
+  height: 24px;
+  border: 1px solid transparent;
+  color: #8a8a8a;
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.sidebar-pin-filter svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
+}
+
+.sidebar-pin-filter .pin-head {
+  fill: currentColor;
+}
+
+.sidebar-session-search .sidebar-pin-filter[aria-pressed='true'] {
+  border-color: rgb(138 120 255 / 24%);
+  background: rgb(138 120 255 / 12%);
+  color: #c3baff;
+}
+
+.sidebar-pin-filter:focus-visible {
+  outline: 1px solid var(--muted-strong);
+  outline-offset: 2px;
 }
 
 .project-session-section {
@@ -360,6 +402,7 @@
   color: #6f6f73;
   font-weight: 500;
   letter-spacing: 0;
+  text-transform: none;
 }
 
 .project-session-scroll {

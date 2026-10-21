@@ -42,8 +42,9 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 
 ## Features
 
-- Browse, search, pin, and run pi sessions across projects. Read live
-  transcripts and monitor work in **Activity**.
+- Browse, search, pin, and run pi sessions across projects. Show
+  [only pinned sessions](docs/user-guide/sessions.md#show-only-pinned-sessions)
+  in the sidebar. Read live transcripts and monitor work in **Activity**.
 - Steer active work or queue **Up next** tasks. Examine tools, System
   changes, local files, and Git changes. Use configured MCP tools and
   respond to extension requests in the workspace.

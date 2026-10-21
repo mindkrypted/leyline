@@ -27,6 +27,8 @@ A research session also shows its compact state and source control. The source c
 
 Subagent children appear as nested rows under their parent. Use the parent's left chevron to show or hide them. Select a child row to open its transcript. See [Sessions](./sessions#open-a-subagent-session) for expansion and search behavior.
 
+Use the pin button beside search to [show only pinned sessions](./sessions#show-only-pinned-sessions). Select it again to restore all sessions.
+
 Select **Go to** to open a session from another project.
 
 The sidebar opens over the workbench. Select the shaded area or a session to close it.

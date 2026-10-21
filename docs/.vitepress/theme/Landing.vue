@@ -205,8 +205,9 @@ onUnmounted(() => {
         <p class="band-label">Sessions</p>
         <h2>See which sessions need attention.</h2>
         <p>
-          Pin sessions in the project sidebar and open child runs from their
-          parent. Activity shows work in other sessions without switching away.
+          Show only pinned sessions in the project sidebar and open child runs
+          from their parent. Activity shows work in other sessions without
+          switching away.
         </p>
       </div>
       <figure class="band-shot">

@@ -112,6 +112,22 @@ PNG captures show the settled layout with reduced motion enabled. Use separate f
 
 Live captures use a synthetic release-review child. Saved messages pass through `projectTranscriptEntries()` with tool arguments retained. A child-scoped `tool_execution_update` supplies the running command output. The helper opens that row to check full output and arguments, checks the task prompt, and verifies that closing releases the child socket. It then reopens the ledger for capture. Exactly one child subscription may remain open, and the parent route must stay selected. No child activation or model request reaches the backend.
 
+For pinned sessions:
+
+```bash
+DOCS_SCREENSHOT_FILTER=pinned-sessions.png,pinned-only.png,mobile-sidebar.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `pinned-sessions.png` | Two pinned sessions above the normal time groups, with the filter off. |
+| `pinned-only.png` | The active lavender pin filter, **Search pinned sessions**, and **2 of 7** visible sessions. |
+| `mobile-sidebar.png` | The mobile search field with its pin filter off, above the expanded subagent branch. |
+
+The pinned-only capture uses the real filter button. It checks the active state, search label, visible count, and pin markers before capture. The selected unpinned conversation stays open. No pin or session mutation reaches the backend.
+
+Changes to sidebar search controls also affect desktop screenshots throughout the guides and README. Refresh those images at their existing dimensions.
+
 For sidebar child sessions:
 
 ```bash
@@ -187,7 +203,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
 
-Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. The pinned-session capture pins two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
+Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. Both pinned-session captures use two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
 
 These models and settings exist only in the capture fixtures. The command does not change local model configuration.
 
