@@ -50,6 +50,8 @@ Leyline cancels recording if the window loses focus, the tab becomes hidden, foc
 
 *Dictation controls remain available in the narrow composer layout.*
 
+> **iOS:** The composer microphone does not work over a local-network HTTP address on iPhone or iPad. Use HTTPS or the iOS keyboard's microphone instead.
+
 ## Microphone and language
 
 Local dictation uses the selected input device, or the system default. The browser or operating system can ask for microphone permission. Grant permission to record. Use **Test microphone** in Settings to check input level; the test stops after 10 seconds unless you stop it first.
