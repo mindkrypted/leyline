@@ -26,16 +26,6 @@ const compactLabel = computed(() => {
   if (phase.value === 'error') return 'Needs attention'
   return label.value
 })
-const sourceLabel = computed(() => {
-  if (phase.value === 'testing') return 'This device'
-  return props.dictation.engine === 'browser' ? 'Browser' : props.dictation.processingLocation || 'Local model'
-})
-const sourceTitle = computed(() => {
-  if (phase.value === 'testing') return 'Microphone on this client · Stops after 10 seconds'
-  if (props.dictation.engine === 'browser') return 'Browser-managed speech recognition. Processing is managed by your browser and is not guaranteed to stay on this device. Audio level is unavailable.'
-  const source = `Local-model speech processing · ${props.dictation.processingLocation || 'Location unavailable'}`
-  return phase.value === 'finishing' && !props.dictation.releasing ? `${source} · Microphone closed` : source
-})
 const timer = computed(() => {
   const seconds = Math.max(0, Math.floor(Number(props.dictation.elapsed) || 0))
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
@@ -152,11 +142,13 @@ async function act(action, event) {
         <svg class="dictation-wave" :class="{ 'dictation-wave-measured': measuring }" viewBox="0 0 210 18" preserveAspectRatio="none" aria-hidden="true">
           <rect v-for="index in DICTATION_WAVE_BARS" :key="index" :ref="element => { waveBars[index - 1] = element }" :x="(index - 1) * 7 + 2" y="0" width="3" height="18" rx="1.5" style="transform: scaleY(0.111111)" />
         </svg>
-        <span class="dictation-status-source" :title="sourceTitle" :aria-label="sourceTitle">{{ sourceLabel }}</span>
       </div>
       <div class="dictation-strip-actions">
         <button v-if="active" class="dictation-finish-target" type="button" :disabled="pending.size > 0 || !['listening', 'testing'].includes(phase)" :aria-label="phase === 'testing' ? 'Stop microphone test' : 'Finish dictation'" @click="act(phase === 'testing' ? 'stopTest' : 'finish', $event)">
           <span class="composer-chip dictation-finish-pill">{{ phase === 'testing' ? 'Stop test' : 'Finish' }}</span>
+        </button>
+        <button v-else-if="error || phase === 'error'" class="dictation-finish-target" type="button" :disabled="pending.size > 0" aria-label="Dismiss dictation error" @click="act('dismissError')">
+          <span class="composer-chip dictation-finish-pill dictation-dismiss-pill">Dismiss</span>
         </button>
         <span class="dictation-cancel-slot">
           <button v-if="active && phase !== 'testing'" class="dictation-cancel" type="button" :disabled="pending.has('cancel')" title="Cancel dictation and discard this recording" aria-label="Cancel dictation and discard this recording" @click="act('cancel')">
@@ -165,9 +157,8 @@ async function act(action, event) {
         </span>
       </div>
     </div>
-    <div v-if="error || phase === 'error'" class="dictation-status-failure">
-      <p v-if="error" class="dictation-status-error" role="alert">{{ error }}</p>
-      <button class="dictation-button dictation-button-quiet" type="button" :disabled="pending.size > 0" aria-label="Dismiss dictation error" @click="act('dismissError')">Dismiss</button>
+    <div v-if="error" class="dictation-status-failure">
+      <p class="dictation-status-error" role="alert">{{ error }}</p>
     </div>
     <div v-if="recoveryText" class="dictation-recovery">
       <label class="dictation-status-label">

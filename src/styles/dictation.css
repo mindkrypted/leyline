@@ -327,24 +327,31 @@
   container: dictation-status / inline-size;
   flex: none;
   min-width: 0;
-  margin: 0 20px;
+  padding: 8px 20px 10px;
   color: #bdb8c3;
   font-size: 11px;
   line-height: 1.5;
 }
 
 .dictation-status-strip {
-  display: grid;
-  grid-template-columns: 156px minmax(0, 1fr) 126px;
+  display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   box-sizing: border-box;
-  height: 52px;
-  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  height: 34px;
+  margin: 0 auto;
+  border: 1px solid #3b3b3e;
+  border-radius: 999px;
+  background: #2c2c2e;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 32%);
+  padding: 0 4px 0 12px;
 }
 
 .dictation-status-line {
-  gap: 6px;
+  flex: none;
+  gap: 7px;
 }
 
 .dictation-status-dot {
@@ -359,26 +366,35 @@
 }
 
 .dictation-status-listening .dictation-status-dot {
-  background-color: #b2a5c5;
+  background-color: #c2b6d6;
+  box-shadow: 0 0 0 3px rgb(178 165 197 / 14%);
+  animation: dictation-dot-pulse 1.9s ease-in-out infinite;
 }
 
 .dictation-status-busy .dictation-status-dot {
-  border-color: #615c69;
+  border-color: #5c5763;
   border-top-color: #c2b7d2;
   background: transparent;
+  box-shadow: none;
   animation: dictation-status-spin 1.2s linear infinite;
 }
 
 .dictation-phase-label {
   overflow: hidden;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 24ch;
+  color: #e2dfe6;
+  font-size: 12px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .dictation-status-line .dictation-timer {
-  min-width: 32px;
+  min-width: 0;
+  color: #8b8790;
+  font-size: 11px;
   text-align: right;
 }
 
@@ -386,50 +402,51 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  overflow: hidden;
   min-width: 0;
+  border-left: 1px solid #434346;
+  padding-left: 10px;
 }
 
 .dictation-wave {
   display: block;
-  flex: 1 1 0;
-  width: 100%;
-  min-width: 56px;
-  height: 18px;
+  flex: 0 1 96px;
+  width: 96px;
+  min-width: 40px;
+  height: 14px;
   color: #77717f;
 }
 
 .dictation-wave-measured {
-  color: #a394b7;
+  color: #9d90b2;
 }
 
 .dictation-wave rect {
+  width: 5px;
   fill: currentColor;
   transform-box: fill-box;
   transform-origin: center;
-}
-
-.dictation-status-source {
-  flex: none;
-  color: #89858e;
-  font-size: 10px;
-  white-space: nowrap;
 }
 
 .dictation-strip-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  width: 126px;
+  flex: none;
   min-width: 0;
+}
+
+.dictation-strip-actions:has(button) {
+  border-left: 1px solid #434346;
+  padding-left: 10px;
 }
 
 .dictation-finish-target,
 .dictation-cancel {
+  position: relative;
   display: grid;
   flex: none;
   place-items: center;
-  height: 44px;
+  height: 26px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -439,46 +456,60 @@
   cursor: pointer;
 }
 
-.dictation-finish-target {
-  width: 80px;
+.dictation-finish-target::after,
+.dictation-cancel::after {
+  content: "";
+  position: absolute;
+  inset: -9px -1px;
 }
 
-.dictation-finish-pill {
+.dictation-finish-target .dictation-finish-pill {
   display: grid;
   place-items: center;
   box-sizing: border-box;
-  width: 100%;
-  height: 28px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #3a3a3d;
+  padding: 0 11px;
+  color: #e6e6e6;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.dictation-finish-target .dictation-dismiss-pill {
+  background: transparent;
+  color: #a09ca8;
 }
 
 .dictation-finish-target:hover:not(:disabled) .dictation-finish-pill {
-  background: #333;
-  color: var(--text);
+  background: #464649;
+  color: #fff;
 }
 
 .dictation-cancel-slot,
 .dictation-cancel {
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: 26px;
+  height: 26px;
 }
 
 .dictation-cancel {
-  color: #918b98;
+  color: #8b8790;
 }
 
 .dictation-cancel svg {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.6;
+  stroke-width: 1.7;
   stroke-linecap: round;
 }
 
 .dictation-cancel:hover:not(:disabled) {
-  background: #2b2b2c;
-  color: var(--muted-strong);
+  background: #3a3a3d;
+  color: #d8d4dc;
 }
 
 .dictation-finish-target:disabled,
@@ -506,19 +537,18 @@
 
 .dictation-status-failure {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  justify-content: center;
   min-width: 0;
-  border-top: 1px solid #303030;
-  padding: 8px 0 12px;
+  padding: 7px 0 0;
 }
 
 .dictation-status-error {
-  flex: 1;
   min-width: 0;
+  max-width: 64ch;
   margin: 0;
-  color: #d8d1c4;
+  color: #a09ba8;
   font-size: 11px;
+  text-align: center;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -532,8 +562,9 @@
 
 .dictation-recovery {
   min-width: 0;
-  border-top: 1px solid #303030;
-  padding: 8px 0 12px;
+  margin-top: 9px;
+  border-top: 1px solid #2c2c2e;
+  padding: 10px 0 12px;
 }
 
 .dictation-recovery > label {
@@ -580,52 +611,38 @@
   to { transform: rotate(360deg); }
 }
 
-@container dictation-status (max-width: 520px) {
-  .dictation-status-strip {
-    grid-template-columns: minmax(0, 1fr) 126px;
-    grid-template-rows: 20px 28px;
-    gap: 0 8px;
-    height: 64px;
-    padding: 8px 0;
-  }
-
-  .dictation-status-line {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .dictation-status-signal {
-    grid-column: 1;
-    grid-row: 2;
-    gap: 8px;
-  }
-
-  .dictation-strip-actions {
-    grid-column: 2;
-    grid-row: 1 / 3;
-  }
-
-  .dictation-finish-pill {
-    height: 32px;
-    font-size: 13px;
-  }
+@keyframes dictation-dot-pulse {
+  0%,
+  100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
-@container dictation-status (max-width: 280px) {
-  .dictation-status-signal {
-    display: grid;
-    grid-template-rows: 14px 14px;
-    gap: 0;
+@container dictation-status (max-width: 520px) {
+  .dictation-status-strip {
+    gap: 8px;
+    padding-left: 10px;
   }
 
   .dictation-wave {
-    height: 14px;
+    flex: 0 1 64px;
+    width: 64px;
+    min-width: 34px;
+  }
+}
+
+@container dictation-status (max-width: 300px) {
+  .dictation-status-signal {
+    display: none;
+  }
+
+  .dictation-status-line {
+    flex: 1 1 auto;
   }
 }
 
 @media (max-width: 760px) {
   .dictation-status {
-    margin-inline: 16px;
+    padding-inline: 12px;
   }
 
   .dictation-status .dictation-button {
@@ -688,7 +705,8 @@
     transition: none;
   }
 
-  .dictation-status-busy .dictation-status-dot {
+  .dictation-status-busy .dictation-status-dot,
+  .dictation-status-listening .dictation-status-dot {
     animation: none;
   }
 }

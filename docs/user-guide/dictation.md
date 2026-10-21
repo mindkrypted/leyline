@@ -2,7 +2,7 @@
 
 Dictation adds recognized speech to the composer draft. It does not send the draft. When you select Send, Leyline finishes an active recording first, then follows the normal send or queue behavior.
 
-![Composer dictation strip with a live waveform, Local model source, Finish, and Cancel controls](../assets/screenshots/dictation.png)
+![Composer dictation capsule with a live waveform, Finish, and Cancel controls](../assets/screenshots/dictation.png)
 
 *Local dictation in progress. The waveform responds to microphone audio and shows about one second of recent activity.*
 
@@ -36,9 +36,9 @@ The download is stored on the speech-processing computer. By default, model file
 
 ## Record and insert speech
 
-Select the composer microphone button, or use the in-app shortcut. The compact status strip shows the recording state, elapsed time, source, and **Finish** and **Cancel** controls.
+Select the composer microphone button, or use the in-app shortcut. The compact status capsule shows the recording state, elapsed time, and **Finish** and **Cancel** controls.
 
-During local dictation, the waveform shows recent microphone audio. During Browser dictation, the waveform is a static motif because the browser does not provide an audio-level signal to Leyline. The source label identifies **Browser** or the local processing location.
+During local dictation, the waveform shows recent microphone audio. During Browser dictation, the waveform is a static motif because the browser does not provide an audio-level signal to Leyline. The microphone button tooltip and the Processing row in Dictation settings identify **Browser** or the local processing location.
 
 Select **Finish** to stop and insert recognized text. Select **Cancel** to discard the recording. A microphone test uses **Stop test** instead. The microphone closes when dictation or a test ends. Keeping a local model ready does not keep the microphone open.
 
@@ -46,7 +46,7 @@ Leyline inserts text at the selection captured when recording starts. If you edi
 
 Leyline cancels recording if the window loses focus, the tab becomes hidden, focus moves outside the composer, or you navigate away or change sessions. Cancellation does not guarantee a recoverable transcript. Select **Finish** before you leave the composer. If you select Send while recording, Leyline finishes dictation before it sends or queues the draft. There is no automatic send when speech recognition finishes.
 
-![Mobile composer with the compact dictation status strip and recording controls](../assets/screenshots/dictation-mobile.png)
+![Mobile composer with the compact dictation status capsule and recording controls](../assets/screenshots/dictation-mobile.png)
 
 *Dictation controls remain available in the narrow composer layout.*
 

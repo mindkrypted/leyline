@@ -2009,10 +2009,10 @@ async function startDictationCapture(page) {
     throw new Error(`Deterministic dictation waveform did not fill the capture width: ${JSON.stringify({ result, heights })}`)
   }
   await page.waitForFunction(() => document.querySelector('.dictation-timer')?.textContent.trim() === '0:01')
-  const source = await page.locator('.dictation-status-source').getAttribute('aria-label')
+  const label = await page.locator('.dictation-phase-label').textContent()
   const timer = await page.locator('.dictation-timer').textContent()
-  if (source !== 'Local-model speech processing · Leyline server' || timer !== '0:01') {
-    throw new Error(`Deterministic dictation status changed: ${JSON.stringify({ source, timer })}`)
+  if (label.trim() !== 'Listening' || timer !== '0:01') {
+    throw new Error(`Deterministic dictation status changed: ${JSON.stringify({ label, timer })}`)
   }
 }
 
