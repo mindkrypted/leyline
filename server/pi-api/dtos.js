@@ -97,6 +97,7 @@ export function activeSessionStateDto(handle) {
       handle.runtime.session,
       handle.extensionUiState,
       handle.pendingToolResults,
+      handle.compactionActive === true,
     ),
     promptQueue: handle.promptQueue?.snapshot()
       || { revision: 0, held: false, error: '', items: [] },
@@ -107,6 +108,7 @@ export function sessionStateDto(
   session,
   extensionUiState = emptyExtensionUiState(),
   pendingToolResults,
+  isCompacting = false,
 ) {
   const activeToolNames = session.getActiveToolNames()
   const pendingToolCalls = [...(session.agent?.state?.pendingToolCalls || [])]
@@ -120,8 +122,8 @@ export function sessionStateDto(
     thinkingLevel: session.thinkingLevel,
     availableThinkingLevels: session.getAvailableThinkingLevels(),
     isStreaming: session.isStreaming,
-    isCompacting: session.isCompacting,
-    compactionCutEntryId: session.isCompacting
+    isCompacting,
+    compactionCutEntryId: isCompacting
       ? compactionCutEntryId(session)
       : '',
     pendingToolCalls,

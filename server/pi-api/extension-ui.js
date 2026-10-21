@@ -17,6 +17,12 @@ export async function bindRuntimeHandle(handle, events) {
   cleanupExtensionConfirmations(handle, { invalidate: !alreadyBound })
   settlePromptHandoff(handle)
   handle.unsubscribe?.()
+  if (!alreadyBound) handle.compactionActive = false
+  const unsubscribeCompaction = session.subscribe((event) => {
+    if (event.type === 'compaction_start') handle.compactionActive = true
+    if (event.type === 'compaction_end') handle.compactionActive = false
+  })
+  handle.unsubscribe = unsubscribeCompaction
   handle.extensionUiState = emptyExtensionUiState()
   handle.pendingToolResults = new Map()
   try {
@@ -36,10 +42,11 @@ export async function bindRuntimeHandle(handle, events) {
     }
     handle.boundSession = session
   } catch (error) {
+    unsubscribeCompaction()
     cleanupExtensionConfirmations(handle)
     throw error
   }
-  handle.unsubscribe = handle.runtime.session.subscribe((event) => {
+  const unsubscribeRuntime = session.subscribe((event) => {
     const handoffId = promptHandoffId(handle, event)
     trackPendingToolResult(handle, event)
     trackRuntimeActivity(handle, event)
@@ -74,6 +81,10 @@ export async function bindRuntimeHandle(handle, events) {
       events.broadcastActiveSession(handle)
     }
   })
+  handle.unsubscribe = () => {
+    unsubscribeRuntime()
+    unsubscribeCompaction()
+  }
   events.broadcastActiveSession(handle)
 }
 

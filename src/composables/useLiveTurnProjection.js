@@ -224,17 +224,19 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
     const newSnapshot = snapshotRevision === undefined
       || snapshotRevision !== runtimeSnapshotRevision
     runtimeSnapshotRevision = snapshotRevision
-    compactingContext.value = state.isCompacting === true
-    if (state.isCompacting === true) {
-      const cutEntryId = state.compactionCutEntryId || ''
-      const previous = compaction.value
-      compaction.value = {
-        reason: previous?.reason || '',
-        startedAt: previous?.startedAt || 0,
-        cutEntryId,
+    if (newSnapshot) {
+      compactingContext.value = state.isCompacting === true
+      if (state.isCompacting === true) {
+        const cutEntryId = state.compactionCutEntryId || ''
+        const previous = compaction.value
+        compaction.value = {
+          reason: previous?.reason || '',
+          startedAt: previous?.startedAt || 0,
+          cutEntryId,
+        }
+      } else {
+        compaction.value = null
       }
-    } else {
-      compaction.value = null
     }
     agentRunning.value = state.isStreaming === true
     if (newSnapshot && !agentRunning.value && !compactingContext.value) {
