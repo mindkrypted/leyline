@@ -68,10 +68,10 @@ DOCS_SCREENSHOT_FILTER=composer-queue.png,composer-queue-held.png,activity.png,a
 For mobile header and composer changes:
 
 ```bash
-DOCS_SCREENSHOT_FILTER=mobile-session.png,mobile-sidebar.png,subagent-inspector-mobile.png,subagent-live-tail-mobile.png,deep-research-mobile.png,trace-mobile.png npm run docs:screenshots
+DOCS_SCREENSHOT_FILTER=mobile-session.png,dictation-mobile.png,mobile-sidebar.png,subagent-inspector-mobile.png,subagent-live-tail-mobile.png,deep-research-mobile.png,trace-mobile.png npm run docs:screenshots
 ```
 
-These captures include the mobile header or composer, sometimes behind a sheet. Check the 48-pixel header targets, the gray model capsule inside its 44-pixel target, and the Ultrafast indicator below it. Full-screen Settings and Activity captures hide these controls and do not need a refresh for this change.
+These captures include the mobile header or composer, sometimes behind a sheet. Check the 48-pixel header targets and the 32-pixel gray capsule with separate model, thinking, and speed controls. Each capsule control has a touch target of at least 44 by 44 pixels. The speed bolt is outlined gray for Standard and filled lavender for Ultrafast. For composer-only changes, refresh `mobile-session.png` and `dictation-mobile.png`. The other captures hide the capsule behind a sidebar, sheet, or full-screen view.
 
 For expanded tool previews:
 

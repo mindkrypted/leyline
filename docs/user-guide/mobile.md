@@ -2,9 +2,9 @@
 
 Leyline uses a mobile layout when the viewport is 760 pixels wide or less.
 
-![Leyline mobile session with the model capsule and ultrafast indicator](../assets/screenshots/mobile-session.png)
+![Leyline mobile session with separate model, thinking, and speed controls](../assets/screenshots/mobile-session.png)
 
-*The mobile composer uses one action row and a desktop-style model capsule.*
+*The mobile composer uses one action row with a three-part settings capsule.*
 
 ## Use the mobile header
 
@@ -105,15 +105,15 @@ Select the close button or backdrop to return to the transcript. See [Subagents]
 
 ## Use the mobile composer
 
-The composer stays above the bottom edge. Its action row contains **Add to message**, the model capsule, dictation, and Send. During dictation, a compact waveform and gray **Finish** chip appear above the composer.
+The composer stays above the bottom edge. Its action row contains **Add to message**, the settings capsule, dictation, and Send. During dictation, a compact waveform and gray **Finish** chip appear above the composer.
 
 ![Mobile dictation with a compact waveform and gray Finish chip](../assets/screenshots/dictation-mobile.png)
 
 Browser dictation is the default in normal web browsers. It is browser-managed and may use an online service. Select **Local models** in Settings to use Parakeet or Whisper Turbo. In a browser, local-model speech runs on the Leyline server that serves the app. In Electron, local-model speech runs on this device. Dictation requires a secure context: use HTTPS or localhost, not ordinary LAN HTTP. See [Dictation](./dictation) for setup and processing details.
 
-Select the gray model capsule to open **Session options**. The capsule shows the model's display name. The sheet contains model selection, **Thinking**, and **Service tier**.
+The gray capsule has three separate controls. Select the model name to open **Session options**. Select the thinking level to open **Thinking**, or the lightning bolt to open **Speed**.
 
-When enabled, a dot and `ultrafast` label appear below the capsule. Supported models, premium pricing, and session scope match desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
+The bolt stays visible in both speed modes. It is gray and outlined for **Standard**, or lavender and filled for **Ultrafast**. For unsupported models, **Speed** explains why Ultrafast is unavailable. Supported models, premium pricing, and session scope match desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
 
 During an active run, an empty draft shows **Stop**. Add text or an image to restore the send arrow and queue the draft in **Up next**. Select **Send options** beside the arrow for **Queue next task** or **Steer current run**.
 

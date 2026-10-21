@@ -2877,9 +2877,10 @@ async function capture({
       if (['home', 'ultrafast'].includes(scenario)) {
         const enabled = scenario === 'ultrafast'
         if (await page.locator('.mobile-model-control:visible').count()) {
-          const indicator = await page.locator('.mobile-ultrafast:visible').count()
-          if (indicator !== (enabled ? 1 : 0)) {
-            throw new Error('Unexpected mobile Ultrafast indicator state')
+          const control = page.locator('.mobile-speed-control:visible')
+          if (await control.count() !== 1
+            || await control.evaluate(element => element.classList.contains('active')) !== enabled) {
+            throw new Error('Unexpected mobile speed control state')
           }
         } else {
           const chip = page.locator('.ultrafast-toggle:visible').first()
