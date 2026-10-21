@@ -2,19 +2,19 @@
 
 Leyline uses a mobile layout when the viewport is 760 pixels wide or less.
 
-![Leyline mobile session with System rows and ultrafast enabled in the composer](../assets/screenshots/mobile-session.png)
+![Leyline mobile session with the model capsule and ultrafast indicator](../assets/screenshots/mobile-session.png)
 
-*The mobile workbench keeps the main session actions in one column.*
+*The mobile composer uses one action row and a desktop-style model capsule.*
 
 ## Use the mobile header
 
-The header shows the Leyline mark, **Open sessions**, the session title, and available transcript controls.
+Select the Leyline mark to return to Home. Use **Open sessions** to open the sidebar. Select a session title to rename it.
 
-The project part of the breadcrumb is hidden. The session rename glyph is also hidden, but you can select the title to rename it.
+Use **Session actions** (three dots) for traces, session details, Git review, memory, runtime events, and export. Available controls depend on the session and backend.
 
-The **Session traces**, **Session details**, **Memory**, **Events**, and **Export transcript** icons remain available when the session and backend support them. Numeric counts are hidden.
+On Home, the three-dot button opens **Session details**, which lists the enabled tools.
 
-A research session also shows its compact state and source control. The source count is hidden, but the control remains available.
+The project breadcrumb, rename glyph, and numeric action counts are hidden. Research sessions retain their compact state label.
 
 ## Open the mobile sidebar
 
@@ -105,31 +105,33 @@ Select the close button or backdrop to return to the transcript. See [Subagents]
 
 ## Use the mobile composer
 
-The composer stays above the bottom edge. Model, thinking, optional `ultrafast`, dictation, and send controls share the primary row. With `ultrafast` available, narrow screens move the model control to its own row.
+The composer stays above the bottom edge. Its action row contains **Add to message**, the model capsule, dictation, and Send.
 
-The `ultrafast` chip uses the same supported models, premium pricing, and session scope as on desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
+Select the gray model capsule to open **Session options**. The capsule shows the model's display name. The sheet contains model selection, **Thinking**, and **Service tier**.
 
-During an active run, the send arrow adds the draft to **Up next**. Select **Send options** beside the arrow for **Queue next task** or **Steer current run**.
+When enabled, a dot and `ultrafast` label appear below the capsule. Supported models, premium pricing, and session scope match desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
+
+During an active run, an empty draft shows **Stop**. Add text or an image to restore the send arrow and queue the draft in **Up next**. Select **Send options** beside the arrow for **Queue next task** or **Steer current run**.
 
 Select the attached **Up next** tab to open the tray across the composer width. The tab moves above the list. The input and footer stay fixed while the list scrolls. Each task has one actions menu for edits, order changes, steering, and removal.
 
 **Stop** holds remaining unsent tasks. The closed **Held** tab shows the count and **Resume**. Text edits keep images, and closing the tray keeps an unsaved edit. Save or cancel the edit before you select **Resume**. See [Composer](./composer#queue-the-next-task) for queue details.
 
-The context row contains runtime status, shell mode, tool count, context text, and the terminal control. Some secondary status chips are hidden to keep the row compact.
+Use **Add to message** for images, a new line, or research mode when available.
 
-The model control uses the `provider/model-id` label. The thinking control uses a shortened label. The context progress bar is hidden, but its token text remains.
+Open **Session details** through **Session actions** for enabled tools, context usage, and terminal access.
 
 ## Open research sources
 
 A [deep research](./deep-research) source pane opens across the full viewport. It has **Cited** and **Research ledger** views.
 
-Select the source control in the header to open the pane. Select **×** to close the pane and return to the report.
+Select **Session actions**, then **Research sources**, to open the pane. Select **×** to close the pane and return to the report.
 
 Select a report citation to open its source preview as a bottom sheet.
 
 ## Inspect traces on mobile
 
-Select **Session traces** in the header for the current session. For all projects on the selected backend, open the sidebar and select the **Trace explorer** icon button.
+Select **Session actions**, then **Session traces**, for the current session. For all projects on the selected backend, open the sidebar and select the **Trace explorer** icon button.
 
 ![Mobile trace view with the selected observation details](../assets/screenshots/trace-mobile.png)
 

@@ -77,7 +77,7 @@ defineExpose({ open, dismiss, opened })
 <template>
   <button :id="fallbackId" class="mobile-add-control" type="button" aria-label="Add to message" aria-haspopup="dialog" :disabled="disabled" :aria-expanded="page === 'add'" @mousedown.prevent @click="open('add', $event)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
   <button class="mobile-model-control" type="button" aria-haspopup="dialog" :aria-label="`${modelLabel}, ${formatMode(thinkingLevel)} thinking, ${ultrafastEnabled ? 'Ultrafast' : 'Standard'} service. Open settings`" :aria-expanded="['options', 'thinking', 'service'].includes(page)" :disabled="disabled || settingsDisabled" @click="open('options', $event)">
-    <span class="mobile-model-content"><span class="mobile-model-title"><span>{{ modelLabel }}</span><span class="mobile-model-caret">⌄</span></span><small v-if="ultrafastEnabled" class="mobile-ultrafast">Ultrafast</small></span>
+    <span class="mobile-model-content"><span class="mobile-model-title"><span>{{ modelLabel }}</span><svg class="mobile-model-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5h6L6 8.5z" /></svg></span><small v-if="ultrafastEnabled" class="mobile-ultrafast"><svg viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="2.5" /></svg>ultrafast</small></span>
   </button>
   <Teleport to="body">
     <Transition name="mobile-sheet">
@@ -122,10 +122,12 @@ defineExpose({ open, dismiss, opened })
   .mobile-add-control svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
   .mobile-model-control { flex: 1; min-width: 0; padding: 0 3px; }
   .mobile-model-content { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; gap: 2px; }
-  .mobile-model-title { display: flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; font-size: 14px; font-weight: 500; }
+  .mobile-model-title { display: flex; align-items: center; gap: 8px; height: 32px; max-width: 100%; min-width: 0; border: 1px solid transparent; border-radius: 999px; padding: 6px 12px; background: #2b2b2c; color: var(--muted-strong); font-size: 13px; font-weight: 600; line-height: 1; transition: background-color var(--motion-base) var(--ease-decelerate), border-color var(--motion-base) var(--ease-decelerate), color var(--motion-base) var(--ease-decelerate); }
+  .mobile-model-control:hover:not(:disabled) .mobile-model-title, .mobile-model-control[aria-expanded='true'] .mobile-model-title { border-color: var(--accent-border); background: #201a32; color: var(--text); }
   .mobile-model-title > span:first-child { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-model-caret { flex: none; color: #aaa; }
-  .mobile-model-content small { font-size: 10px; }
+  .mobile-model-caret { flex: none; width: 12px; height: 12px; fill: currentColor; }
+  .mobile-model-content small { display: flex; align-items: center; gap: 4px; height: 10px; font-size: 10px; line-height: 1; }
+  .mobile-model-content small svg { width: 7px; height: 7px; fill: var(--accent); }
   .mobile-ultrafast { color: #bfb3ef !important; }
   .mobile-sheet-backdrop { position: fixed; z-index: 80; top: var(--app-top, 0px); left: 0; width: 100%; height: var(--app-height, 100dvh); display: flex; align-items: flex-end; background: #0008; }
   .mobile-composer-sheet { display: flex; flex-direction: column; width: 100%; max-height: calc(100% - 16px - env(safe-area-inset-top, 0px)); min-height: 0; border: 1px solid #3a3a3a; border-bottom: 0; border-radius: 24px 24px 0 0; outline: none; background: #181818; color: #e5e5e5; box-shadow: 0 -12px 50px #0005; padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -162,6 +164,6 @@ defineExpose({ open, dismiss, opened })
   .mobile-sheet-leave-active { pointer-events: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mobile-sheet-enter-active, .mobile-sheet-leave-active, .mobile-sheet-enter-active .mobile-composer-sheet, .mobile-sheet-leave-active .mobile-composer-sheet { transition: none; }
+  .mobile-model-title, .mobile-sheet-enter-active, .mobile-sheet-leave-active, .mobile-sheet-enter-active .mobile-composer-sheet, .mobile-sheet-leave-active .mobile-composer-sheet { transition: none; }
 }
 </style>

@@ -65,6 +65,14 @@ Refresh selected assets with `DOCS_SCREENSHOT_FILTER`, a comma-separated list of
 DOCS_SCREENSHOT_FILTER=composer-queue.png,composer-queue-held.png,activity.png,activity-mobile.png npm run docs:screenshots
 ```
 
+For mobile header and composer changes:
+
+```bash
+DOCS_SCREENSHOT_FILTER=mobile-session.png,mobile-sidebar.png,subagent-inspector-mobile.png,subagent-live-tail-mobile.png,deep-research-mobile.png,trace-mobile.png npm run docs:screenshots
+```
+
+These captures include the mobile header or composer, sometimes behind a sheet. Check the 48-pixel header targets, the gray model capsule inside its 44-pixel target, and the Ultrafast indicator below it. Full-screen Settings and Activity captures hide these controls and do not need a refresh for this change.
+
 For expanded tool previews:
 
 ```bash

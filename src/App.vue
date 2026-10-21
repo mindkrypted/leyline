@@ -4001,8 +4001,8 @@ function closePickerMenus() {
           type="button"
           aria-label="Open sessions"
           @click="openMobileSidebar"
-        >☰</button>
-        <button v-if="systemPromptMobile && homeComposerVisible" type="button" class="topbar-icon-button mobile-home-details" aria-label="Session details" aria-haspopup="dialog" @click="startComposerRef?.openMobileDetails($event)">•••</button>
+        ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
+        <button v-if="systemPromptMobile && homeComposerVisible" type="button" class="topbar-icon-button mobile-home-details" aria-label="Session details" aria-haspopup="dialog" @click="startComposerRef?.openMobileDetails($event)"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="19" cy="12" r="1.75" /></svg></button>
         <div v-if="selectedSession" class="workbench-title-row">
           <button
             v-if="selectedSession.isSubagentSession
@@ -4056,7 +4056,7 @@ function closePickerMenus() {
               : selectedResearch.phase }}</span>
         </div>
         <div v-if="selectedSession" class="topbar-meta">
-          <button ref="headerMoreButton" class="header-more-button topbar-icon-button" type="button" aria-label="Session actions" :aria-expanded="headerMoreOpen" @click="headerMoreOpen = !headerMoreOpen">•••</button>
+          <button ref="headerMoreButton" class="header-more-button topbar-icon-button" type="button" aria-label="Session actions" :aria-expanded="headerMoreOpen" @click="headerMoreOpen = !headerMoreOpen"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.75" /><circle cx="12" cy="12" r="1.75" /><circle cx="19" cy="12" r="1.75" /></svg></button>
           <div ref="headerActions" class="header-utilities" :class="{ open: headerMoreOpen }" role="group" aria-label="Session actions" @click="headerMoreOpen = false">
           <button
             v-if="tracingAvailable"
