@@ -6,6 +6,15 @@ const processPath = fileURLToPath(new URL('./dictation-process.js', import.meta.
 const prefix = 'leyline:dictation:'
 const methods = ['getState', 'updateSettings', 'downloadModel', 'cancelDownload', 'removeModel', 'start', 'pushAudio', 'finish', 'cancel']
 
+function normalizeOrigin(value) {
+  try {
+    const origin = new URL(value).origin
+    return origin === 'null' ? null : origin
+  } catch {
+    return null
+  }
+}
+
 export function createDictationService(isWorkspaceUrl) {
   const windows = new Map()
   const sessions = new Set()
@@ -144,17 +153,17 @@ export function createDictationService(isWorkspaceUrl) {
     }
     session.setPermissionCheckHandler((sender, permission, origin, details) => {
       if (['clipboard-sanitized-write', 'fullscreen'].includes(permission)) {
-        return Boolean(workspacePermission(sender, details) && origin === windows.get(sender.id).origin)
+        return Boolean(workspacePermission(sender, details) && normalizeOrigin(origin) === windows.get(sender.id).origin)
       }
       if (permission !== 'media' || details.mediaType !== 'audio') return false
-      return permissionOwner(sender, details) && origin === core.capture.owner.record.origin
+      return permissionOwner(sender, details) && normalizeOrigin(origin) === core.capture.owner.record.origin
     })
     session.setPermissionRequestHandler((sender, permission, callback, details) => {
       const allowed = ['clipboard-sanitized-write', 'fullscreen'].includes(permission)
         ? workspacePermission(sender, details)
         : permission === 'media' && details.mediaTypes?.length === 1
           && details.mediaTypes[0] === 'audio' && permissionOwner(sender, details)
-          && (!details.securityOrigin || details.securityOrigin === core.capture.owner.record.origin)
+          && (!details.securityOrigin || normalizeOrigin(details.securityOrigin) === core.capture.owner.record.origin)
       callback(Boolean(allowed))
     })
     session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
