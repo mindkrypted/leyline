@@ -1310,7 +1310,7 @@ try {
     scenario: 'pinned',
     interact: async (page) => {
       await page.locator('.session-time-heading', { hasText: 'Pinned' }).waitFor()
-      await page.locator('.session-pinned-icon').nth(1).waitFor()
+      await page.locator('.session-meta > .session-pinned-icon').nth(1).waitFor()
     },
   })
   await capture({
@@ -1320,14 +1320,14 @@ try {
     ready: '.assistant-message',
     scenario: 'pinned',
     interact: async (page) => {
-      await page.locator('.session-pinned-icon').nth(1).waitFor()
+      await page.locator('.session-meta > .session-pinned-icon').nth(1).waitFor()
       await page.getByRole('button', { name: 'Show pinned sessions only', exact: true }).click()
       await page.locator('.sidebar-pin-filter[aria-pressed="true"]').waitFor()
       await page.getByRole('textbox', { name: 'Search pinned sessions in this project', exact: true }).waitFor()
       await page.waitForFunction(() => {
         const rows = document.querySelectorAll('.project-session-row')
         const count = document.querySelector('.project-session-heading span:last-child')
-        return rows.length === 2 && [...rows].every(row => row.querySelector('.session-pinned-icon'))
+        return rows.length === 2 && [...rows].every(row => row.querySelector('.session-meta > .session-pinned-icon'))
           && count?.textContent.trim() === '2 of 7'
       })
     },
@@ -2031,12 +2031,16 @@ async function openSidebarChildren(page, count) {
     const node = child.querySelector('.session-child-node').getBoundingClientRect()
     return {
       gap: title.left - control.right,
+      gutter: control.width,
+      aligned: [...document.querySelectorAll('.project-session-row .session-title')]
+        .every(element => Math.abs(element.getBoundingClientRect().left - title.left) < 0.5),
       inset: node.left + node.width / 2 - title.left,
       height: child.getBoundingClientRect().height,
       glyphs: document.querySelectorAll('.session-child-icon').length,
     }
   })
-  if (geometry.gap < 6 || geometry.inset < 10 || geometry.height !== 30 || geometry.glyphs) {
+  if (geometry.gap !== 4 || geometry.gutter !== 18 || !geometry.aligned
+    || geometry.inset < 10 || geometry.height !== 30 || geometry.glyphs) {
     throw new Error(`Unexpected sidebar child layout: ${JSON.stringify(geometry)}`)
   }
 }

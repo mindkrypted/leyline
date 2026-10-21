@@ -40,7 +40,9 @@ The app's System prompt inspector always overlays the right side below the heade
 
 ## Sidebar subagent tree
 
-Only parent rows with visible chevrons reserve a left chevron column. Plain rows keep normal padding. The entire child branch sits inset under its parent, with a vertical guide and hollow nodes.
+All regular session rows reserve an 18-pixel chevron gutter with a 4-pixel gap before the title. Rows without children leave the gutter empty. Pin markers sit beside the time or status in the right metadata group. On desktop, row actions replace these details on hover or keyboard focus. The research marker stays after the title.
+
+The entire child branch sits inset under its parent, with a vertical guide and hollow nodes.
 
 Explicit chevron toggles unfold or collapse the branch as one unit in up to 180 ms, with a shared fade and no stagger. Animated heights drive virtualized row positions and spacers so following rows move with the branch. Reduced motion disables the fold animation. Scroll, search, and reload do not start it.
 

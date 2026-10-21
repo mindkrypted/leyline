@@ -23,6 +23,8 @@ By default, the sidebar shows all regular sessions in the current project. Pinne
 
 The **Sessions** heading shows the session count. The list scrolls when it is longer than the available space.
 
+Session titles share one left edge. A fixed gutter holds the chevrons for sessions with children.
+
 Enter a session name or ID in **Search sessions** to filter the current project.
 
 A flask after the title identifies a [deep research session](./deep-research). The marker remains visible after the run finishes.
@@ -40,7 +42,7 @@ Leyline moves the session to the **Pinned** group at the top of the current proj
 
 Leyline saves pins by backend connection in this Leyline installation. Pinning does not change the session file. A fork begins unpinned.
 
-During sidebar search, Leyline uses search order and does not show the **Pinned** group. The pin marker remains beside the session title. **Go to** does not use pin state.
+During sidebar search, Leyline uses search order and does not show the **Pinned** group. The pin marker remains beside the time or status on the right. On desktop, row actions replace these details on hover or keyboard focus. **Go to** does not use pin state.
 
 ## Show only pinned sessions
 

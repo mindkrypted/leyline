@@ -1503,16 +1503,6 @@ const vFocusSelect = {
                     @keydown.up.prevent="moveSessionFocus(item, -1)"
                   >
                     <span class="session-title-with-kind">
-                      <svg
-                        v-if="isPinned(item.session)"
-                        class="session-pinned-icon"
-                        viewBox="0 0 16 16"
-                        role="img"
-                        aria-label="Pinned session"
-                      >
-                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
-                        <path d="m6.5 9.5-4 4"></path>
-                      </svg>
                       <span
                         class="session-title"
                         :title="sessionTitle(item.session)"
@@ -1528,19 +1518,31 @@ const vFocusSelect = {
                         <path d="M6 2h4M7 2v4l-3.5 6A1.3 1.3 0 0 0 4.6 14h6.8a1.3 1.3 0 0 0 1.1-2L9 6V2M5.5 10h5"></path>
                       </svg>
                     </span>
-                    <span
-                      v-if="statusFor(item.session).label"
-                      class="session-status"
-                      :class="`status-${statusFor(item.session).tone}`"
-                    >
-                      {{ statusFor(item.session).label }}
+                    <span class="session-meta">
+                      <svg
+                        v-if="isPinned(item.session)"
+                        class="session-pinned-icon"
+                        viewBox="0 0 16 16"
+                        role="img"
+                        aria-label="Pinned session"
+                      >
+                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
+                        <path d="m6.5 9.5-4 4"></path>
+                      </svg>
+                      <span
+                        v-if="statusFor(item.session).label"
+                        class="session-status"
+                        :class="`status-${statusFor(item.session).tone}`"
+                      >
+                        {{ statusFor(item.session).label }}
+                      </span>
+                      <time
+                        v-else
+                        class="session-time"
+                        :datetime="sessionDateTime(item.session)"
+                        :title="sessionFullTime(item.session)"
+                      >{{ sessionListTime(item.session) }}</time>
                     </span>
-                    <time
-                      v-else
-                      class="session-time"
-                      :datetime="sessionDateTime(item.session)"
-                      :title="sessionFullTime(item.session)"
-                    >{{ sessionListTime(item.session) }}</time>
                   </button>
                   <button
                     class="session-row-actions-button"

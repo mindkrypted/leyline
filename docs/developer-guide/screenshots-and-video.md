@@ -124,9 +124,9 @@ DOCS_SCREENSHOT_FILTER=pinned-sessions.png,pinned-only.png,mobile-sidebar.png np
 | `pinned-only.png` | The active lavender pin filter, **Search pinned sessions**, and **2 of 7** visible sessions. |
 | `mobile-sidebar.png` | The mobile search field with its pin filter off, above the expanded subagent branch. |
 
-The pinned-only capture uses the real filter button. It checks the active state, search label, visible count, and pin markers before capture. The selected unpinned conversation stays open. No pin or session mutation reaches the backend.
+The pinned-only capture uses the real filter button. It checks the active state, search label, visible count, and pin markers in the right metadata group before capture. The selected unpinned conversation stays open. No pin or session mutation reaches the backend.
 
-Changes to sidebar search controls also affect desktop screenshots throughout the guides and README. Refresh those images at their existing dimensions.
+Changes to sidebar controls or row alignment also affect desktop screenshots throughout the guides and README. Refresh those images at their existing dimensions. Update the workspace share card from the refreshed workbench image and use a new filename to avoid stale previews.
 
 For sidebar child sessions:
 
@@ -142,7 +142,7 @@ DOCS_SCREENSHOT_FILTER=subagent-sidebar.png,mobile-sidebar.png,workbench.png,sub
 | `docs/assets/screenshots/subagent-outcomes.png` | Five settled children beside the desktop task inspector. |
 | `deep-research.png` in both output directories | Three research workers under their parent, beside the completed report and sources. |
 
-The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper checks the inset nodes and chevron spacing, then waits for folding to finish. General captures retain `local/minimax-m2.7`; workbench captures keep the approved Ultrafast model.
+The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper waits for folding to finish, then checks the inset nodes, aligned parent titles, 18-pixel chevron gutter, and 4-pixel title gap. General captures retain `local/minimax-m2.7`; workbench captures keep the approved Ultrafast model.
 
 Use local visual checks for fold motion, rapid reversals, and reduced-motion behavior. PNG captures show only the settled layout.
 
@@ -199,7 +199,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
 - Settled subagent captures: compact Activity rows and separate Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
 - Live subagent captures: one running explorer, two reads and one search in the ledger, active verification output, and **Following live** in the footer
-- Sidebar child captures: an inset guide with hollow nodes, a parent-only chevron column, and one completed child beside two running children
+- Sidebar child captures: an inset guide with hollow nodes, a fixed chevron gutter on every parent row, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
 
@@ -250,7 +250,7 @@ Open every changed image. Check these items:
 6. The vision selector shows `local/qwen3.6-27b` and excludes text-only models.
 7. System captures show the intended prompt and tool deltas without clipping.
 8. Subagent inspectors show the selected task, its outcome, and live activity or a saved result without inline task bodies in Activity.
-9. Sidebar children sit inside the parent, use hollow nodes, and leave plain rows without an empty chevron column.
+9. Sidebar children sit inside the parent and use hollow nodes. Parent titles align across rows with and without chevrons. Pin markers sit beside the time or status on the right.
 10. Each Markdown image reference resolves in both documentation base paths.
 
 Run the PNG structure audit from the documentation screenshot skill when it is available. Check whitespace and both documentation base paths:

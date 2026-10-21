@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress'
 const base = process.env.VITEPRESS_BASE || '/docs/'
 const siteUrl = 'https://leyline.sh/'
 const description = 'Run concurrent pi sessions in your browser, desktop, or mobile. Read transcripts, inspect tool calls, and steer agents as they work.'
-const shareImage = new URL('social/leyline-workspace-v2.png', siteUrl).href
+const shareImage = new URL('social/leyline-workspace-v3.png', siteUrl).href
 const shareImageAlt = 'Leyline logo above a workspace showing pi sessions, a conversation transcript, and tool activity.'
 
 export default defineConfig({
