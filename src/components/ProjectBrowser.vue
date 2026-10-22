@@ -94,7 +94,7 @@ async function browseQuery() {
   error.value = ''
 
   try {
-    const data = await fetchFsDirectory(nativePickerPath(directory), props.activeCwd)
+    const data = await fetchFsDirectory(nativeBrowsePath(directory), props.activeCwd)
     if (generation !== browseGeneration) return
     parentPath.value = data.parentPath || data.path || ''
     parentParentPath.value = data.parent || ''
@@ -381,6 +381,19 @@ function nativePickerPath(path) {
   }
 
   return value
+}
+
+// The browse fetch is the one place a picker path is handed to the backend
+// (fs-browser.js), whose contract is: a trailing separator means "list this
+// directory", while without one the last segment is treated as a name prefix
+// matched in the parent directory. nativePickerPath() trims that separator,
+// which would make the backend list one level too high, so restore it here —
+// and only here; submit/display paths keep the trimmed canonical form.
+function nativeBrowsePath(directory) {
+  const native = nativePickerPath(directory)
+  if (!directory.endsWith('/')) return native
+  const separator = /^[A-Za-z]:/.test(native) || native.startsWith('\\\\') ? '\\' : '/'
+  return native.endsWith(separator) ? native : `${native}${separator}`
 }
 
 function pickerTilde(absolute, homePath) {
