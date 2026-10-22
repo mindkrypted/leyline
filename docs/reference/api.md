@@ -1179,11 +1179,19 @@ Query:
 
 ```text
 path?: string
+compact?: "1"
+toolArguments?: "1"
 ```
 
-Response: `SessionDetail` without an outer envelope.
+Response: `SessionDetail` without an outer envelope. This read does not activate the session.
 
 If `path` is present, Leyline opens that file and verifies that its session ID equals `:id`. A missing session returns `404`. An ID and path mismatch returns `500`.
+
+`compact=1` removes tool `copyText`. Without `toolArguments=1`, it also omits tool `text` when a non-error tool has nonempty `preview.fallbackText`.
+
+`toolArguments=1` includes `args` from the paired original tool call when available. It also retains the original projected tool `text` when combined with `compact=1`. Missing recorded arguments remain absent. Without this option, ordinary session-detail payloads remain unchanged.
+
+Child previews request `compact=1&toolArguments=1` for full output and arguments in their readers. Neither option imposes an entry-count limit.
 
 ### `GET /api/pi/sessions/by-path`
 
@@ -1193,11 +1201,13 @@ Query:
 
 ```text
 path: string
+compact?: "1"
+toolArguments?: "1"
 ```
 
-Response: `SessionDetail` without an outer envelope.
+Response: `SessionDetail` without an outer envelope. This read does not activate the session.
 
-A missing query returns `400`. A session that cannot be resolved returns `404`.
+The `compact` and `toolArguments` options use the rules above. A missing `path` query returns `400`. A session that cannot be resolved returns `404`.
 
 ### `PATCH /api/pi/sessions/:id`
 
@@ -2561,6 +2571,8 @@ Response: An HTML document with `Content-Type: text/html; charset=utf-8`.
 
 `disposition=inline` sets `Content-Disposition: inline`. All other values use `attachment`. Both forms include a sanitized export filename. An unknown session currently returns `500`.
 
+Subagent inspectors use matching Action ledger and reader styles for task text already available in the parent's tool result. Export does not fetch or embed the full child transcript or subscribe to live child events.
+
 ## Event WebSockets
 
 Runtime and Git review events use separate WebSockets on the selected backend. Use `ws://` with an HTTP backend and `wss://` with an HTTPS backend. A successful upgrade returns HTTP `101`. An ordinary HTTP `GET` returns `426` instead of an SSE stream.
@@ -2604,6 +2616,8 @@ Each connection sends one `active_session` event for every open runtime, followe
 The browser supplies `?sessionId=<id>` to select full snapshots and live updates for one session. Other sessions receive compact snapshots and filtered runtime events. Compact `promptQueue` state contains `count`, `held`, and `error`, without item content.
 
 An empty `sessionId` selects no full runtime. Omitting the parameter selects full events for all runtimes, for protocol compatibility.
+
+This query controls payloads for one connection. It does not activate the requested runtime. The subagent inspector opens a separate child-scoped connection only for its selected running child. Closing this connection does not abort the child run. Saved child previews use read-only session detail without a runtime connection. Snapshots omit transcript entries and in-flight assistant content, so child observers also request saved [session detail](#session-routes) with `toolArguments=1`.
 
 Implemented event types and their `data` values are:
 

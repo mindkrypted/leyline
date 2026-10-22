@@ -113,12 +113,8 @@ The current composer has no fixed image count or byte limit. Provider and reques
 
 See [Images and previews](./images-and-previews) for model scope and context behavior.
 
-## Use browser dictation
+## Use dictation
 
-1. Select **Start dictation**.
-2. Speak after the browser starts recognition.
-3. Select **Stop dictation** when the draft is complete.
+Select the composer microphone button to start. Select **Finish** to add recognized speech to the draft, or **Cancel** to discard the recording. Leyline inserts text at the selection captured when recording starts. If the draft changes, Leyline offers the transcript for recovery instead of overwriting the draft.
 
-Leyline appends final recognized text to the draft. Browser microphone permission is required.
-
-Dictation is not supported in Electron. It is also unavailable when the browser does not provide the Web Speech API.
+See [Dictation](./dictation) for setup, local models, microphone permissions, and shortcuts.

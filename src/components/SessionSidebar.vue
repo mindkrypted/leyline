@@ -166,6 +166,7 @@ const backendMenu = ref(null)
 const backendMenuOpen = ref(false)
 const projectControl = ref(null)
 const navigatorSearch = ref(null)
+const pinFilter = ref(null)
 const navigatorDialog = ref(null)
 const navigatorOpener = ref(null)
 const navigatorSearchFocus = ref(null)
@@ -175,6 +176,7 @@ const sessionActionDialog = ref(null)
 const sessionActionsOpen = computed(() => Boolean(sessionActionTarget.value))
 const navigatorQuery = ref('')
 const sessionQuery = ref('')
+const pinnedOnly = ref(false)
 const navigationProjectCwd = ref('')
 const projectOrder = ref([])
 const sessionOrder = ref([])
@@ -375,6 +377,12 @@ const currentProjectSessions = computed(() => {
   return projectSessions
 })
 
+const filteredProjectSessions = computed(() => {
+  return pinnedOnly.value
+    ? currentProjectSessions.value.filter(isPinned)
+    : currentProjectSessions.value
+})
+
 watch(
   [
     () => props.visibleProjects,
@@ -421,7 +429,7 @@ const searchedChildren = computed(() => {
   const matches = new Map()
   const query = sessionQuery.value.trim()
   if (!query) return matches
-  for (const session of currentProjectSessions.value) {
+  for (const session of filteredProjectSessions.value) {
     const children = childrenForSession(session)
     if (!children.length) continue
     matches.set(session.path, children.filter((child) => {
@@ -437,7 +445,7 @@ const searchedChildren = computed(() => {
 
 const matchingProjectSessions = computed(() => {
   const byId = new Map(
-    currentProjectSessions.value.map((session) => [session.id, session]),
+    filteredProjectSessions.value.map((session) => [session.id, session]),
   )
   const sessions = sessionOrder.value.map((id) => byId.get(id)).filter(Boolean)
   const query = sessionQuery.value.trim()
@@ -703,7 +711,10 @@ const projectSessionCount = computed(() => {
   if (!props.sessionsHydrated
     && !props.sessionsHydrationError
     && !props.sessionsError) return '…'
-  return count
+  if (pinnedOnly.value && !props.pinsReady) return '…'
+  return pinnedOnly.value
+    ? `${matchingProjectSessions.value.length} of ${count}`
+    : count
 })
 
 const navigatorTitle = computed(() => {
@@ -723,6 +734,7 @@ watch(
   () => [
     currentProject.value?.cwd || '',
     sessionQuery.value,
+    pinnedOnly.value,
     props.activeBackendConnection?.id || '',
     props.activeBackendConnection?.url || '',
   ],
@@ -770,7 +782,10 @@ watch(
     const index = orderedProjectSessions.value.findIndex((session) => {
       return session.id === id
     })
-    if (index < 0) return
+    if (index < 0) {
+      if (pinnedOnly.value) pinFilter.value?.focus({ preventScroll: true })
+      return
+    }
     scrollSessionIntoView(index)
     await nextTick()
     if (document.activeElement
@@ -1330,15 +1345,33 @@ const vFocusSelect = {
           <input
             v-model="sessionQuery"
             type="text"
-            placeholder="Search sessions"
-            aria-label="Search sessions in this project"
+            :placeholder="pinnedOnly ? 'Search pinned sessions' : 'Search sessions'"
+            :aria-label="pinnedOnly
+              ? 'Search pinned sessions in this project'
+              : 'Search sessions in this project'"
           />
-          <button
-            v-if="sessionQuery"
-            type="button"
-            aria-label="Clear session search"
-            @click="sessionQuery = ''"
-          >×</button>
+          <div class="sidebar-session-search-actions">
+            <button
+              v-if="sessionQuery"
+              type="button"
+              aria-label="Clear session search"
+              @click="sessionQuery = ''"
+            >×</button>
+            <button
+              ref="pinFilter"
+              class="sidebar-pin-filter"
+              type="button"
+              aria-label="Show pinned sessions only"
+              :aria-pressed="pinnedOnly"
+              :title="pinnedOnly ? 'Show all sessions' : 'Show pinned sessions only'"
+              @click="pinnedOnly = !pinnedOnly"
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
+                <path d="m6.5 9.5-4 4"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1375,10 +1408,24 @@ const vFocusSelect = {
             No sessions in this project
           </div>
           <div
+            v-else-if="pinnedOnly && !pinsReady"
+            class="sidebar-note project-session-empty"
+          >
+            {{ pinsError ? 'Pinned sessions unavailable' : 'Loading pinned sessions…' }}
+          </div>
+          <div
+            v-else-if="sessionsHydrated && pinnedOnly
+              && filteredProjectSessions.length === 0"
+            class="sidebar-note project-session-empty"
+          >
+            No pinned sessions in this project
+            <button type="button" @click="pinnedOnly = false">Show all sessions</button>
+          </div>
+          <div
             v-else-if="sessionsHydrated && matchingProjectSessions.length === 0"
             class="sidebar-note project-session-empty"
           >
-            No matching sessions
+            {{ pinnedOnly ? 'No matching pinned sessions' : 'No matching sessions' }}
           </div>
           <template v-else-if="matchingProjectSessions.length > 0">
             <div
@@ -1459,16 +1506,6 @@ const vFocusSelect = {
                     @keydown.up.prevent="moveSessionFocus(item, -1)"
                   >
                     <span class="session-title-with-kind">
-                      <svg
-                        v-if="isPinned(item.session)"
-                        class="session-pinned-icon"
-                        viewBox="0 0 16 16"
-                        role="img"
-                        aria-label="Pinned session"
-                      >
-                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
-                        <path d="m6.5 9.5-4 4"></path>
-                      </svg>
                       <span
                         class="session-title"
                         :title="sessionTitle(item.session)"
@@ -1484,19 +1521,31 @@ const vFocusSelect = {
                         <path d="M6 2h4M7 2v4l-3.5 6A1.3 1.3 0 0 0 4.6 14h6.8a1.3 1.3 0 0 0 1.1-2L9 6V2M5.5 10h5"></path>
                       </svg>
                     </span>
-                    <span
-                      v-if="statusFor(item.session).label"
-                      class="session-status"
-                      :class="`status-${statusFor(item.session).tone}`"
-                    >
-                      {{ statusFor(item.session).label }}
+                    <span class="session-meta">
+                      <svg
+                        v-if="isPinned(item.session)"
+                        class="session-pinned-icon"
+                        viewBox="0 0 16 16"
+                        role="img"
+                        aria-label="Pinned session"
+                      >
+                        <path class="pin-head" d="m10 2 4 4-3 1-2 2v3L4 7h3l2-2z"></path>
+                        <path d="m6.5 9.5-4 4"></path>
+                      </svg>
+                      <span
+                        v-if="statusFor(item.session).label"
+                        class="session-status"
+                        :class="`status-${statusFor(item.session).tone}`"
+                      >
+                        {{ statusFor(item.session).label }}
+                      </span>
+                      <time
+                        v-else
+                        class="session-time"
+                        :datetime="sessionDateTime(item.session)"
+                        :title="sessionFullTime(item.session)"
+                      >{{ sessionListTime(item.session) }}</time>
                     </span>
-                    <time
-                      v-else
-                      class="session-time"
-                      :datetime="sessionDateTime(item.session)"
-                      :title="sessionFullTime(item.session)"
-                    >{{ sessionListTime(item.session) }}</time>
                   </button>
                   <button
                     class="session-row-actions-button"

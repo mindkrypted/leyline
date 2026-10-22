@@ -13,7 +13,8 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/components/ReviewPane.vue`: Renders changed files and prepared Pierre diffs for the selected project.
 - `src/components/SystemPromptInspector.vue`: Renders prompt sections, tool changes, raw text, and actions for a selected System event.
 - `src/components/MobileToolActivity.vue`: Renders shared Activity cards on desktop and mobile, including direct inspector access for a single subagent call.
-- `src/components/SubagentInspector.vue`: Renders ordered tasks, prompts, Markdown results, outcomes, copy actions, and child-session navigation in a bounded reader.
+- `src/components/SubagentInspector.vue`: Owns task selection, Action ledger, full-entry and prompt readers, display snapshots, following, scroll restoration, and bounded row motion.
+- `src/components/SubagentTailEntry.vue`: Renders one Action ledger row with an action, source-derived target and excerpt, outcome, character count, and reader-open event.
 - `src/components/ResearchSourcesPane.vue`: Renders cited sources and the complete research ledger.
 - `src/components/ResearchCitationPreview.vue`: Renders the anchored citation preview and mobile bottom sheet.
 - `src/components/GlobalSettingsModal.vue`: Owns global category navigation, capability gates, focus containment, and owner labels.
@@ -31,6 +32,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/composables/useTranscriptPreferences.js`: Owns app-wide transcript display settings.
 - `src/composables/useSettingsOperation.js`: Owns backend-bound operation polling, answers, and cancellation.
 - `src/composables/useLiveTurnProjection.js`: Owns optimistic and live transcript state.
+- `src/composables/useSubagentPreview.js`: Reads the selected saved or active child with tool arguments, and observes a running child through its own runtime socket.
 - `src/composables/useRuntimeEvents.js`: Adapts runtime WebSocket events to frontend callbacks, trace subscribers, and the event log.
 - `src/composables/useMemoryInspector.js`: Owns Memory Inspector requests and optimistic state.
 - `src/composables/useProjectBrowser.js`: Owns project picker and folder-browser visibility.
@@ -38,7 +40,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/composables/useFileLinks.js`: Resolves file actions, including child-result origins from `data-file-session-id`.
 - `src/composables/useWorkbenchScroll.js`: Owns transcript following and Jump to latest.
 - `src/composables/useTerminal.js`: Owns xterm and terminal WebSocket state.
-- `src/composables/useDictation.js`: Wraps browser speech recognition.
+- `src/composables/useDictation.js`: Supplies the shared dictation controller, which routes browser speech recognition or local dictation through the preload bridge or same-origin speech WebSocket.
 - `src/composables/useSmoothStreamingText.js`: Controls incremental live text display.
 - `src/lib/backend.js`: Builds runtime HTTP and WebSocket URLs for the active backend.
 - `src/lib/event-socket.js`: Supplies the shared runtime/review WebSocket client with reconnect backoff, timeouts, heartbeat replies, stale-socket guards, and cleanup.
@@ -57,6 +59,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `lib/research-citations.js`: Validates numbered report links against the research source ledger.
 - `lib/transcript-projection.js`: Projects pi branch entries, including System events, into shared transcript DTOs.
 - `lib/tool-activity.js`: Groups top-level tools, excludes nested child tools, counts outcomes, and identifies direct inspector access through `singleSubagentEntry()`.
+- `lib/subagent-ledger.js`: Projects source-derived ledger rows and supplies an optional current-rows cache for unchanged previews and row objects.
 - `lib/subagent-view.js`: Supplies shared task, title, output, and fallback presentation helpers.
 - `lib/subagent-status.js`: Defines subagent status semantics and task outcome counts.
 - `lib/ultrafast.js`: Defines Ultrafast model and authentication eligibility and shared control identifiers.
@@ -74,7 +77,7 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `src/styles/topbar.css`: Defines runtime chrome and workbench header controls.
 - `src/styles/workbench.css`: Defines scrolling, start state, empty state, and loading state.
 - `src/styles/transcript.css`: Defines messages, Markdown, thinking, feedback, and transcript actions.
-- `src/styles/tools.css`: Defines Activity cards, compact subagent rows, prompt and subagent inspectors, skills, and previews.
+- `src/styles/tools.css`: Defines Activity cards, compact subagent rows, prompt inspectors, Graphite subagent ledgers and readers, skills, and previews.
 - `src/styles/composer.css`: Defines composer layout, menus, attachments, and submission states.
 - `src/styles/memory.css`: Defines the Memory Inspector.
 - `src/styles/review.css`: Defines the resizable and expanded Git review pane.
@@ -116,7 +119,7 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/rollout-feedback.js`: Implements rollout feedback storage.
 - `server/pi-api/subagents.js`: Implements subagent discovery and overrides.
 - `server/pi-api/vision.js`: Implements vision overrides and persisted parent-context replacement.
-- `server/pi-api/export-renderer.js`: Renders HTML transcript exports, including shared Activity groups, subagent templates, a lazy native dialog, and export-specific styles.
+- `server/pi-api/export-renderer.js`: Renders HTML exports with shared Activity groups, a lazy subagent dialog, and matching ledger and reader styles for recorded task output.
 - `server/pi-api/terminal.js`: Runs PTYs over WebSocket.
 - `server/pi-api/http.js`: Contains HTTP response helpers.
 - `server/leyline-server.js`: Serves the packaged frontend and native backend.

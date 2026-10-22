@@ -26,6 +26,7 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - [Linux installation](docs/getting-started/linux-installation.md)
 - [Sessions](docs/user-guide/sessions.md)
 - [Composer](docs/user-guide/composer.md)
+- [Dictation](docs/user-guide/dictation.md)
 - [Deep research](docs/user-guide/deep-research.md)
 - [Git review](docs/user-guide/git-review.md)
 - [Images and vision](docs/user-guide/images-and-previews.md)
@@ -42,12 +43,15 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 
 ## Features
 
-- Browse, search, pin, and run pi sessions across projects. Read live
-  transcripts and monitor work in **Activity**.
+- Browse, search, pin, and run pi sessions across projects. Show
+  [only pinned sessions](docs/user-guide/sessions.md#show-only-pinned-sessions)
+  in the sidebar. Read live transcripts and monitor work in **Activity**.
 - Steer active work or queue **Up next** tasks. Examine tools, System
   changes, local files, and Git changes. Use configured MCP tools and
   respond to extension requests in the workspace.
-- Open subagent child sessions under their parents in the sidebar.
+- [Read subagent activity](docs/user-guide/subagents.md#read-a-subagent-card)
+  in an action ledger without leaving the parent session. Open rows for full
+  output and arguments, or open child sessions from the sidebar.
   Use memory, HTML export, an embedded terminal, and deep research
   with validated citations. A configured vision model can
   describe images for models that cannot receive images.
@@ -58,6 +62,14 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
   session or traces across projects on the selected backend. Traces can
   contain private prompts and tool results. See
   [Tracing](docs/user-guide/tracing.md).
+
+## Dictation
+
+In ordinary browsers, browser-managed dictation is the default; Electron uses local Parakeet or Whisper models. Local browser audio is processed on the Leyline-serving host, while Electron processes audio on-device. The responsive waveform appears only during local capture; see the [Dictation guide](docs/user-guide/dictation.md) for setup and controls.
+
+<a href="assets/readme/dictation.png"><img alt="Composer showing local dictation in progress, with an audio waveform and Finish control" src="assets/readme/dictation.png" /></a>
+
+*Local dictation in the composer. See the [Dictation guide](docs/user-guide/dictation.md) for setup and controls.*
 
 Read [Motivations](docs/motivations.md) for the project direction.
 
@@ -117,35 +129,40 @@ The Vite server also serves the documentation at
 
 ## Backend connections
 
-The sidebar footer shows the backend for the current window. Open **Settings →
-Connections**. You can add, test, edit, remove, or select a named connection
-there. The **Native backend** is the server that supplied the current Leyline
-app.
+The bottom of the sidebar shows which backend this window is using. The
+backend is where Leyline does its work for that window.
 
-To share the native backend with other devices, enable **Allow network access**
-in **Settings → Connections**. Copy a sharing URL and open it on the other
-device. For a fixed port, set **Proxy port** and select **Apply**. Leave it blank
-for automatic selection. Changes apply immediately. Local clients and agents
-stay connected, but a port change or disabling sharing disconnects remote
-clients. The API has no authentication, so use trusted networks only. See
+Open **Settings → Connections** to add, test, edit, remove, or pick a saved
+connection. The **Native backend** is the one that came with this copy of
+Leyline.
+
+To open Leyline on another device, turn on **Allow network access** in
+**Settings → Connections**. Then copy a sharing link and open it on that
+device. If you want the same port every time, set **Proxy port** and select
+**Apply**. Leave it blank and Leyline will pick one for you.
+
+Changes take effect right away. Work on this computer stays connected. Other
+devices disconnect if you change the port or turn sharing off. There is no
+password, so anyone who can open the link can get in. Only use this on
+networks you trust. See
 [Network access](docs/user-guide/settings.md#share-the-native-backend).
 
-Saved connections and the configured default are app-wide. Each browser or
-Electron window keeps its active connection independently. A new window uses
-the default. A new Electron window inherits the source window's active
-connection.
+Your saved connections and your default choice are shared across the app.
+Each window can still use a different connection at the same time. A new
+window normally starts with your default. A new Electron window opened from
+an existing one uses the same connection as that window.
 
-Runtime HTTP commands, runtime and Git review events, terminal traffic, trace
-requests, and exports use the active backend. Events and terminal traffic use
-separate WebSockets. Leyline does not combine
-traces or capture settings across connections. Traces and capture settings stay
-on the active backend. Connection management stays on the native backend. See
-[Settings](docs/user-guide/settings.md) for
-connection setup and [Environment variables](docs/reference/environment.md) for
-packaged server and origin settings.
+Everything in a window goes to the backend that window is using: agents, the
+terminal, Git review updates, traces, and exports. Traces are kept apart by
+backend and never mixed. Your trace capture choices also stay on the backend
+you are using. Managing the saved connection list always happens on the
+Native backend. See [Settings](docs/user-guide/settings.md) to set
+connections up and [Environment variables](docs/reference/environment.md) for
+the packaged app settings.
 
-The frontend and backend must both use API v2. Runtime and Git review events
-require WebSockets, with no SSE fallback. See
+The window and the backend both have to use API v2. Live updates need
+WebSockets, which means a connection that stays open. If that is blocked,
+live updates will not work. There is no backup method. See
 [Realtime events](docs/developer-guide/realtime-events.md).
 
 ## Optional Electron app

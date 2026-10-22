@@ -14,6 +14,8 @@ The composer shows controls for the model, thinking level, optional `ultrafast`,
 
 The control and result rows use `provider/model-id` labels. Filtering also matches the model display name, provider, and model ID.
 
+On mobile, select the model capsule to open **Session options**. The sheet contains model, thinking, and service-tier choices. See [Mobile composer](./mobile#use-the-mobile-composer).
+
 You cannot change the model during a run, compaction, submission, or runtime reload. Leyline records the selected model in the session and saves it as the pi default for new sessions.
 
 Repeated model selections before the next conversation message update one **Model changed from … to …** divider. Returning to the original model removes it. Initial model setup does not add a divider.

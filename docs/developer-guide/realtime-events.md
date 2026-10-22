@@ -14,7 +14,7 @@ Each event is one JSON text message with `type` and `data` fields:
 {"type":"runtime_roster","data":{"sessionIds":[]}}
 ```
 
-The browser supplies the selected `sessionId` in the query string. That runtime receives full snapshots; other runtimes receive compact snapshots.
+A connection can request full snapshots and live updates for one session with the `sessionId` query parameter. Other runtimes receive compact payloads. This parameter scopes the connection; it does not activate a session.
 
 A new connection receives one `active_session` event per runtime, followed by `runtime_roster`. The server does not provide replay IDs or persisted event history.
 
@@ -48,6 +48,8 @@ Research updates change the extension status after they append state. The result
 Connection callbacks update the visible stream status. The adapter passes event messages to `handleEvent(type, data)`.
 
 The adapter keeps the latest 100 local log items. The Runtime Events drawer displays the newest 20.
+
+An open subagent inspector uses `useSubagentPreview.js` to read only the selected child with `toolArguments=1`, including saved children. While that child runs, the preview opens a separate child-scoped socket through the same helper. Observation never activates the child or changes the parent's subscription and selection. Preview events do not add another event-log stream. Closing the inspector releases its child observer without aborting the run.
 
 The adapter logs extension errors. Composer error handling filters expected cancellations without removing their raw event records.
 
@@ -91,7 +93,11 @@ If the snapshot belongs to the selected session, `App.vue` also updates `activeR
 
 `message_update` drives live assistant blocks through one animation-frame batch. It does not fetch persisted detail.
 
-Settlement, reconnect, and manual compaction schedule immediate session-detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming message and tool events do not fetch detail individually.
+Settlement, reconnect, and manual compaction schedule immediate session-detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming message and tool events do not fetch main-transcript detail individually.
+
+The child preview coalesces its own refreshes after message and tool completion. It queues new reads behind an in-flight request. Reconnect recovery reconciles saved messages before resetting the child projection and replaying post-open events. Its live projection opts into tool arguments for **Output**/**Arguments** readers without changing the main transcript's default projection.
+
+The inspector combines display snapshots into at most one commit per animation frame, after the preview applies authoritative runtime events. This display batch does not delay runtime event handling or discard projected output. The current-rows cache and six-row motion budget affect presentation only. See [Subagent inspector state](./frontend-state#subagent-inspector-state) for reader identity and scroll ownership.
 
 Live user, assistant, System, and tool rows reconcile with projected persisted entries after refresh. The last saved entry ID anchors the merged saved tail. Saved-only rows, including compaction summaries, keep branch order beside matched live rows. The next turn clears matched rows from the previous turn.
 
@@ -115,7 +121,7 @@ Pending browser confirmations also travel in `extensionUi.confirmations`. Compac
 
 Each runtime event includes `activeSessionId`. Keep this field when adding event handling.
 
-Live transcript updates apply only to the selected session. Background events update sidebar status and unread state.
+Main-transcript updates apply only to the selected session. Background events update sidebar status and unread state. The subagent inspector separately projects the child requested by its own socket.
 
 All windows connected to one backend receive its broadcasts. Runtime subscriptions and
 runtime handles are process-wide within that backend. Windows on another

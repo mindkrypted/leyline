@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { useDictation } from '../composables/useDictation'
+import DictationStatus from './DictationStatus.vue'
 import ModelPicker from './ModelPicker.vue'
 import MobileComposerControls from './MobileComposerControls.vue'
 import { useMobileComposerInput } from '../composables/useMobileComposerInput'
@@ -12,6 +12,8 @@ const isWindows = /Win/i.test(navigator.platform || navigator.userAgent || '')
 const steerShortcutLabel = isWindows ? 'Alt+Enter' : 'Option+Enter'
 
 const props = defineProps({
+  dictation: { type: Object, required: true },
+  dictationSubmitting: Boolean,
   agentRunning: Boolean,
   mobile: Boolean,
   settingsError: { type: String, default: '' },
@@ -196,25 +198,13 @@ const queueMode = computed(() => !shellMode.value && !props.editingLabel
   && (props.agentRunning || props.compacting || props.reloadingSession
     || props.switchingModel || props.switchingUltrafast
     || props.promptQueue?.held || props.promptQueue?.items?.length > 0))
-const submitDisabled = computed(() => (props.promptSubmitting && (!props.compacting || props.editingLabel))
+const submitDisabled = computed(() => props.dictationSubmitting
+  || (props.promptSubmitting && (!props.compacting || props.editingLabel))
   || !props.canSubmitDraft
   || (props.shellRunning && shellMode.value)
   || (props.reloadingSession && Boolean(props.editingLabel)))
 const shellModeLabel = computed(() => {
   return hiddenShellMode.value ? 'shell · hidden' : 'shell · context'
-})
-const {
-  dictationButtonDisabled,
-  dictationListening,
-  dictationSupported,
-  dictationTitle,
-  toggleDictation,
-} = useDictation({
-  focus: () => textarea.value?.focus(),
-  getDraft: () => props.draft,
-  inputDisabled: ref(false),
-  onDraftChange: () => emit('show-slash-picker'),
-  setDraft: (value) => emit('update:draft', value),
 })
 
 watch(() => props.sessionId, () => {
@@ -267,9 +257,26 @@ function dismissMobileSheet() {
 
 const mobileStop = computed(() => props.mobile && !props.editingLabel
   && (props.agentRunning || props.compacting || props.shellRunning)
+  && !props.dictation.active && !props.dictationSubmitting
   && !props.draft.trim() && !props.attachedImages.length)
 
-defineExpose({ focus, form, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet })
+function getSelection() {
+  const input = textarea.value
+  return input ? { text: input.value, start: input.selectionStart, end: input.selectionEnd } : null
+}
+
+function getTextarea() {
+  return textarea.value
+}
+
+async function restoreSelection(input, value, caret, valid, restoreFocus) {
+  await nextTick()
+  if (!valid() || textarea.value !== input || !input.isConnected || input.disabled || props.draft !== value) return
+  if (restoreFocus?.()) input.focus({ preventScroll: true })
+  input.setSelectionRange(caret, caret)
+}
+
+defineExpose({ focus, form, getSelection, getTextarea, restoreSelection, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet })
 
 function updateDraft(event) {
   emit('update:draft', event.target.value)
@@ -382,6 +389,7 @@ async function insertNewline() {
     <Transition name="composer-reveal">
       <div v-if="visionDelegationNotice" class="composer-notice">{{ visionDelegationNotice }}</div>
     </Transition>
+    <DictationStatus :dictation="dictation" />
     <div class="composer-bar">
       <div class="composer-primary-row">
         <div class="composer-row-spacer"></div>
@@ -467,16 +475,17 @@ async function insertNewline() {
           <button
             class="dictation-button"
             :class="{
-              active: dictationListening,
-              unsupported: !dictationSupported,
+              active: dictation.active,
+              unsupported: !dictation.supported,
             }"
             type="button"
-            :disabled="dictationButtonDisabled"
-            :title="dictationTitle"
-            :aria-label="dictationTitle"
-            :aria-disabled="!dictationSupported"
-            :aria-pressed="dictationListening"
-            @click="toggleDictation"
+            :disabled="dictation.buttonDisabled || dictationSubmitting"
+            :title="dictation.title"
+            :aria-label="dictation.title"
+            :aria-disabled="!dictation.supported"
+            :aria-pressed="dictation.active"
+            @mousedown.prevent
+            @click="dictation.toggle({ focusFrom: $event.currentTarget })"
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <rect

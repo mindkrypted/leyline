@@ -30,6 +30,8 @@ The phase bar shows four steps:
 
 A research plan normally contains two to five threads. The **Research threads** row stays compact inside Activity. Select it to open the [subagent inspector](./subagents#read-a-subagent-card), then select a thread to read its prompt, source count, status, and result.
 
+A running worker also provides a [live preview](./subagents#follow-an-active-child) in the inspector. Read its messages and tool output without leaving the research parent.
+
 Select **Open child session** in the inspector to open the worker's transcript. Use Command-click, Ctrl-click, or middle-click on that control to open it in a new tab or window. The child transcript contains the worker's tool calls, source work, and final result.
 
 Research workers also appear as [nested child rows](./sessions#open-a-subagent-session) under the research parent in the sidebar.

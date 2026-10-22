@@ -11,6 +11,7 @@ import {
 } from '../lib/research-state.js'
 import { renderSessionExportHtml } from '../server/pi-api/export-renderer.js'
 import { subagentTaskTitle } from '../lib/subagent-view.js'
+import { docsDictation, docsDictationClient, docsDictationMeters } from './fixtures/docs-dictation.js'
 
 const baseUrl = process.env.DOCS_SCREENSHOT_URL || 'http://localhost:5173/'
 const screenshotFilter = (process.env.DOCS_SCREENSHOT_FILTER || '')
@@ -689,7 +690,7 @@ const toolActivityEntries = [
     id: 'tools-user',
     role: 'user',
     label: 'You',
-    text: 'Use the release-review skill to check the release flow.',
+    text: `<skill name="release-review" location=".pi/skills/release-review/SKILL.md">\n${skillPreviewContent}\n</skill>\n\nCheck the release flow before publication.`,
     timestamp: '2026-08-06T15:43:00.000Z',
   }),
   toolEntry({
@@ -805,6 +806,104 @@ const subagentSidebarEntries = [
     timestamp: '2026-08-06T15:44:00.000Z',
   }),
 ]
+
+const subagentLiveResult = {
+  agent: 'explore',
+  title: 'Verify release safeguards',
+  task: 'Review the release workflow and script. Confirm that verification runs before tagging and publication, and that a failed check stops the release.',
+  status: 'running',
+  exitCode: -1,
+  childSession: { id: 'release-live-check', path: '/workspace/harbor/sessions/release-live-check.jsonl', cwd: '/workspace/harbor' },
+  messages: [],
+}
+const subagentLiveEntries = [
+  messageEntry({
+    id: 'subagent-live-user',
+    role: 'user',
+    label: 'You',
+    text: 'Review the release workflow and report whether a failed verification stops publication.',
+    timestamp: '2026-08-06T15:58:00.000Z',
+  }),
+  messageEntry({
+    id: 'subagent-live-assistant',
+    role: 'assistant',
+    label: 'Agent',
+    text: 'I will check the workflow and release script in a separate child session.',
+    timestamp: '2026-08-06T15:58:10.000Z',
+  }),
+]
+const subagentLiveChildEntries = projectTranscriptEntries([
+  {
+    id: 'live-child-prompt', type: 'message', timestamp: '2026-08-06T15:58:15.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: subagentLiveResult.task }] },
+  },
+  {
+    id: 'live-child-first', type: 'message', timestamp: '2026-08-06T15:58:25.000Z',
+    message: { role: 'assistant', content: [
+      { type: 'thinking', thinking: 'Trace verification, tagging, and publication in order.' },
+      { type: 'text', text: '**Verification** runs before release. I am checking the failure path.' },
+    ] },
+  },
+  {
+    id: 'live-child-file-calls', type: 'message', timestamp: '2026-08-06T15:58:30.000Z',
+    message: { role: 'assistant', content: [
+      { type: 'toolCall', id: 'live-read-workflow', name: 'read', arguments: { path: '.github/workflows/release.yml' } },
+      { type: 'toolCall', id: 'live-read-script', name: 'read', arguments: { path: 'scripts/release.js' } },
+      { type: 'toolCall', id: 'live-search-order', name: 'grep', arguments: { path: 'scripts/release.js', pattern: 'verify|tag|publish' } },
+    ] },
+  },
+  {
+    id: 'live-child-workflow', type: 'message', timestamp: '2026-08-06T15:58:31.000Z',
+    message: { role: 'toolResult', toolCallId: 'live-read-workflow', toolName: 'read', content: [{ type: 'text', text: 'steps:\n  - run: npm run verify\n  - run: node scripts/release.js' }] },
+  },
+  {
+    id: 'live-child-script', type: 'message', timestamp: '2026-08-06T15:58:32.000Z',
+    message: { role: 'toolResult', toolCallId: 'live-read-script', toolName: 'read', content: [{ type: 'text', text: 'await verify()\nawait tag()\nawait publish()' }] },
+  },
+  {
+    id: 'live-child-search', type: 'message', timestamp: '2026-08-06T15:58:33.000Z',
+    message: { role: 'toolResult', toolCallId: 'live-search-order', toolName: 'grep', content: [{ type: 'text', text: 'scripts/release.js:4: await verify()\nscripts/release.js:5: await tag()\nscripts/release.js:6: await publish()' }] },
+  },
+  {
+    id: 'live-child-progress', type: 'message', timestamp: '2026-08-06T15:59:50.000Z',
+    message: { role: 'assistant', content: [
+      { type: 'text', text: 'A failed check stops tagging. I am running `npm run verify`.' },
+      { type: 'toolCall', id: 'live-release-verify', name: 'bash', arguments: { command: 'npm run verify' } },
+    ] },
+  },
+], { toolArguments: true })
+const subagentLiveChildDetail = {
+  session: {
+    ...session(subagentLiveResult.childSession.id, subagentLiveResult.title, '2026-08-06T15:58:15.000Z', 7),
+    sessionFile: subagentLiveResult.childSession.path,
+    parentSessionPath: '/workspace/harbor/sessions/demo-session.jsonl',
+    isSubagentSession: true,
+    contextTokens: 3840,
+    created: '2026-08-06T15:58:15.000Z',
+  },
+  entries: subagentLiveChildEntries,
+}
+const subagentSavedChildDetails = subagentOutcomeResults.map((result, index) => {
+  const target = ['scripts/release.js', 'package.json', 'scripts/rollback.js', 'CHANGELOG.md', '.github/workflows/release.yml'][index]
+  const content = ['await verify()\nawait tag()\nawait publish()', '{ "scripts": { "package": "node scripts/package.js" } }', 'await restorePreviousRelease()', '## Next release\n\n- Verify before publication.', 'steps:\n  - run: npm run verify\n  - run: node scripts/release.js'][index]
+  const stopped = result.status === 'stopped'
+  return {
+    session: {
+      ...session(result.childSession.id, result.title, '2026-08-06T15:44:00.000Z', 7),
+      sessionFile: result.childSession.path,
+      parentSessionPath: '/workspace/harbor/sessions/demo-session.jsonl',
+      isSubagentSession: true,
+    },
+    entries: projectTranscriptEntries([
+      { id: 'child-prompt', type: 'message', timestamp: '2026-08-06T15:44:00.000Z', message: { role: 'user', content: [{ type: 'text', text: result.task }] } },
+      { id: 'child-plan', type: 'message', timestamp: '2026-08-06T15:44:01.000Z', message: { role: 'assistant', content: [{ type: 'thinking', thinking: 'Check the release inputs before publication.' }, { type: 'toolCall', id: 'read-release-input', name: 'read', arguments: { path: target } }] } },
+      { id: 'child-read', type: 'message', timestamp: '2026-08-06T15:44:02.000Z', message: { role: 'toolResult', toolCallId: 'read-release-input', toolName: 'read', content: [{ type: 'text', text: content }] } },
+      { id: 'child-check-call', type: 'message', timestamp: '2026-08-06T15:44:03.000Z', message: { role: 'assistant', content: [{ type: 'toolCall', id: 'run-release-check', name: 'bash', arguments: { command: 'npm run verify' } }] } },
+      { id: 'child-check', type: 'message', timestamp: '2026-08-06T15:44:04.000Z', message: { role: 'toolResult', toolCallId: 'run-release-check', toolName: 'bash', cancelled: stopped, isError: stopped, content: [{ type: 'text', text: stopped ? result.error : 'Release checks passed.\nNo artifacts were published.' }] } },
+      ...result.messages.map((message, messageIndex) => ({ id: `child-result-${messageIndex}`, type: 'message', timestamp: '2026-08-06T15:44:05.000Z', message: { ...message, content: [{ type: 'text', text: message.content }] } })),
+    ], { toolArguments: true }),
+  }
+})
 
 const researchEntries = [
   messageEntry({
@@ -1029,9 +1128,9 @@ const primaryTrace = traceFixtures[0]
 const traceEditObservation = primaryTrace.observations.find(item => item.type === 'TOOL' && item.metadata.toolResultEntryId === 'tool-edit')
 const traceFinalGeneration = primaryTrace.observations.find(item => item.type === 'GENERATION' && item.metadata.messageEntryId === 'assistant-2')
 const traceAssetNames = ['trace-inspector.png', 'trace-workspace.png', 'trace-explorer.png', 'trace-capture.png', 'trace-mobile.png', 'tracing.png']
-const pinnedAssetNames = ['pinned-sessions.png']
+const pinnedAssetNames = ['pinned-sessions.png', 'pinned-only.png']
 const networkAssetNames = ['network-access.png', 'network-access-mobile.png']
-const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png']
+const subagentAssetNames = ['subagent-sidebar.png', 'subagent-outcomes.png', 'subagent-inspector-mobile.png', 'subagent-inspector-export.png', 'subagent-live-tail.png', 'subagent-live-tail-mobile.png']
 const embeddedAssetNames = ['embedded-inspector.png', 'embedded-workspace.png', 'embedded-explorer.png']
 const allowedNames = new Set([
   ...await fs.readdir(docsOutputDir),
@@ -1041,6 +1140,9 @@ const allowedNames = new Set([
   ...networkAssetNames,
   ...subagentAssetNames,
   'tool-activity.png',
+  'dictation.png',
+  'dictation-settings.png',
+  'dictation-mobile.png',
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1132,6 +1234,41 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'dictation.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'dictation',
+    interact: startDictationCapture,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'dictation-settings.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'dictation-settings',
+    interact: openDictationSettings,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'dictation-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    viewport: { width: 390, height: 844 },
+    scenario: 'dictation',
+    interact: startDictationCapture,
+  })
+  await capture({
+    browser,
+    file: path.join(readmeOutputDir, 'dictation.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    viewport: { width: 1503, height: 818 },
+    scenario: 'dictation',
+    interact: startDictationCapture,
+    macWindow: true,
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'home.png'),
     route: '/',
     ready: '.research-mode-chip',
@@ -1212,7 +1349,26 @@ try {
     scenario: 'pinned',
     interact: async (page) => {
       await page.locator('.session-time-heading', { hasText: 'Pinned' }).waitFor()
-      await page.locator('.session-pinned-icon').nth(1).waitFor()
+      await page.locator('.session-meta > .session-pinned-icon').nth(1).waitFor()
+    },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'pinned-only.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'pinned',
+    interact: async (page) => {
+      await page.locator('.session-meta > .session-pinned-icon').nth(1).waitFor()
+      await page.getByRole('button', { name: 'Show pinned sessions only', exact: true }).click()
+      await page.locator('.sidebar-pin-filter[aria-pressed="true"]').waitFor()
+      await page.getByRole('textbox', { name: 'Search pinned sessions in this project', exact: true }).waitFor()
+      await page.waitForFunction(() => {
+        const rows = document.querySelectorAll('.project-session-row')
+        const count = document.querySelector('.project-session-heading span:last-child')
+        return rows.length === 2 && [...rows].every(row => row.querySelector('.session-meta > .session-pinned-icon'))
+          && count?.textContent.trim() === '2 of 7'
+      })
     },
   })
   await capture({
@@ -1510,12 +1666,16 @@ try {
     ready: '.transcript-tool',
     scenario: 'tools',
     interact: async (page) => {
+      await page.locator('.skill-message-header').waitFor()
       const activity = page.locator('.mobile-activity-card')
       await activity.locator('.mobile-activity-summary').click()
-      const tool = activity.locator('.transcript-tool').filter({ hasText: 'Skill · release-review' })
+      const tool = activity.locator('.skill-tool-card').filter({ hasText: 'release-review' })
       await tool.locator('.tool-expand-button').click()
       await tool.locator('.pierre-diffs-container [data-line]').filter({ hasText: 'Confirm that a failed check stops the release.' }).waitFor()
       await disableMotion(page)
+      await page.locator('.workbench').hover({ position: { x: 10, y: 10 } })
+      await page.mouse.wheel(0, -1000)
+      await page.waitForFunction(() => document.querySelector('.workbench')?.scrollTop === 0)
       const label = await tool.locator('.tool-label').boundingBox()
       const preview = await tool.locator('.tool-preview-clip').boundingBox()
       const action = await tool.locator('.tool-preview-cta').boundingBox()
@@ -1607,6 +1767,25 @@ try {
     viewport: { width: 390, height: 844 },
     scenario: 'subagent-mobile',
     interact: (page) => openSubagentInspector(page, 3),
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-live-tail.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    scenario: 'subagent-live',
+    sidebarChildren: true,
+    interact: openLiveSubagentInspector,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-live-tail-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.subagent-card .tool-inspect-button',
+    viewport: { width: 390, height: 844 },
+    scenario: 'subagent-live',
+    sidebarChildren: true,
+    interact: openLiveSubagentInspector,
   })
   await capture({
     browser,
@@ -1818,6 +1997,35 @@ try {
 
 console.log('Screenshot capture complete')
 
+async function startDictationCapture(page) {
+  await page.locator('.dictation-button[aria-label^="Start local dictation"]').click()
+  await page.locator('.dictation-status-listening').waitFor()
+  const result = await page.evaluate(() => window.__docsFeedDictation())
+  const heights = await page.locator('.dictation-wave rect').evaluateAll(bars => bars.map(bar => Number(bar.style.transform.match(/scaleY\(([\d.]+)\)/)?.[1] || 0)))
+  if (result.count !== 31 || result.time !== 1000 || result.acknowledged !== 31 || heights.length !== 30 || Math.max(...heights) - Math.min(...heights) < 0.2
+    || heights.filter(value => value > 0.2).length < 20
+    || new Set(heights.map(value => value.toFixed(2))).size < 8
+    || ![0, 10, 20].every(start => heights.slice(start, start + 10).some(value => value > 0.2))) {
+    throw new Error(`Deterministic dictation waveform did not fill the capture width: ${JSON.stringify({ result, heights })}`)
+  }
+  await page.waitForFunction(() => document.querySelector('.dictation-timer')?.textContent.trim() === '0:01')
+  const label = await page.locator('.dictation-phase-label').textContent()
+  const timer = await page.locator('.dictation-timer').textContent()
+  if (label.trim() !== 'Listening' || timer !== '0:01') {
+    throw new Error(`Deterministic dictation status changed: ${JSON.stringify({ label, timer })}`)
+  }
+}
+
+async function openDictationSettings(page) {
+  await page.evaluate(() => window.dispatchEvent(new Event('leyline:open-settings')))
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.getByRole('button', { name: 'Dictation', exact: true }).click()
+  await dialog.locator('.dictation-settings').waitFor()
+  await dialog.getByRole('heading', { name: 'Speech model', exact: true }).waitFor()
+  await dialog.getByText('Downloaded on Leyline server', { exact: true }).waitFor()
+}
+
 async function waitForTrace(page) {
   await page.locator('.elune-ui[aria-busy="false"] .elune-summary h3').filter({ hasText: primaryTrace.name }).waitFor()
   await page.locator(`[data-observation-id="${traceEditObservation.id}"]`).waitFor()
@@ -1891,14 +2099,32 @@ async function openSidebarChildren(page, count) {
     const node = child.querySelector('.session-child-node').getBoundingClientRect()
     return {
       gap: title.left - control.right,
+      gutter: control.width,
+      aligned: [...document.querySelectorAll('.project-session-row .session-title')]
+        .every(element => Math.abs(element.getBoundingClientRect().left - title.left) < 0.5),
       inset: node.left + node.width / 2 - title.left,
       height: child.getBoundingClientRect().height,
       glyphs: document.querySelectorAll('.session-child-icon').length,
     }
   })
-  if (geometry.gap < 6 || geometry.inset < 10 || geometry.height !== 30 || geometry.glyphs) {
+  if (geometry.gap !== 4 || geometry.gutter !== 18 || !geometry.aligned
+    || geometry.inset < 10 || geometry.height !== 30 || geometry.glyphs) {
     throw new Error(`Unexpected sidebar child layout: ${JSON.stringify(geometry)}`)
   }
+}
+
+async function waitForSubagentReader(page) {
+  await page.waitForFunction(() => {
+    const inspector = document.querySelector('.subagent-inspector')
+    const readers = inspector?.querySelectorAll('.subagent-inspector-content')
+    if (readers?.length !== 1 || inspector.querySelectorAll('.subagent-inspector-footer-content').length > 1) return false
+    const reader = readers[0]
+    const stack = inspector.querySelector('.subagent-inspector-reader-stack')
+    return reader.getClientRects().length > 0 && !reader.inert
+      && reader.getAttribute('aria-hidden') !== 'true'
+      && stack?.getAttribute('aria-busy') !== 'true'
+      && getComputedStyle(reader).opacity === '1'
+  })
 }
 
 async function openSubagentInspector(page, taskCount, exportPage = false) {
@@ -1919,23 +2145,73 @@ async function openSubagentInspector(page, taskCount, exportPage = false) {
   await inspector.locator('.subagent-summary').filter({ hasText: `${taskCount - 1} completed` }).waitFor()
   await inspector.locator('.subagent-summary').filter({ hasText: '1 stopped' }).waitFor()
   await tasks.nth(2).click()
-  await inspector.locator('.subagent-inspector-empty').filter({ hasText: 'This task was stopped.' }).waitFor()
+  await waitForSubagentReader(page)
+  await tasks.nth(2).locator('.status-stopped').waitFor()
+  await inspector.locator('.subagent-ledger-row').filter({ hasText: 'This operation was aborted' }).waitFor()
   await tasks.first().click()
-  await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
-  await inspector.locator('.subagent-inspector-prompt > summary').click()
-  if (await inspector.locator('.subagent-inspector-prompt pre').innerText() !== subagentOutcomeResults[0].task) {
+  await waitForSubagentReader(page)
+  await inspector.locator('.subagent-ledger-latest h3').filter({ hasText: 'Verification precedes publication' }).waitFor()
+  await inspector.getByRole('button', { name: 'Full task prompt', exact: true }).click()
+  await waitForSubagentReader(page)
+  if (await inspector.locator('.subagent-entry-raw').innerText() !== subagentOutcomeResults[0].task) {
     throw new Error('Subagent inspector changed the full task prompt')
   }
   await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
   await inspector.waitFor({ state: 'detached' })
   await activity.locator('.tool-inspect-button').click()
-  await inspector.locator('.subagent-inspector-output h2').waitFor()
+  await waitForSubagentReader(page)
+  await inspector.locator('.subagent-ledger-latest h3').waitFor()
+  if (exportPage || page.viewportSize().width <= 760) {
+    await inspector.getByRole('button', { name: /^Read full/ }).click()
+    await waitForSubagentReader(page)
+    await inspector.locator('.subagent-inspector-output h2').filter({ hasText: 'Verification precedes publication' }).waitFor()
+  } else {
+    await inspector.locator('.subagent-ledger-row').filter({ hasText: 'scripts/release.js' }).waitFor()
+  }
   if (exportPage) await inspector.getByText('Child sessions are available in Leyline', { exact: true }).waitFor()
   else await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
   const after = await activity.boundingBox()
   if (before.height !== after.height || before.y !== after.y || await activity.evaluate(element => element.classList.contains('is-expanded'))) {
     throw new Error(`Single-call subagent inspection expanded or moved the Activity card: ${JSON.stringify({ before, after })}`)
   }
+}
+
+async function openLiveSubagentInspector(page) {
+  await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
+  await disableMotion(page)
+  if (page.viewportSize().width > 760) await openSidebarChildren(page, 1)
+  const activity = page.locator('.mobile-activity-card').filter({ has: page.locator('.subagent-card') })
+  await activity.scrollIntoViewIfNeeded()
+  const before = await activity.boundingBox()
+  await activity.locator('.mobile-activity-summary').click()
+  const inspector = page.locator('.subagent-inspector')
+  const running = inspector.locator('[data-subagent-tail-entry="tool:live-release-verify"]')
+  await running.locator('.status-running').waitFor()
+  await waitForSubagentReader(page)
+  await inspector.locator('.subagent-ledger-row').filter({ hasText: 'A failed check stops tagging.' }).waitFor()
+  if (await inspector.locator('h2').innerText() !== subagentLiveResult.title) throw new Error('Live preview lost its supplied title')
+  await running.click()
+  await waitForSubagentReader(page)
+  await inspector.locator('.subagent-entry-raw').filter({ hasText: 'Checking publication safeguards…' }).waitFor()
+  await inspector.getByRole('button', { name: 'Arguments', exact: true }).click()
+  if (JSON.parse(await inspector.locator('.subagent-entry-raw').innerText()).command !== 'npm run verify') throw new Error('Live preview changed the tool arguments')
+  await inspector.getByRole('button', { name: 'Full task prompt', exact: true }).click()
+  await waitForSubagentReader(page)
+  if (await inspector.locator('.subagent-entry-raw').innerText() !== subagentLiveResult.task) throw new Error('Live preview changed the full task prompt')
+  await inspector.getByRole('button', { name: 'Close subagent inspector', exact: true }).click()
+  await inspector.waitFor({ state: 'detached' })
+  const closed = await page.evaluate(id => window.__docsEventSockets.every(socket => new URL(socket.url).searchParams.get('sessionId') !== id || socket.readyState === WebSocket.CLOSED), subagentLiveResult.childSession.id)
+  if (!closed) throw new Error('Closed live inspector retained its child subscription')
+  await activity.locator('.tool-inspect-button').click()
+  await waitForSubagentReader(page)
+  await running.locator('.status-running').waitFor()
+  await inspector.locator('.subagent-tail-following').filter({ hasText: 'Following live' }).waitFor()
+  await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
+  const open = await page.evaluate(id => window.__docsEventSockets.filter(socket => new URL(socket.url).searchParams.get('sessionId') === id && socket.readyState === WebSocket.OPEN).length, subagentLiveResult.childSession.id)
+  if (open !== 1 || new URL(page.url()).pathname !== '/sessions/demo-session') throw new Error('Live preview must observe only its child without navigation')
+  if (await inspector.evaluate(element => element.scrollWidth > element.clientWidth)) throw new Error('Live preview overflows horizontally')
+  const after = await activity.boundingBox()
+  if (before.height !== after.height || before.y !== after.y || await activity.evaluate(element => element.classList.contains('is-expanded'))) throw new Error('Live inspection moved or expanded the parent Activity card')
 }
 
 async function waitForResearchSources(page) {
@@ -2069,7 +2345,8 @@ function runtimeFor(scenario) {
   const held = scenario === 'queue-held'
   const research = scenario === 'research'
   const sidebar = scenario === 'subagent-sidebar'
-  const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar'].includes(scenario)
+  const live = scenario === 'subagent-live'
+  const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar', 'subagent-live'].includes(scenario)
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
@@ -2083,11 +2360,19 @@ function runtimeFor(scenario) {
       availableModels,
       thinkingLevel: 'high',
       availableThinkingLevels: selectedModel.availableThinkingLevels,
-      isStreaming: (queued && !held) || activity || sidebar,
+      isStreaming: (queued && !held) || activity || sidebar || live,
       isCompacting: false,
-      pendingToolCalls: sidebar ? ['subagent-sidebar-tool']
+      pendingToolCalls: live ? ['subagent-live-tool'] : sidebar ? ['subagent-sidebar-tool']
         : activity ? ['activity-selected-tool'] : [],
-      pendingTools: sidebar ? [{
+      pendingTools: live ? [{
+        toolCallId: 'subagent-live-tool',
+        toolName: 'subagent',
+        args: { agent: subagentLiveResult.agent, title: subagentLiveResult.title, task: subagentLiveResult.task },
+        partialResult: {
+          content: [{ type: 'text', text: 'The release safeguard check is running.' }],
+          details: { mode: 'single', background: true, results: [subagentLiveResult] },
+        },
+      }] : sidebar ? [{
         toolCallId: 'subagent-sidebar-tool',
         toolName: 'subagent',
         args: {
@@ -2144,6 +2429,33 @@ function runtimeFor(scenario) {
 }
 
 function runtimeFixturesFor(scenario, runtime) {
+  if (scenario === 'subagent-live') {
+    const child = runtimeFor('default')
+    return {
+      runtimeSessions: [runtime, {
+        ...child,
+        ...subagentLiveResult.childSession,
+        session: subagentLiveChildDetail.session,
+        state: {
+          ...child.state,
+          isStreaming: true,
+          pendingToolCalls: ['live-release-verify'],
+          pendingTools: [{ toolCallId: 'live-release-verify', toolName: 'bash', args: { command: 'npm run verify' } }],
+          activeToolCount: 3,
+          activeToolNames: ['read', 'grep', 'bash'],
+        },
+      }],
+      runtimeEvents: [{
+        activeSessionId: subagentLiveResult.childSession.id,
+        event: {
+          type: 'tool_execution_update',
+          toolCallId: 'live-release-verify',
+          toolName: 'bash',
+          partialResult: { content: [{ type: 'text', text: '> harbor@1.0.0 verify\n> node scripts/verify-release.js\n\nChecking release inputs…\nChecking publication safeguards…' }] },
+        },
+      }],
+    }
+  }
   if (scenario !== 'activity') {
     return { runtimeSessions: [runtime], runtimeEvents: [] }
   }
@@ -2205,6 +2517,7 @@ function detailFor(scenario) {
     'subagent-outcomes': subagentOutcomeEntries,
     'subagent-mobile': subagentMobileEntries,
     'subagent-sidebar': subagentSidebarEntries,
+    'subagent-live': subagentLiveEntries,
     markdown: markdownPreviewEntries,
     tools: toolActivityEntries,
     shell: shellEntries,
@@ -2232,9 +2545,10 @@ function detailFor(scenario) {
 function sidebarFixtureFor(scenario, parent) {
   const results = scenario === 'research'
     ? researchEntries.find((entry) => entry.toolName === 'subagent').subagentDetails.results
-    : scenario === 'subagent-sidebar' ? subagentSidebarResults
-      : scenario === 'subagent-outcomes' ? subagentOutcomeResults
-        : subagentOutcomeResults.slice(0, 2)
+    : scenario === 'subagent-live' ? [subagentLiveResult]
+      : scenario === 'subagent-sidebar' ? subagentSidebarResults
+        : scenario === 'subagent-outcomes' ? subagentOutcomeResults
+          : subagentOutcomeResults.slice(0, 2)
   const children = results.map((result, index) => ({
     ...session(
       result.childSession.id,
@@ -2354,6 +2668,7 @@ async function capture({
     .concat(sidebar?.children || [])
   const runtimeFixtures = runtimeFixturesFor(scenario, runtime)
   for (const child of sidebar?.liveChildren || []) {
+    if (runtimeFixtures.runtimeSessions.some(runtime => runtime.id === child.id)) continue
     const childRuntime = runtimeFor('default')
     runtimeFixtures.runtimeSessions.push({
       ...childRuntime,
@@ -2378,7 +2693,10 @@ async function capture({
     runtimeSessions: runtimeFixtures.runtimeSessions,
     runtimeEvents: runtimeFixtures.runtimeEvents,
     terminal,
-    emitRuntimeEvents: scenario !== 'home',
+    emitRuntimeEvents: !['home', 'subagent-live'].includes(scenario),
+    dictation: ['dictation', 'dictation-settings'].includes(scenario) ? docsDictation : null,
+    dictationClient: ['dictation', 'dictation-settings'].includes(scenario) ? docsDictationClient : null,
+    dictationMeters: scenario === 'dictation' ? docsDictationMeters : null,
   })
   const page = await context.newPage()
   const unexpected = []
@@ -2491,8 +2809,11 @@ async function capture({
     if (key === 'GET /api/pi/fs') return json(projectDirectory)
     if (key === 'GET /api/pi/sessions') return json({ sessions: captureSessions })
     if (key === 'GET /api/pi/state') return json({ active: runtime })
-    if (key === 'POST /api/pi/active-session') return json({ active: runtime })
+    if (key === 'POST /api/pi/active-session' && (scenario !== 'subagent-live' || req.postDataJSON()?.id === runtime.id)) return json({ active: runtime })
     if (key === `GET /api/pi/sessions/${runtime.id}`) return json(detail)
+    if (scenario === 'subagent-live' && key === `GET /api/pi/sessions/${subagentLiveResult.childSession.id}`) return json(subagentLiveChildDetail)
+    const savedChild = subagentSavedChildDetails.find(child => key === `GET /api/pi/sessions/${child.session.id}`)
+    if (savedChild) return json(savedChild)
     if (key === 'GET /api/pi/review') {
       return json(scenario === 'review' ? reviewPayload : cleanReviewPayload)
     }
@@ -2534,6 +2855,7 @@ async function capture({
       })
     }
     if (interact) await interact(page)
+    if (await page.locator('.subagent-inspector').count()) await waitForSubagentReader(page)
     await sanitizeNativeBackendAddress(page)
     await page.evaluate(async () => {
       await document.fonts.ready
@@ -2555,9 +2877,10 @@ async function capture({
       if (['home', 'ultrafast'].includes(scenario)) {
         const enabled = scenario === 'ultrafast'
         if (await page.locator('.mobile-model-control:visible').count()) {
-          const indicator = await page.locator('.mobile-ultrafast:visible').count()
-          if (indicator !== (enabled ? 1 : 0)) {
-            throw new Error('Unexpected mobile Ultrafast indicator state')
+          const control = page.locator('.mobile-speed-control:visible')
+          if (await control.count() !== 1
+            || await control.evaluate(element => element.classList.contains('active')) !== enabled) {
+            throw new Error('Unexpected mobile speed control state')
           }
         } else {
           const chip = page.locator('.ultrafast-toggle:visible').first()
@@ -2838,6 +3161,9 @@ function initBrowser({
   runtimeEvents,
   terminal,
   emitRuntimeEvents,
+  dictation,
+  dictationClient,
+  dictationMeters,
 }) {
   const NativeDate = Date
   let tick = 0
@@ -2861,8 +3187,79 @@ function initBrowser({
   }
   window.SpeechRecognition = MockSpeechRecognition
   window.webkitSpeechRecognition = MockSpeechRecognition
+  if (dictationClient) {
+    window.localStorage.setItem('leyline.dictation.client.v1', JSON.stringify(dictationClient))
+    let fixtureNow = 0
+    Object.defineProperty(Performance.prototype, 'now', { configurable: true, value: () => fixtureNow })
+    const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window)
+    window.requestAnimationFrame = callback => nativeRequestAnimationFrame(() => callback(fixtureNow))
+    const tracks = [{ onended: null, stop() {} }]
+    const stream = { getTracks: () => tracks, getAudioTracks: () => tracks }
+    const emptyNode = () => ({ connect() {}, disconnect() {} })
+    let workletNode
+    class DocsAudioContext {
+      state = 'suspended'
+      destination = {}
+      audioWorklet = { addModule: async () => {} }
+      async resume() { this.state = 'running' }
+      async close() { this.state = 'closed' }
+      createMediaStreamSource() { return emptyNode() }
+      createGain() { return { ...emptyNode(), gain: { value: 1 } } }
+    }
+    class DocsAudioWorkletNode {
+      constructor() {
+        workletNode = this
+        this.port = {
+          onmessage: null,
+          postMessage: value => {
+            if (value === 'flush') this.port.onmessage?.({ data: { type: 'flushed' } })
+          },
+        }
+        this.onprocessorerror = null
+      }
+      connect() {}
+      disconnect() {}
+    }
+    window.AudioContext = DocsAudioContext
+    window.webkitAudioContext = DocsAudioContext
+    window.AudioWorkletNode = DocsAudioWorkletNode
+    Object.defineProperty(navigator.mediaDevices, 'enumerateDevices', {
+      configurable: true,
+      value: async () => [{ deviceId: 'demo-microphone', groupId: 'demo-group', kind: 'audioinput', label: 'Demo microphone', toJSON() {} }],
+    })
+    Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
+      configurable: true,
+      value: async () => stream,
+    })
+    window.__docsDictationAcknowledged = 0
+    window.__docsFeedDictation = async () => {
+      if (!workletNode?.port.onmessage || !dictationMeters?.length) throw new Error('Mock dictation audio worklet is not ready')
+      let previousDrawing = ''
+      for (let index = 0; index < dictationMeters.length; index++) {
+        fixtureNow = index * 1000 / (dictationMeters.length - 1)
+        const meter = dictationMeters[index]
+        workletNode.port.onmessage({ data: { type: 'meter', ...meter } })
+        const pcm = new Float32Array(1600)
+        for (let sample = 0; sample < pcm.length; sample++) {
+          pcm[sample] = Math.sin((index * pcm.length + sample) * 0.071) * meter.rms * 1.4
+        }
+        workletNode.port.onmessage({ data: { type: 'audio', pcm } })
+        await new Promise(resolve => setTimeout(resolve, 0))
+        const drawing = [...document.querySelectorAll('.dictation-wave rect')].map(bar => bar.style.transform).join('|')
+        if (!drawing || drawing === previousDrawing) throw new Error(`Dictation meter ${index + 1} did not update the production waveform`)
+        if (window.__docsDictationAcknowledged !== index + 1) throw new Error(`Dictation PCM packet ${index + 1} was not acknowledged`)
+        previousDrawing = drawing
+      }
+      return { count: dictationMeters.length, time: fixtureNow, acknowledged: window.__docsDictationAcknowledged }
+    }
+    window.addEventListener('pagehide', () => {
+      if (workletNode) workletNode.port.onmessage = null
+    }, { once: true })
+  }
 
   const NativeWebSocket = window.WebSocket
+  let docsCaptureSequence = 0
+  window.__docsEventSockets = []
   class MockWebSocket extends EventTarget {
     static CONNECTING = 0
     static OPEN = 1
@@ -2873,10 +3270,12 @@ function initBrowser({
       if ([protocols].flat().includes('vite-hmr')) return new NativeWebSocket(url, protocols)
       this.url = String(url)
       this.readyState = MockWebSocket.CONNECTING
-      const pathname = new URL(url, window.location.href).pathname
+      const target = new URL(url, window.location.href)
+      const pathname = target.pathname
+      if (pathname === '/api/pi/events') window.__docsEventSockets.push(this)
       setTimeout(() => {
         if (this.readyState !== MockWebSocket.CONNECTING) return
-        if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal'].includes(pathname)
+        if (!['/api/pi/events', '/api/pi/review/events', '/api/pi/terminal', ...(dictation ? ['/api/leyline/dictation'] : [])].includes(pathname)
           || (pathname === '/api/pi/terminal' && !terminal)) {
           this.close()
           return
@@ -2885,6 +3284,12 @@ function initBrowser({
         const event = new Event('open')
         this.onopen?.(event)
         this.dispatchEvent(event)
+        if (pathname === '/api/leyline/dictation') {
+          this.dictationState = structuredClone(dictation)
+          this.dictationCapture = null
+          this.dictationOwner = true
+          return
+        }
         if (pathname === '/api/pi/terminal') {
           this.emit({ type: 'ready', cwd: '/workspace/harbor', shell: '/bin/zsh', pty: true })
           this.emit({ type: 'data', data: '$ npm run docs:build\r\n✓ documentation build complete\r\n' })
@@ -2909,10 +3314,10 @@ function initBrowser({
               ]
             : []),
         ]
-        if (emitRuntimeEvents) {
-          for (const data of [...events, ...runtimeEvents]) {
-            this.emit({ type: 'runtime_event', data })
-          }
+        for (const data of [...(emitRuntimeEvents ? events : []), ...runtimeEvents]) {
+          if (['message_update', 'tool_execution_update'].includes(data.event?.type)
+            && data.activeSessionId !== target.searchParams.get('sessionId')) continue
+          this.emit({ type: 'runtime_event', data })
         }
         this.emit({ type: 'active_session', data: { ...runtime, snapshotRevision: now + 1 } })
       }, pathname === '/api/pi/terminal' ? 20 : 0)
@@ -2923,7 +3328,69 @@ function initBrowser({
       this.onmessage?.(event)
       this.dispatchEvent(event)
     }
-    send() {}
+    send(data) {
+      if (!dictation || new URL(this.url).pathname !== '/api/leyline/dictation') return
+      if (typeof data === 'string') {
+        const request = JSON.parse(data)
+        try {
+          const value = this.dictationCommand(request.method, request.input)
+          this.emit({ id: request.id, ok: true, value })
+        } catch (error) {
+          this.emit({ id: request.id, ok: false, error: error.message })
+        }
+        return
+      }
+      if (!(data instanceof ArrayBuffer) || data.byteLength < 48 || (data.byteLength - 44) % 4) return
+      const frame = new DataView(data)
+      const id = frame.getUint32(0, true)
+      const sequence = frame.getUint32(4, true)
+      const captureId = new TextDecoder().decode(new Uint8Array(data, 8, 36))
+      if (!this.dictationOwner || !this.dictationCapture || this.dictationCapture.captureId !== captureId || this.dictationCapture.sequence !== sequence) {
+        this.emit({ id, ok: false, error: 'Invalid dictation audio sequence' })
+        return
+      }
+      for (let offset = 44; offset < data.byteLength; offset += 4) {
+        const sample = frame.getFloat32(offset, true)
+        if (!Number.isFinite(sample) || Math.abs(sample) > 1) {
+          this.emit({ id, ok: false, error: 'Invalid dictation audio sample' })
+          return
+        }
+      }
+      this.dictationCapture.sequence++
+      window.__docsDictationAcknowledged++
+      this.emit({ id, ok: true, value: { accepted: true } })
+    }
+    dictationCommand(method, input) {
+      if (method === 'getState') return structuredClone(this.dictationState)
+      if (method === 'updateSettings') {
+        this.dictationState.settings = { ...this.dictationState.settings, ...input }
+        return structuredClone(this.dictationState)
+      }
+      if (method === 'start') {
+        if (!this.dictationOwner || this.dictationCapture) throw new Error('Dictation capture is busy')
+        const sequence = ++docsCaptureSequence
+        const captureId = `${String(Date.now()).slice(-8).padStart(8, '0')}-0000-4000-8000-${sequence.toString(16).padStart(12, '0')}`
+        this.dictationCapture = { captureId, sequence: 0, requestId: input.requestId }
+        this.dictationState.busy = true
+        this.dictationState.owned = true
+        return { captureId, sampleRate: 16000 }
+      }
+      if (method === 'finish') {
+        if (!this.dictationOwner || !this.dictationCapture || this.dictationCapture.captureId !== input) throw new Error('Dictation capture is not owned')
+        this.dictationCapture = null
+        this.dictationState.busy = false
+        this.dictationState.owned = false
+        return { text: 'The release notes are ready for review.' }
+      }
+      if (method === 'cancel') {
+        if (input?.requestId && this.dictationCapture?.requestId !== input.requestId) throw new Error('Dictation capture is not owned')
+        this.dictationCapture = null
+        this.dictationState.busy = false
+        this.dictationState.owned = false
+        return structuredClone(this.dictationState)
+      }
+      throw new Error(`Unknown dictation method: ${method}`)
+    }
     close() {
       if (this.readyState === MockWebSocket.CLOSED) return
       this.readyState = MockWebSocket.CLOSED

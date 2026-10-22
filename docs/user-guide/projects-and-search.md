@@ -13,7 +13,9 @@ Search matches regular session names and IDs in the current project. For subagen
 
 Matching children appear under their parent, even when the parent title does not match. Search expands matching children and hides the parent's chevron. Only matching children appear, even when the parent title matches.
 
-Search does not inspect transcript content. Clear the field to restore the full session list.
+Search does not inspect transcript content. Clear the field to restore the session list for the current filter.
+
+When [Show pinned sessions only](./sessions#show-only-pinned-sessions) is active, search matches only pinned parents and their children. Select the pin button beside search again to include unpinned sessions.
 
 ## Use Go to
 
@@ -25,7 +27,7 @@ Search does not inspect transcript content. Clear the field to restore the full 
 2. Enter text in **Search sessions or projects** if necessary.
 3. Select a project or session.
 
-The default view shows recent projects and current or recent regular sessions. A query searches project names, CWDs, and regular session names and IDs. **Go to** does not search subagent children.
+The default view shows recent projects and current or recent regular sessions. A query searches project names, CWDs, and regular session names and IDs. **Go to** does not search subagent children. The sidebar's pinned-only filter does not limit **Go to**.
 
 When you select a project, Leyline opens the last session that you used in that project. Otherwise, it opens the most recent session.
 

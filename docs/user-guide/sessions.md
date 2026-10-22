@@ -19,9 +19,11 @@ on other platforms or middle-click with a mouse. This behavior also applies to
 
 ## Browse the session list
 
-The sidebar shows all regular sessions in the current project. It orders them from most recent modification to oldest.
+By default, the sidebar shows all regular sessions in the current project. Pinned sessions appear first, followed by time groups.
 
 The **Sessions** heading shows the session count. The list scrolls when it is longer than the available space.
+
+Session titles share one left edge. A fixed gutter holds the chevrons for sessions with children.
 
 Enter a session name or ID in **Search sessions** to filter the current project.
 
@@ -36,11 +38,25 @@ A flask after the title identifies a [deep research session](./deep-research). T
 1. Point to the session row, or move keyboard focus to the row.
 2. Select **Pin session**.
 
-Leyline moves the session to the **Pinned** group at the top of the current project list. Pinned sessions remain in modification-time order. Select **Unpin session** to return a session to its time group.
+Leyline moves the session to the **Pinned** group at the top of the current project list. Live updates do not reorder pinned sessions. Select **Unpin session** to return a session to its time group.
 
 Leyline saves pins by backend connection in this Leyline installation. Pinning does not change the session file. A fork begins unpinned.
 
-During sidebar search, Leyline uses search order and does not show the **Pinned** group. The pin marker remains beside the session title. **Go to** does not use pin state.
+During sidebar search, Leyline uses search order and does not show the **Pinned** group. The pin marker remains beside the time or status on the right. On desktop, row actions replace these details on hover or keyboard focus. **Go to** does not use pin state.
+
+## Show only pinned sessions
+
+![Sidebar with only two pinned sessions, the active pin filter, and a count of 2 of 7](../assets/screenshots/pinned-only.png)
+
+*The pin button beside search hides unpinned sessions without changing the selected transcript.*
+
+Select **Show pinned sessions only**, the pin button beside **Search sessions**. The button turns lavender, and the field changes to **Search pinned sessions**. Select the button again to restore all sessions.
+
+Search matches only pinned parent sessions and their children while this filter is active. Pinned parents keep their subagent branches and existing order. The **Sessions** count shows visible parent sessions against the project total, such as **2 of 7**.
+
+If the project has no pins, the empty list offers **Show all sessions**.
+
+The filter changes only the sidebar list. **Activity**, **Go to**, the selected transcript, and running work remain unchanged. The filter resets when you reload the app. Saved pins remain.
 
 ## Read runtime status
 
@@ -116,7 +132,7 @@ By default, children expand when a child is live or selected. A manual chevron c
 
 Children do not add to regular session counts and have no separate pins or **Activity** entries. To delete a child, point to its row and select **Delete subagent session**. Confirm deletion in the dialog. This moves the child's JSONL file to Leyline trash.
 
-You can also open the [subagent inspector](./subagents#read-a-subagent-card), select a task, then select **Open child session**. An available **Child sessions** link in a trace observation also opens the child transcript.
+Use the [subagent inspector](./subagents#follow-an-active-child) to preview a running child while the parent session stays selected. Select **Open child session** when you need the full transcript. An available **Child sessions** link in a trace observation also opens the child transcript.
 
 The child-session header shows **← parent session**. Select it to return to the
 parent session. Use a modified click on either session target to open it in a

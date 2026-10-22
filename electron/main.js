@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { BACKEND_SHUTDOWN_TIMEOUT_MS } from '../server/shutdown-deadlines.js'
+import { createDictationService } from './dictation.js'
 import {
   app,
   BrowserWindow,
@@ -39,6 +40,7 @@ let mainWindow
 let quitAfterServerStops = false
 let serverStoppedForQuit = false
 let unexpectedServerExitHandled = false
+let dictationService
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 if (!gotSingleInstanceLock) app.quit()
@@ -69,6 +71,7 @@ function hasPrimaryModifier(input) {
 }
 
 async function createWindow(initialCommand, initialUrl = '') {
+  await app.whenReady()
   await environmentReady
   const url = initialUrl
     ? urlWithInitialCommand(initialUrl, initialCommand)
@@ -85,10 +88,14 @@ async function createWindow(initialCommand, initialUrl = '') {
       backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)),
     },
   })
   mainWindow = window
   const appOrigin = new URL(url).origin
+  dictationService ||= createDictationService(isWorkspaceUrl)
+  dictationService.registerWindow(window, url)
 
   window.webContents.setWindowOpenHandler(({ url: openedUrl }) => {
     if (isWorkspaceUrl(openedUrl, appOrigin)) {
@@ -659,6 +666,7 @@ function installApplicationMenu() {
 if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     await environmentReady
+    dictationService ||= createDictationService(isWorkspaceUrl)
     // Diagnostic only: GPU feature status is misleading before the first
     // window loads (Chromium reports software paths at whenReady, then
     // enables GPU compositing once a compositor exists — verified on an
@@ -682,12 +690,15 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', (event) => {
-  if (serverStoppedForQuit || !leylineServerProcess) return
+  if (serverStoppedForQuit || (!leylineServerProcess && !dictationService)) return
   event.preventDefault()
   if (quitAfterServerStops) return
 
   quitAfterServerStops = true
-  void stopPackagedAppServer().finally(() => {
+  void Promise.allSettled([
+    stopPackagedAppServer(),
+    dictationService?.close(),
+  ]).finally(() => {
     serverStoppedForQuit = true
     app.quit()
   })

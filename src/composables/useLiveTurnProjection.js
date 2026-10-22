@@ -9,7 +9,7 @@ import {
   toolAnnotation,
 } from '../lib/transcript'
 
-export function useLiveTurnProjection({ onIntent } = {}) {
+export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) {
   const selectedSessionId = ref('')
   const persistedDetail = ref(null)
   const optimisticEntries = ref([])
@@ -224,17 +224,19 @@ export function useLiveTurnProjection({ onIntent } = {}) {
     const newSnapshot = snapshotRevision === undefined
       || snapshotRevision !== runtimeSnapshotRevision
     runtimeSnapshotRevision = snapshotRevision
-    compactingContext.value = state.isCompacting === true
-    if (state.isCompacting === true) {
-      const cutEntryId = state.compactionCutEntryId || ''
-      const previous = compaction.value
-      compaction.value = {
-        reason: previous?.reason || '',
-        startedAt: previous?.startedAt || 0,
-        cutEntryId,
+    if (newSnapshot) {
+      compactingContext.value = state.isCompacting === true
+      if (state.isCompacting === true) {
+        const cutEntryId = state.compactionCutEntryId || ''
+        const previous = compaction.value
+        compaction.value = {
+          reason: previous?.reason || '',
+          startedAt: previous?.startedAt || 0,
+          cutEntryId,
+        }
+      } else {
+        compaction.value = null
       }
-    } else {
-      compaction.value = null
     }
     agentRunning.value = state.isStreaming === true
     if (newSnapshot && !agentRunning.value && !compactingContext.value) {
@@ -548,7 +550,7 @@ export function useLiveTurnProjection({ onIntent } = {}) {
       toolName: event.toolName || 'tool',
       label: liveToolLabel(event, existing),
       code: liveToolCode(event) || existing?.code || '',
-      args: event.args || event.input || existing?.args || {},
+      args: event.args || event.arguments || event.input || existing?.args || {},
       status,
       restoredFromRuntime: event.restoredFromRuntime === true
         || existing?.restoredFromRuntime === true,
@@ -595,13 +597,13 @@ export function useLiveTurnProjection({ onIntent } = {}) {
 
   function liveToolLabel(event, existing) {
     if (event.toolName === 'compact') return 'Compact'
-    const args = event.args || event.input
+    const args = event.args || event.arguments || event.input
     if (!args && existing?.label) return existing.label
     return toolAnnotation(event.toolName, { arguments: args || {} }).label
   }
 
   function liveToolCode(event) {
-    const args = event.args || event.input || {}
+    const args = event.args || event.arguments || event.input || {}
     if (event.toolName === 'subagent') {
       return args.task || (args.tasks?.length ? `${args.tasks.length} tasks` : args.chain?.length ? `${args.chain.length} steps` : '')
     }
@@ -672,8 +674,8 @@ export function useLiveTurnProjection({ onIntent } = {}) {
         toolName: message.toolName || tool.toolName,
       },
     }, new Map([[toolCallId, {
-      arguments: tool.args || {},
-    }]]))
+      arguments: tool.args || tool.resultEntry?.args || {},
+    }]]), { toolArguments })
     return entry ? { ...entry, persisted: false } : null
   }
 

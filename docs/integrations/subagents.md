@@ -71,4 +71,14 @@ Children with an isolated custom system prompt retain output-budget and inline E
 
 Bundled requests include `parentSessionId` and `_toolCallId` for trace linkage. The child marker retains available parent trace and observation anchors. Proven committed child usage can reconcile parent totals after the tool result. Unknown attribution remains explicit. See [Elune integration](./elune#usage-and-child-accounting).
 
-The child route waits for the child run to finish. If the caller disconnects before the response finishes, the server aborts the child run. See the [API reference](../reference/api#subagent-routes).
+The child execution route waits for the child run to finish. If its caller disconnects before the response finishes, the server aborts the child run. See the [API reference](../reference/api#subagent-routes).
+
+## Live child inspection
+
+`useSubagentPreview.js` loads a flat, source-derived Action ledger for the selected child, whether saved or active. Rows open full entries in the same sheet. Message readers offer **Formatted**/**Source**, while tool readers offer **Output**/**Arguments**. **Copy full text** copies the selected format. The full task prompt opens another reader view. **Back to activity** restores the ledger scroll position and keeps the selected task.
+
+The inspector reads only the selected child through `GET /api/pi/sessions/:id?compact=1&toolArguments=1&path=...`. While that child runs, it also opens a separate `WS /api/pi/events?sessionId=<child-id>` connection. These reads never activate the child or submit work. The parent session and its runtime subscription stay selected. `toolArguments=1` retains original projected tool text and arguments even with `compact=1`, without changing ordinary session payloads. Older records can lack output or arguments, and the reader does not reconstruct them.
+
+Closing the inspector releases this observer without canceling the execution request. Previews retain the latest 80 projected assistant/tool entries before ledger block expansion. Full child history remains available through **Open child session**. HTML exports use matching ledger and reader styles for task messages and results already available in the parent result. They do not fetch or embed the full child transcript or subscribe to live updates.
+
+See [Subagent inspector state](../developer-guide/frontend-state#subagent-inspector-state) for request ordering, reconnect recovery, reader identity, and scroll ownership.

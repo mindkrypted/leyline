@@ -2051,8 +2051,8 @@ function activeSessionDto(handle = activeHandle) {
   return runtimeSessionDto(handle)
 }
 
-function toActiveSessionDetailDto(handle = activeHandle) {
-  return handleSessionDetailDto(handle)
+function toActiveSessionDetailDto(handle = activeHandle, options) {
+  return handleSessionDetailDto(handle, options)
 }
 
 const runtimeState = trackRuntimeCreation(async (cwd, { refresh = false } = {}) => {
@@ -2111,9 +2111,9 @@ function broadcastEvent(type, data) {
   events.broadcastEvent(type, data)
 }
 
-async function sessionDetail(id, path) {
+async function sessionDetail(id, path, options) {
   const handle = runtimeHandles.get(id)
-  if (handle) return toActiveSessionDetailDto(handle)
+  if (handle) return toActiveSessionDetailDto(handle, options)
   const suspended = idleSessions.get(id)
     || (path && [...idleSessions.values()].find(state => state.info.path === path))
   if (suspended) {
@@ -2121,13 +2121,13 @@ async function sessionDetail(id, path) {
     const info = idleSessions.has(suspended.info.id) ? suspended.info : {
       id: manager.getSessionId(), path: manager.getSessionFile(), cwd: manager.getCwd(),
     }
-    return toSessionDetailFromManager(manager, info)
+    return toSessionDetailFromManager(manager, info, undefined, undefined, options)
   }
-  if (path) return toSessionDetailFromPath(id, path)
+  if (path) return toSessionDetailFromPath(id, path, options)
 
   const session = await findSession(id)
   if (!session) return null
-  return toSessionDetailDto(session)
+  return toSessionDetailDto(session, options)
 }
 
 async function exportSessionDetail(id) {

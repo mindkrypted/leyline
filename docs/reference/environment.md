@@ -11,10 +11,10 @@ variables come from the user's pi setup.
 | `LEYLINE_PUBLIC_URL` | Base URL for Open Graph and Twitter metadata in HTML exports. A final slash is removed. |
 | `LEYLINE_SERVER_HOST` | Origin host for the packaged Electron server. The default is `127.0.0.1`. The network-access toggle does not change this binding. Vite does not use this variable. |
 | `LEYLINE_SERVER_PORT` | Origin port for the packaged Electron server. The default is `0`, which selects an available port. Set the separate sharing port through **Settings → Connections → Proxy port**. Vite does not use this variable. |
-| `LEYLINE_SERVER_ALLOWED_ORIGINS` | Comma-separated frontend origins that can use the backend. Same-origin and loopback clients work without this variable. Use `*` to allow all origins. |
+| `LEYLINE_SERVER_ALLOWED_ORIGINS` | Comma-separated frontend origins that can use the backend. Same-origin and loopback clients work without this variable. `*` allows all origins for standard API CORS checks. Dictation requires exact origins. |
 | `PI_CODING_AGENT_SESSION_DIR` | Session directory for discovery and new sessions. Leyline expands `~` and searches subdirectories for JSONL files. |
 | `PI_CODING_AGENT_DIR` | Pi agent directory resolved by the SDK. Global provider/model/MCP configuration and native credentials use this directory. The default is `~/.pi/agent`. |
-| `LEYLINE_MEMORY_DIR` | Backend data directory. App metadata and `tracing.enabled` use `memory.sqlite`. Embedded trace records use `elune/elune.db`. Vision delegation uses `attachments/<session-id>/`. |
+| `LEYLINE_MEMORY_DIR` | Backend data directory. App metadata and dictation settings use `memory.sqlite`. Dictation models use `dictation/models/`. Embedded trace records use `elune/elune.db`. Vision delegation uses `attachments/<session-id>/`. |
 | `SHELL` | Login shell used by Electron environment loading and the terminal backend. Electron falls back to the account shell; the terminal has additional shell fallbacks. |
 
 Without `PI_CODING_AGENT_SESSION_DIR`, Leyline uses the session directory from
@@ -25,6 +25,7 @@ Use an absolute path for `LEYLINE_MEMORY_DIR`. Without this variable, Leyline us
 ```text
 ~/.local/share/leyline/memory.sqlite
 ~/.local/share/leyline/attachments/<session-id>/
+~/.local/share/leyline/dictation/models/
 ~/.local/share/leyline/elune/elune.db
 ```
 
@@ -36,7 +37,14 @@ Display, network access, saved connections, and pinned sessions belong to the na
 
 Set `LEYLINE_SERVER_ALLOWED_ORIGINS` on a backend when a browser UI connects
 from a different non-loopback origin. Separate origins with commas. Each value
-must include its scheme and host. Add a port when the origin uses one.
+must include its scheme and host. Add a port when the origin uses one. For
+example, use `https://ui.example.org`, without a path.
+
+Browser local dictation sends microphone audio to the Leyline server that
+serves the app. Its WebSocket accepts same-origin requests or exact origins
+listed in `LEYLINE_SERVER_ALLOWED_ORIGINS`. Do not use `*` for dictation. Use
+HTTPS for the browser app, or serve it from `localhost`, to allow microphone
+access. See [Dictation](../user-guide/dictation).
 
 For network sharing, use **Settings → Connections → Allow network access**. No environment variable is necessary. The switch defaults to off and persists as `server.network_access` in `memory.sqlite`.
 
@@ -50,7 +58,7 @@ Explicit origin host and port configuration remains authoritative. If that confi
 
 Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, set of UI settings, network-access settings, and set of pinned sessions.
 
-It also selects different memory, rollout, subagent, vision, and capture metadata, plus the attachment directory and embedded trace database.
+It also selects different memory, rollout, subagent, vision, dictation settings, and capture metadata, plus the attachment and dictation model directories and embedded trace database.
 
 ## Embedded trace storage
 

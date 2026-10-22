@@ -29,7 +29,7 @@ The token value is the latest available context usage. It is not a total of all 
 
 ## Read export content
 
-The export includes rendered Markdown, assistant thoughts, Activity cards, skill rows, subagent results, and attached images.
+The export includes rendered Markdown, assistant thoughts, Activity cards, skills, subagent results, and attached images. Skills retain the app's prompt headers, expandable read rows, and status labels.
 
 System events use the same muted dividers as the app. Select **System prompt** or **System updated** to open the prompt inspector.
 
@@ -49,13 +49,17 @@ Images and transcript data are embedded in the HTML. File, diff, and patch previ
 
 ## Inspect exported subagents
 
-![Exported subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-export.png)
+![Exported subagent entry reader with task outcomes and a formatted result](../assets/screenshots/subagent-inspector-export.png)
 
 Subagent calls stay compact inside Activity. A card containing only one subagent call opens its inspector directly from the header or row, including calls with parallel tasks. Expand cards with several tool calls first.
 
-Select a task to read its Markdown result and **Full task prompt**. Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
+Select a task to see its saved message rows. Select a row or **Read full** to open the entry reader. Use **Formatted** or **Source**, then **Copy full text** to copy the entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger.
 
-Child-session navigation is available only in Leyline, not in the exported file. Press Escape, select the close button, or select the backdrop to return to the transcript.
+Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
+
+The export includes only task messages saved with the parent call. It does not fetch the child's full history or subscribe to live activity. Full child transcripts remain available in Leyline.
+
+Escape returns from an entry to the ledger. Press it again, select the close button, or select the backdrop to return to the transcript.
 
 ## Use the responsive layout
 

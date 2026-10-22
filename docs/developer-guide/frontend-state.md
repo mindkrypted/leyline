@@ -25,10 +25,12 @@
 | `useProjectBrowser.js` | Project picker state, folder expansion, and project-browser visibility |
 | `useToolExpansion.js` | Tool and skill expansion, copy state, and fullscreen previews |
 | `SystemPromptInspector.vue` | Tabs, raw view, event actions, and rendering for the System event selected by `App.vue` |
-| `SubagentInspector.vue` | Selected task and reader position for the subagent call selected by `App.vue` |
+| `SubagentInspector.vue` | Selected task, displayed snapshots, Action ledger, full-entry readers, scroll anchors, following, and bounded row motion |
+| `SubagentTailEntry.vue` | One ledger row with an action, source-derived target and excerpt, outcome, character count, and reader-open event |
+| `useSubagentPreview.js` | Selected saved or active child detail, runtime subscription, refresh queue, recovery, and stable preview identities |
 | `useWorkbenchScroll.js` | Bottom following, composer space, new-output state, and Jump to latest |
 | `useTerminal.js` | xterm, WebSocket, PTY status, focus, fit, and drawer height |
-| `useDictation.js` | Browser speech-recognition state inside both composer components |
+| `App.vue` / `useDictation.js` | One shared dictation controller for both composers; routes browser speech recognition or local dictation through the preload bridge or same-origin speech WebSocket |
 | `useSmoothStreamingText.js` | Incremental text reveal for live Markdown blocks |
 
 ## App composition
@@ -43,7 +45,7 @@
 
 Runtime summary merges preserve existing `subagentChildren` when a snapshot omits it. Children stay in creation order, independent of runtime activity. Sidebar search keeps parent context and shows only matching children. Children remain outside regular session counts, pin controls, and the **Activity** navigator.
 
-`SessionComposer.vue` and `StartComposer.vue` own local input mechanics and dictation adapters.
+`SessionComposer.vue` and `StartComposer.vue` own local input mechanics. `App.vue` creates one dictation controller and passes it to both composers.
 
 `PromptQueue.vue` displays backend queue state. It does not schedule model work. Its attached tab opens a bounded corner tray, with a measured full-width layout when the composer is narrow. Opening it leaves the input and footer fixed.
 
@@ -270,11 +272,29 @@ Expansion state resets when the selected session changes. Preview content remain
 
 ## Subagent inspector state
 
-`App.vue` owns `subagentSelection`, the opener, and the modal focus scope. It resolves the selected call across persisted and live Activity projections by `toolCallId`, with `id` as the fallback. The component key stays stable during live updates and saved-entry reconciliation, preserving task selection and reader position. `SubagentInspector.vue` resets reader position when the user selects a task.
+`App.vue` owns `subagentSelection`, the opener, and the modal focus scope. It resolves the selected call across persisted and live Activity projections by `toolCallId`, with `id` as the fallback. The component key stays stable during live updates and saved-entry reconciliation, preserving task selection and reader position.
+
+`SubagentInspector.vue` separates the requested task (`selectedIndex` and `requestedView`) from the displayed task (`presentation`). The child observer changes immediately, but the outgoing reader stays visible until the target preview is ready. A post-render watcher combines pending display snapshots into at most one commit per animation frame. Runtime event handling remains separate and does not wait for this display commit.
+
+Task changes restore each task's following state and ledger position. A new ledger starts at its latest entry. Full-entry readers start at a saved position or at the top. Reader and footer transitions share fixed grid layers. Outgoing content is inert and hidden from assistive technology.
 
 `singleSubagentEntry()` bypasses Activity expansion when the group's only top-level tool call is `subagent`. Both its header and compact row open the inspector directly, including calls with parallel tasks. Multi-call groups still expand before individual subagent rows open the inspector. `useToolExpansion.js` does not own subagent inspector selection.
 
-`useModalFocus()` contains focus and restores the opener on close. Opening the subagent inspector pauses transcript auto-follow. Escape, the close button, or the backdrop closes it. Session or backend changes, removal of the selected call, and new pending extension confirmations also close it. An existing pending confirmation prevents it from opening.
+`useSubagentPreview.js` reads only the selected child, including saved children, through `fetchSessionDetail()` with `toolArguments: true` on the selected backend. While the child runs, it also uses a separate child-scoped runtime WebSocket. Its `useLiveTurnProjection.js` instance opts into tool arguments without changing the main transcript's default projection. Observation never activates the child or changes the parent selection. Task changes and unmount close the observer and cancel its outstanding reads. Completion or runtime removal closes the child socket and refreshes the saved activity.
+
+Detail reads run one at a time, with the next refresh queued behind the current request. Response epochs reject reads from before reconnect or settlement. Recovery reconciles finished messages before resetting the projection, retains rendered-ID aliases, and replays events received after socket open. Snapshots alone cannot restore in-flight assistant content.
+
+`useSubagentPreview.js` caches up to four child previews within the inspector, with a combined serialized-size estimate of 4 MiB. Each preview stores a saved baseline, message/tool identities, and up to 128 native runtime frames. Returning to a cached child restores the shared live projection before exposing new updates. A failed detail read leaves that projection available. Reconciliation removes saved assistant frames from the replay buffer to prevent duplicate answers on a later return. Unmount clears the cache.
+
+A changed branch or an assistant message after the cached anchor causes a rebase. This removes stale streaming content when the child completed a response while another task was selected.
+
+`lib/subagent-ledger.js` projects the displayed entries into flat rows. Its optional current-rows cache reuses unchanged previews and row objects, and removes entries outside the displayed set. Stable message aliases, tool-call IDs, and result keys preserve row identity through live-to-persisted updates and late saved results.
+
+`SubagentInspector.vue` owns the full-entry reader, format, last-read marker, and scroll positions per task, entry, and format. **Back to activity** restores the ledger position. An open reader retains its entry if that entry leaves the preview tail. Scrolling up pauses following. **New output** and **Jump to latest** return to the tail. Live updates preserve task selection and manual scrollback.
+
+`useModalFocus()` contains focus and restores the opener on close. Opening the subagent inspector pauses transcript auto-follow.
+
+Both the component and global Escape handlers call `dismissReader()` before closing the inspector. Escape returns from an entry reader to the ledger. From the ledger, Escape closes the inspector. The close button, backdrop, session or backend changes, selected-call removal, and new pending extension confirmations also close it. An existing pending confirmation prevents it from opening.
 
 This state is separate from the System prompt inspector and trace Inspector. See [Tool Activity and subagent inspector](./transcript-projection#tool-activity-and-subagent-inspector) for renderer boundaries.
 

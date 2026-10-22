@@ -25,14 +25,17 @@ const props = defineProps({
 })
 const emit = defineEmits(['select-model', 'select-thinking', 'toggle-ultrafast', 'pick-images', 'newline', 'toggle-research', 'interrupt', 'open'])
 const page = ref('')
+const rootPage = ref('')
+const selecting = ref(false)
 const query = ref('')
 const dialog = ref(null)
 const opener = ref(null)
 const fallbackId = useId()
 const opened = computed(() => Boolean(page.value))
-const title = computed(() => ({ options: 'Session options', thinking: 'Thinking', service: 'Service tier', add: 'Add to message', details: 'Session details' })[page.value])
+const title = computed(() => ({ options: 'Session options', thinking: 'Thinking', service: 'Speed', add: 'Add to message', details: 'Session details' })[page.value])
 const selectedModel = computed(() => props.availableModels.find(model => props.modelKey(model) === props.selectedModelKey))
 const modelLabel = computed(() => selectedModel.value?.name || props.currentModelLabel || 'Choose model')
+const thinkingLabel = computed(() => formatMode(props.thinkingLevel) || 'off')
 const models = computed(() => {
   const terms = query.value.toLowerCase().trim().split(/\s+/).filter(Boolean)
   return props.availableModels.filter(model => terms.every(term => `${model.name} ${model.id} ${model.provider}`.toLowerCase().includes(term)))
@@ -45,12 +48,20 @@ watch(page, async () => {
   await nextTick()
   if (page.value) dialog.value?.focus({ preventScroll: true })
 })
+watch([selecting, () => props.settingsDisabled], ([pending, disabled]) => {
+  if (!pending || disabled) return
+  selecting.value = false
+  if (!props.settingsError) dismiss()
+}, { flush: 'post' })
 function open(name, event) {
   opener.value = event?.currentTarget || document.activeElement
+  rootPage.value = name
+  selecting.value = false
   page.value = name
 }
 function dismiss() {
   if (!page.value) return false
+  selecting.value = false
   page.value = ''
   return true
 }
@@ -63,28 +74,39 @@ function newline() {
   emit('newline')
 }
 function chooseThinking(level) {
+  if (props.disabled || props.settingsDisabled) return
   emit('select-thinking', level)
-  page.value = 'options'
+  if (rootPage.value === 'options') page.value = 'options'
+  else selecting.value = true
 }
 function chooseTier(enabled) {
-  if (props.settingsDisabled || (enabled && !props.ultrafastAvailable)) return
+  if (props.disabled || props.settingsDisabled || (enabled && !props.ultrafastAvailable)) return
   if (enabled !== props.ultrafastEnabled) emit('toggle-ultrafast')
-  page.value = 'options'
+  if (rootPage.value === 'options') page.value = 'options'
+  else selecting.value = true
 }
 defineExpose({ open, dismiss, opened })
 </script>
 
 <template>
   <button :id="fallbackId" class="mobile-add-control" type="button" aria-label="Add to message" aria-haspopup="dialog" :disabled="disabled" :aria-expanded="page === 'add'" @mousedown.prevent @click="open('add', $event)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
-  <button class="mobile-model-control" type="button" aria-haspopup="dialog" :aria-label="`${modelLabel}, ${formatMode(thinkingLevel)} thinking, ${ultrafastEnabled ? 'Ultrafast' : 'Standard'} service. Open settings`" :aria-expanded="['options', 'thinking', 'service'].includes(page)" :disabled="disabled || settingsDisabled" @click="open('options', $event)">
-    <span class="mobile-model-content"><span class="mobile-model-title"><span>{{ modelLabel }}</span><span class="mobile-model-caret">⌄</span></span><small v-if="ultrafastEnabled" class="mobile-ultrafast">Ultrafast</small></span>
-  </button>
+  <div class="mobile-model-controls" role="group" aria-label="Model, thinking, and speed">
+    <div class="mobile-model-capsule">
+      <button class="mobile-setting-control mobile-model-control" type="button" aria-haspopup="dialog" :aria-label="`Model: ${modelLabel}. Open settings`" :aria-expanded="rootPage === 'options' && ['options', 'thinking', 'service'].includes(page)" :disabled="disabled || settingsDisabled" @click="open('options', $event)">
+        <span class="mobile-model-title"><span>{{ modelLabel }}</span><svg class="mobile-model-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5h6L6 8.5z" /></svg></span>
+      </button>
+      <button class="mobile-setting-control mobile-thinking-control" type="button" aria-haspopup="dialog" :aria-label="`Thinking: ${thinkingLabel}. Change thinking`" :aria-expanded="page === 'thinking'" :disabled="disabled || settingsDisabled || !availableThinkingLevels.length" :title="availableThinkingLevels.length ? `Thinking: ${thinkingLabel}` : 'Thinking is not available for this model.'" @click="open('thinking', $event)">{{ thinkingLabel }}</button>
+      <button class="mobile-setting-control mobile-speed-control" :class="{ active: ultrafastEnabled }" type="button" aria-haspopup="dialog" :aria-label="`Speed: ${ultrafastEnabled ? 'Ultrafast' : 'Standard'}. Change speed`" :aria-expanded="page === 'service'" :disabled="disabled || settingsDisabled" :title="ultrafastEnabled ? 'Speed: Ultrafast. Premium pricing.' : 'Speed: Standard'" @click="open('service', $event)">
+        <span class="mobile-speed-face"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 10-12h-7V2Z" /></svg></span>
+      </button>
+    </div>
+  </div>
   <Teleport to="body">
     <Transition name="mobile-sheet">
       <div v-if="opened" class="mobile-sheet-backdrop" @click.self="dismiss" @keydown.esc.prevent.stop="dismiss">
         <section ref="dialog" class="mobile-composer-sheet" :class="{ 'is-options': page === 'options' }" role="dialog" aria-modal="true" :aria-label="title" tabindex="-1">
           <div class="mobile-sheet-handle" aria-hidden="true"></div>
-          <header class="mobile-sheet-heading"><button v-if="page === 'thinking' || page === 'service'" type="button" aria-label="Back to session options" @click="page = 'options'">‹</button><h2>{{ title }}</h2><button type="button" class="mobile-sheet-done" @click="dismiss">Done</button></header>
+          <header class="mobile-sheet-heading"><button v-if="rootPage === 'options' && (page === 'thinking' || page === 'service')" type="button" aria-label="Back to session options" @click="page = 'options'">‹</button><h2>{{ title }}</h2><button type="button" class="mobile-sheet-done" @click="dismiss">Done</button></header>
           <p v-if="settingsError" class="mobile-sheet-error" role="alert">{{ settingsError }}</p>
           <div class="mobile-sheet-body">
             <template v-if="page === 'options'">
@@ -95,7 +117,7 @@ defineExpose({ open, dismiss, opened })
                 <p v-if="!models.length">{{ availableModels.length ? 'No matching models.' : 'No models available.' }}</p>
               </div>
               <h3>Options</h3>
-              <div class="mobile-sheet-choices"><button type="button" :disabled="disabled || settingsDisabled || !availableThinkingLevels.length" @click="page = 'thinking'"><span>Thinking</span><span class="mobile-option-value">{{ formatMode(thinkingLevel) }}</span><span aria-hidden="true">›</span></button><button type="button" :disabled="disabled || settingsDisabled" @click="page = 'service'"><span>Service tier</span><span class="mobile-option-value" :class="{ 'mobile-ultrafast': ultrafastEnabled }">{{ ultrafastEnabled ? 'Ultrafast' : 'Standard' }}</span><span aria-hidden="true">›</span></button></div>
+              <div class="mobile-sheet-choices"><button type="button" :disabled="disabled || settingsDisabled || !availableThinkingLevels.length" @click="page = 'thinking'"><span>Thinking</span><span class="mobile-option-value">{{ formatMode(thinkingLevel) }}</span><span aria-hidden="true">›</span></button><button type="button" :disabled="disabled || settingsDisabled" @click="page = 'service'"><span>Speed</span><span class="mobile-option-value" :class="{ 'mobile-ultrafast': ultrafastEnabled }">{{ ultrafastEnabled ? 'Ultrafast' : 'Standard' }}</span><span aria-hidden="true">›</span></button></div>
             </template>
             <template v-else-if="page === 'thinking'">
               <p>Choose the thinking level for your next message.</p>
@@ -103,7 +125,7 @@ defineExpose({ open, dismiss, opened })
             </template>
             <template v-else-if="page === 'service'">
               <div class="mobile-sheet-choices"><button type="button" :disabled="disabled || settingsDisabled" :aria-pressed="!ultrafastEnabled" @click="chooseTier(false)"><span>Standard<small>Default service tier</small></span><span v-if="!ultrafastEnabled" aria-hidden="true">✓</span></button><button type="button" :disabled="disabled || settingsDisabled || !ultrafastAvailable" :aria-pressed="ultrafastEnabled" @click="chooseTier(true)"><span>Ultrafast<small>Premium pricing</small></span><span v-if="ultrafastEnabled" aria-hidden="true">✓</span></button></div>
-              <p class="mobile-sheet-note">{{ ultrafastAvailable ? 'Ultrafast stays visible beside the model while enabled.' : 'Ultrafast is not available for this model.' }}</p>
+              <p class="mobile-sheet-note">{{ ultrafastAvailable ? 'Applies to this session only.' : 'Ultrafast is not available for this model.' }}</p>
             </template>
             <div v-else-if="page === 'add'" class="mobile-sheet-choices"><button type="button" :disabled="disabled || imageDisabled" @click="addImage"><span>Add image</span></button><button type="button" :disabled="disabled" @click="newline"><span>New line</span></button><button v-if="running" type="button" :disabled="interrupting" @click="emit('interrupt'); dismiss()"><span>{{ interrupting ? 'Stopping' : 'Stop generation' }}</span></button><button v-if="researchEnabled" type="button" :disabled="disabled || imageDisabled || researchDisabled" :aria-pressed="research" @click="emit('toggle-research')"><span>Research</span><span v-if="research" aria-hidden="true">✓</span></button></div>
             <template v-else-if="page === 'details'"><h3>Enabled tools · {{ toolNames.length }}</h3><ul class="mobile-tool-inventory"><li v-for="tool in toolNames" :key="tool">{{ tool }}</li></ul><p v-if="!toolNames.length">No tools are enabled.</p></template>
@@ -115,17 +137,28 @@ defineExpose({ open, dismiss, opened })
 </template>
 
 <style scoped>
-.mobile-add-control, .mobile-model-control { display: none; }
+.mobile-add-control, .mobile-model-controls { display: none; }
 @media (max-width: 760px) {
-  .mobile-add-control, .mobile-model-control { display: flex; align-items: center; justify-content: center; min-height: 44px; border: 0; border-radius: 10px; padding: 0; background: transparent; color: #d7d7d7; font: inherit; }
-  .mobile-add-control { flex: none; width: 44px; }
+  .mobile-add-control, .mobile-model-controls { display: flex; align-items: center; justify-content: center; min-height: 44px; }
+  .mobile-add-control { flex: none; width: 44px; border: 0; border-radius: 10px; padding: 0; background: transparent; color: #d7d7d7; font: inherit; }
   .mobile-add-control svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
-  .mobile-model-control { flex: 1; min-width: 0; padding: 0 3px; }
-  .mobile-model-content { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; gap: 2px; }
-  .mobile-model-title { display: flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; font-size: 14px; font-weight: 500; }
+  .mobile-model-controls { flex: 1; min-width: 0; padding: 0 3px; }
+  .mobile-model-capsule { display: flex; align-items: center; min-width: 0; max-width: 100%; height: 32px; border: 1px solid transparent; border-radius: 999px; background: #2b2b2c; color: var(--muted-strong); }
+  .mobile-setting-control { position: relative; display: flex; flex: none; align-items: center; justify-content: center; min-width: 44px; height: 44px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; transition: color var(--motion-base) var(--ease-decelerate); }
+  .mobile-setting-control + .mobile-setting-control::before { position: absolute; left: 0; width: 1px; height: 16px; background: #4a4a4c; content: ''; }
+  .mobile-setting-control:hover:not(:disabled), .mobile-setting-control[aria-expanded='true'] { color: var(--text); }
+  .mobile-model-control { flex: 0 1 auto; border-radius: 999px 0 0 999px; padding: 0 9px 0 12px; }
+  .mobile-model-title { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; font-weight: 600; line-height: 1; }
   .mobile-model-title > span:first-child { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
-  .mobile-model-caret { flex: none; color: #aaa; }
-  .mobile-model-content small { font-size: 10px; }
+  .mobile-model-caret { flex: none; width: 12px; height: 12px; fill: currentColor; }
+  .mobile-thinking-control { padding: 0 4px; font-size: 12px; font-weight: 500; }
+  .mobile-speed-control { width: 44px; border-radius: 0 999px 999px 0; }
+  .mobile-speed-face { display: flex; align-items: center; justify-content: center; width: 44px; height: 30px; border-radius: inherit; transition: background-color var(--motion-base) var(--ease-decelerate); }
+  .mobile-speed-control svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .mobile-speed-control.active { color: #bfb3ef; }
+  .mobile-speed-control.active::before { background: #514365; }
+  .mobile-speed-control.active .mobile-speed-face { background: #342d45; }
+  .mobile-speed-control.active svg { fill: currentColor; stroke-width: 1.2; }
   .mobile-ultrafast { color: #bfb3ef !important; }
   .mobile-sheet-backdrop { position: fixed; z-index: 80; top: var(--app-top, 0px); left: 0; width: 100%; height: var(--app-height, 100dvh); display: flex; align-items: flex-end; background: #0008; }
   .mobile-composer-sheet { display: flex; flex-direction: column; width: 100%; max-height: calc(100% - 16px - env(safe-area-inset-top, 0px)); min-height: 0; border: 1px solid #3a3a3a; border-bottom: 0; border-radius: 24px 24px 0 0; outline: none; background: #181818; color: #e5e5e5; box-shadow: 0 -12px 50px #0005; padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -162,6 +195,6 @@ defineExpose({ open, dismiss, opened })
   .mobile-sheet-leave-active { pointer-events: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .mobile-sheet-enter-active, .mobile-sheet-leave-active, .mobile-sheet-enter-active .mobile-composer-sheet, .mobile-sheet-leave-active .mobile-composer-sheet { transition: none; }
+  .mobile-setting-control, .mobile-speed-face, .mobile-sheet-enter-active, .mobile-sheet-leave-active, .mobile-sheet-enter-active .mobile-composer-sheet, .mobile-sheet-leave-active .mobile-composer-sheet { transition: none; }
 }
 </style>

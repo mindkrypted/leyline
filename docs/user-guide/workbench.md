@@ -35,7 +35,7 @@ Muted **System** rows mark prompt and tool changes that pi recorded. Select a ro
 
 Assistant output and tool activity appear while the run is active. Saved rows replace live rows after pi records the turn. Leyline keeps one visible copy of each item.
 
-Subagent calls stay compact in Activity cards. Their [inspector](./subagents#read-a-subagent-card) shows tasks and results in a side sheet, or a bottom sheet on mobile, without expanding the transcript.
+Subagent calls stay compact in Activity cards. Their [inspector](./subagents#read-a-subagent-card) shows live child activity and task results in a side sheet, or a bottom sheet on mobile. The parent session stays selected and its transcript does not expand.
 
 A [deep research session](./deep-research) adds a phase bar, a Research threads row in Activity, a cited report artifact, a source pane, and citation previews. Select a thread in the inspector to read its result or open its child transcript.
 

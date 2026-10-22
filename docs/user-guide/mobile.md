@@ -2,19 +2,19 @@
 
 Leyline uses a mobile layout when the viewport is 760 pixels wide or less.
 
-![Leyline mobile session with System rows and ultrafast enabled in the composer](../assets/screenshots/mobile-session.png)
+![Leyline mobile session with separate model, thinking, and speed controls](../assets/screenshots/mobile-session.png)
 
-*The mobile workbench keeps the main session actions in one column.*
+*The mobile composer uses one action row with a three-part settings capsule.*
 
 ## Use the mobile header
 
-The header shows the Leyline mark, **Open sessions**, the session title, and available transcript controls.
+Select the Leyline mark to return to Home. Use **Open sessions** to open the sidebar. Select a session title to rename it.
 
-The project part of the breadcrumb is hidden. The session rename glyph is also hidden, but you can select the title to rename it.
+Use **Session actions** (three dots) for traces, session details, Git review, memory, runtime events, and export. Available controls depend on the session and backend.
 
-The **Session traces**, **Session details**, **Memory**, **Events**, and **Export transcript** icons remain available when the session and backend support them. Numeric counts are hidden.
+On Home, the three-dot button opens **Session details**, which lists the enabled tools.
 
-A research session also shows its compact state and source control. The source count is hidden, but the control remains available.
+The project breadcrumb, rename glyph, and numeric action counts are hidden. Research sessions retain their compact state label.
 
 ## Open the mobile sidebar
 
@@ -26,6 +26,8 @@ A research session also shows its compact state and source control. The source c
 2. Select a session in the current project.
 
 Subagent children appear as nested rows under their parent. Use the parent's left chevron to show or hide them. Select a child row to open its transcript. See [Sessions](./sessions#open-a-subagent-session) for expansion and search behavior.
+
+Use the pin button beside search to [show only pinned sessions](./sessions#show-only-pinned-sessions). Select it again to restore all sessions.
 
 Select **Go to** to open a session from another project.
 
@@ -85,41 +87,55 @@ Tool targets can shorten to fit the row. User messages and tool cards use the fu
 
 ## Inspect subagent tasks
 
-![Mobile subagent inspector with task outcomes and a selected result](../assets/screenshots/subagent-inspector-mobile.png)
+![Mobile subagent entry reader with task outcomes and a formatted result](../assets/screenshots/subagent-inspector-mobile.png)
 
 Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
 
-Select a task to read its result, expand **Full task prompt** for its instructions, or select **Open child session** to open its transcript. The task list and result area scroll separately. The session link and **Copy result** stay in the footer.
+Select a task to see its action ledger, then select a row to read the full entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger. The task list and reader scroll separately. **Copy full text** copies the open entry, and **Open child session** opens the complete transcript.
+
+The current reader stays visible until the next task preview is ready. The task highlight, reader, and footer then change together without moving the sheet. Reduced motion removes the animation.
+
+A running child updates the ledger with messages and tool activity. Select a running call for its current output and arguments. Scroll up to pause following. Select **New output** or **Jump to latest** to return to the latest activity.
+
+![Mobile live subagent action ledger with a running verification call](../assets/screenshots/subagent-live-tail-mobile.png)
+
+Closing the sheet leaves the child run active. See [Follow an active child](./subagents#follow-an-active-child) for preview limits and reconnect behavior.
 
 Select the close button or backdrop to return to the transcript. See [Subagents](./subagents#read-a-subagent-card) for outcome labels and confirmation behavior.
 
 ## Use the mobile composer
 
-The composer stays above the bottom edge. Model, thinking, optional `ultrafast`, dictation, and send controls share the primary row. With `ultrafast` available, narrow screens move the model control to its own row.
+The composer stays above the bottom edge. Its action row contains **Add to message**, the settings capsule, dictation, and Send. During dictation, a compact waveform and gray **Finish** chip appear above the composer.
 
-The `ultrafast` chip uses the same supported models, premium pricing, and session scope as on desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
+![Mobile dictation with a compact waveform and gray Finish chip](../assets/screenshots/dictation-mobile.png)
 
-During an active run, the send arrow adds the draft to **Up next**. Select **Send options** beside the arrow for **Queue next task** or **Steer current run**.
+Browser dictation is the default in normal web browsers. It is browser-managed and may use an online service. Select **Local models** in Settings to use Parakeet or Whisper Turbo. In a browser, local-model speech runs on the Leyline server that serves the app. In Electron, local-model speech runs on this device. Dictation requires a secure context: use HTTPS or localhost, not ordinary LAN HTTP. See [Dictation](./dictation) for setup and processing details.
+
+The gray capsule has three separate controls. Select the model name to open **Session options**. Select the thinking level to open **Thinking**, or the lightning bolt to open **Speed**.
+
+The bolt stays visible in both speed modes. It is gray and outlined for **Standard**, or lavender and filled for **Ultrafast**. For unsupported models, **Speed** explains why Ultrafast is unavailable. Supported models, premium pricing, and session scope match desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
+
+During an active run, an empty draft shows **Stop**. Add text or an image to restore the send arrow and queue the draft in **Up next**. Select **Send options** beside the arrow for **Queue next task** or **Steer current run**.
 
 Select the attached **Up next** tab to open the tray across the composer width. The tab moves above the list. The input and footer stay fixed while the list scrolls. Each task has one actions menu for edits, order changes, steering, and removal.
 
 **Stop** holds remaining unsent tasks. The closed **Held** tab shows the count and **Resume**. Text edits keep images, and closing the tray keeps an unsaved edit. Save or cancel the edit before you select **Resume**. See [Composer](./composer#queue-the-next-task) for queue details.
 
-The context row contains runtime status, shell mode, tool count, context text, and the terminal control. Some secondary status chips are hidden to keep the row compact.
+Use **Add to message** for images, a new line, or research mode when available.
 
-The model control uses the `provider/model-id` label. The thinking control uses a shortened label. The context progress bar is hidden, but its token text remains.
+Open **Session details** through **Session actions** for enabled tools, context usage, and terminal access.
 
 ## Open research sources
 
 A [deep research](./deep-research) source pane opens across the full viewport. It has **Cited** and **Research ledger** views.
 
-Select the source control in the header to open the pane. Select **×** to close the pane and return to the report.
+Select **Session actions**, then **Research sources**, to open the pane. Select **×** to close the pane and return to the report.
 
 Select a report citation to open its source preview as a bottom sheet.
 
 ## Inspect traces on mobile
 
-Select **Session traces** in the header for the current session. For all projects on the selected backend, open the sidebar and select the **Trace explorer** icon button.
+Select **Session actions**, then **Session traces**, for the current session. For all projects on the selected backend, open the sidebar and select the **Trace explorer** icon button.
 
 ![Mobile trace view with the selected observation details](../assets/screenshots/trace-mobile.png)
 

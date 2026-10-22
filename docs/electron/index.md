@@ -17,8 +17,8 @@ Electron adds these functions:
 explorer as the browser app. The package includes the library and SQLite worker.
 No separate Elune server is needed. Traces stay on the selected backend.
 
-Dictation is not available in Electron. Use a compatible browser when you need
-dictation.
+Electron supports local speech models. Speech runs on this device. See the
+[dictation guide](../user-guide/dictation) to set up a model.
 
 See [Development](./development), [Packaging](./packaging),
 [Environment](./environment), and [Windows and state](./window-state).
