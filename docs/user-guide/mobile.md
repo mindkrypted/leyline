@@ -91,7 +91,9 @@ Tool targets can shorten to fit the row. User messages and tool cards use the fu
 
 Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
 
-Select a task to see its action ledger, then select a row to read the full entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger. The task list and reader scroll separately. **Copy full text** copies the open entry, and **Open child session** opens the complete transcript.
+Select a task to see its action ledger, then select a row to read the full entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger.
+
+Task details and the latest response use bounded scroll sections to keep space for **Activity**. Reader sections scroll below **Back to activity**, which stays visible. **Copy full text** copies the open entry, and **Open child session** opens the complete transcript.
 
 The current reader stays visible until the next task preview is ready. The task highlight, reader, and footer then change together without moving the sheet. Reduced motion removes the animation.
 

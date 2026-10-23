@@ -88,7 +88,9 @@ The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
 3. Select **Full task prompt** to read the original instructions.
 4. Select **Open child session** for the complete child transcript, when available.
 
-Each ledger row shows a short preview, a file or command when available, an outcome, and a text size. Thoughts, messages, and tool calls have separate rows.
+Separate chips show the agent, task status, and connection or saved-activity state beside **Full task prompt**. The inset card shows the latest response or thought. Select **Read full** to open its complete text.
+
+The **Activity** heading shows entry and tool-call counts. Each flat row has an icon, action, target or excerpt, outcome, and character count. Thoughts, messages, and tool calls have separate rows.
 
 The entry reader uses the same sheet. Messages have **Formatted** and **Source** views. Tool calls have **Output** and **Arguments** views. Arguments are unavailable when the original call was not recorded. **Copy full text** copies the entry text or the selected arguments. **Back to activity** restores your place in the ledger.
 

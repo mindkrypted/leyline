@@ -433,11 +433,11 @@ function exportSubagentRows(entry, task, active) {
   return rows
 }
 
-function renderExportSubagentRow(row, index) {
+function renderExportSubagentRow(row) {
   const size = row.text.length >= 1000 ? `${(row.text.length / 1000).toFixed(1)}k` : row.text.length
   return `<button class="subagent-ledger-row" type="button" data-subagent-tail-entry="${escapeHtml(row.key)}" data-subagent-open="${escapeHtml(row.key)}" title="${escapeHtml(row.title)}">
-<span class="subagent-ledger-action"><span class="subagent-ledger-number">${String(index + 1).padStart(2, '0')}<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3 3v10H4zM9 1.5v3h3M6 8h4m-4 3h4" /></svg></span>${row.action}</span>
-<span class="subagent-ledger-body"><span class="subagent-ledger-target">${escapeHtml(row.title)}</span>${row.excerpt ? `<span class="subagent-ledger-excerpt">${escapeHtml(row.excerpt)}</span>` : ''}</span>
+<span class="subagent-ledger-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.5h5l3 3v10H4zM9 1.5v3h3M6 8h4m-4 3h4" /></svg></span>
+<span class="subagent-ledger-body"><span class="subagent-ledger-line"><span class="subagent-ledger-action">${row.action}</span><span class="subagent-ledger-target">${escapeHtml(row.title)}</span></span>${row.excerpt ? `<span class="subagent-ledger-excerpt">${escapeHtml(row.excerpt)}</span>` : ''}</span>
 <span class="subagent-ledger-outcome"><span class="subagent-ledger-status status-${row.status}">${row.status === 'error' ? 'Failed' : 'Saved'}</span><span class="subagent-ledger-size">${size} chars</span></span>
 </button>`
 }
@@ -447,13 +447,15 @@ function renderExportSubagentReader(row) {
   const time = row.timestamp != null && !Number.isNaN(new Date(row.timestamp).getTime())
     ? new Date(row.timestamp).toLocaleTimeString() : ''
   return `<template data-subagent-entry-content="${escapeHtml(row.key)}" data-subagent-source="${row.source}"${row.source === 'message' ? ` data-subagent-message="${row.messageIndex}"` : ''} data-subagent-format="${raw ? 'raw' : 'formatted'}">
-<header class="subagent-entry-header">
 <div class="subagent-entry-nav"><button class="subagent-entry-back" type="button" data-subagent-back><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M14 8H2m5-5L2 8l5 5" /></svg>Back to activity</button><span>${row.text.length.toLocaleString()} chars · ${row.text.split('\n').length.toLocaleString()} lines</span></div>
+<div class="subagent-entry-sections">
+<header class="subagent-entry-header">
 <h3 class="subagent-entry-title">${escapeHtml(row.title)}</h3><div class="subagent-entry-meta"><span>${row.action}</span>${time ? `<span>${escapeHtml(time)}</span>` : ''}<span class="subagent-ledger-status status-${row.status}">${row.status === 'error' ? 'Failed' : 'Saved'}</span></div>
 </header>
 <nav class="subagent-entry-formats" aria-label="Content format"><button type="button" data-subagent-format="formatted" aria-pressed="${!raw}">Formatted</button><button type="button" data-subagent-format="raw" aria-pressed="${raw}">Source</button><button class="subagent-entry-copy" type="button" data-subagent-copy-text title="Copy full text" aria-label="Copy full text"><span aria-live="polite">Copy full text</span></button></nav>
 <div class="subagent-entry-scroll" tabindex="0" aria-label="Full entry content"><div class="subagent-inspector-output markdown-body"${raw ? ' hidden' : ''}>${renderMarkdown(row.text, { subagentExport: true })}</div><pre class="subagent-entry-raw"${raw ? '' : ' hidden'}></pre><p class="subagent-entry-end">End of entry. Full text retained.</p></div>
 <div class="subagent-entry-position"><span>Start of entry</span><button type="button" data-subagent-jump>Jump to end</button></div>
+</div>
 </template>`
 }
 
@@ -478,12 +480,13 @@ function renderExportSubagent(entry, index) {
     const latest = rows.findLast(row => ['message', 'result'].includes(row.kind))
     const prompt = task?.task ? exportSubagentRow('prompt', task.task, { kind: 'prompt', action: 'Task prompt', title: 'Full task prompt', status: 'saved', source: 'prompt' }) : null
     return `<template data-subagent-task-content="${taskIndex}">
-<div class="subagent-inspector-meta">${task ? `<span>Agent <code>${escapeHtml(task.agent)}</code></span>` : ''}${task?.research ? `<span>${escapeHtml(task.research.sources?.length || 0)} sources</span>` : ''}${status(task)}<span>Saved task output</span>${prompt ? '<button class="subagent-inspector-prompt" type="button" data-subagent-open="prompt">Full task prompt <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>' : ''}</div>
+<div class="subagent-inspector-meta">${task ? `<span class="subagent-inspector-agent"><span>Agent</span> <code>${escapeHtml(task.agent)}</code></span>` : ''}${task?.research ? `<span>${escapeHtml(task.research.sources?.length || 0)} sources</span>` : ''}${status(task)}<span>Saved task output</span>${prompt ? '<button class="subagent-inspector-prompt" type="button" data-subagent-open="prompt">Full task prompt <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>' : ''}</div>
 <template data-subagent-ledger><div class="subagent-ledger-overview">
-${latest ? `<section class="subagent-ledger-latest"><div class="subagent-ledger-latest-heading"><span>Latest agent response</span><button type="button" data-subagent-open="${escapeHtml(latest.key)}">Read full · ${latest.text.length.toLocaleString()} chars</button></div><h3>${escapeHtml(latest.title)}</h3>${latest.excerpt ? `<p>${escapeHtml(latest.excerpt)}</p>` : ''}</section>` : ''}
-<div class="subagent-ledger-labels"><span>Entry</span><span>Content / target</span><span>Outcome</span></div>
+<div class="subagent-ledger-summary" tabindex="0" aria-label="Latest activity">
+${latest ? `<section class="subagent-ledger-latest"><div class="subagent-ledger-latest-heading"><span><span class="subagent-ledger-latest-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.5h12v8H7l-3.5 3v-3H2z" /></svg></span>Latest response</span><button type="button" data-subagent-open="${escapeHtml(latest.key)}">Read full · ${latest.text.length.toLocaleString()} chars</button></div><h3>${escapeHtml(latest.title)}</h3>${latest.excerpt ? `<p>${escapeHtml(latest.excerpt)}</p>` : ''}</section>` : ''}
+</div>
+<div class="subagent-ledger-labels"><span class="subagent-ledger-activity-label">Activity</span><span>${rows.length} entries · ${rows.filter(row => row.kind === 'tool').length} calls</span><span class="subagent-ledger-read-hint">Select a row to read</span></div>
 <div class="subagent-ledger-scroll" tabindex="0" aria-label="Saved task output"><div class="subagent-ledger-rows">${rows.map(renderExportSubagentRow).join('')}${rows.length ? '' : `<p class="subagent-inspector-empty">${escapeHtml(task ? subagentEmptyText(key) : 'Individual task details are unavailable.')}</p>`}</div></div>
-<div class="subagent-ledger-hint"><span>${rows.length} ${rows.length === 1 ? 'entry' : 'entries'}</span><span>Select a row to read the full entry</span></div>
 </div></template>
 ${[...rows, ...(prompt ? [prompt] : [])].map(renderExportSubagentReader).join('')}
 </template>`
@@ -499,6 +502,7 @@ ${[...rows, ...(prompt ? [prompt] : [])].map(renderExportSubagentReader).join(''
 </button>
 </div>
 <template id="subagent-template-${index}">
+<div class="subagent-inspector-context" tabindex="0" aria-label="Task details">
 <header class="subagent-inspector-header">
 <div><p>${label}</p><h2 id="subagent-inspector-title">${escapeHtml(title)}</h2></div>
 ${tasks.length !== 1 ? summary : ''}
@@ -507,6 +511,7 @@ ${tasks.length !== 1 ? summary : ''}
 </header>
 ${tasks.length > 1 ? `<nav class="subagent-inspector-tasks" aria-label="Subagent tasks">${tasks.map((task, taskIndex) => `<button class="subagent-inspector-task" type="button" data-subagent-task="${taskIndex}" aria-pressed="${taskIndex === 0}" title="${escapeHtml(subagentTaskTitle(task, taskIndex))}"><span class="subagent-inspector-index">${taskIndex + 1}</span><span class="subagent-inspector-task-label">${escapeHtml(subagentTaskTitle(task, taskIndex))}</span>${status(task)}</button>`).join('')}</nav>` : ''}
 <div class="subagent-inspector-meta"></div>
+</div>
 <div class="subagent-inspector-reader-stack"><div class="subagent-inspector-content"></div></div>
 ${taskTemplates}
 <footer class="subagent-inspector-footer"><span>Child sessions are available in Leyline</span><span class="subagent-tail-following" data-subagent-reading>Saved task output</span></footer>
@@ -2374,11 +2379,21 @@ dialog.subagent-inspector:not([open]) {
   stroke-linejoin: round;
 }
 
+.subagent-inspector-context {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 45%;
+  overflow: auto;
+}
+
 .subagent-inspector-header {
   display: flex;
   flex: none;
   align-items: center;
   gap: 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
   padding: 15px 20px 13px;
 }
 
@@ -2420,12 +2435,12 @@ dialog.subagent-inspector:not([open]) {
   display: grid;
   flex: none;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 8px;
   padding: 0;
-  background: transparent;
+  background: #2b2b2f;
   color: #b0b1b9;
   cursor: pointer;
 }
@@ -2450,29 +2465,41 @@ dialog.subagent-inspector:not([open]) {
   color: #acb9af;
 }
 
+.subagent-ledger-status.status-completed {
+  background: rgb(172 185 175 / 12%);
+}
+
 .subagent-ledger-status.status-running {
+  background: rgb(176 162 244 / 13%);
   color: #b0a2f4;
 }
 
 .subagent-ledger-status.status-error,
 .subagent-ledger-status.status-failed {
+  background: rgb(216 138 150 / 12%);
   color: #d88a96;
 }
 
 .subagent-ledger-status.status-stopped {
+  background: rgb(198 173 131 / 12%);
   color: #c6ad83;
 }
 
-.subagent-ledger-status.status-unknown,
+.subagent-ledger-status.status-unknown {
+  border: 1px dashed #55555d;
+  color: #b0b1b9;
+}
+
 .subagent-ledger-status.status-saved {
+  background: rgb(255 255 255 / 5%);
   color: #93959f;
 }
 
 .subagent-inspector-tasks {
   position: relative;
   flex: 0 1 auto;
-  min-height: 0;
-  max-height: 31%;
+  min-height: 54px;
+  max-height: 240px;
   overflow: auto;
   border-bottom: 1px solid rgb(255 255 255 / 4.3%);
   padding: 0 12px 9px;
@@ -2542,7 +2569,7 @@ dialog.subagent-inspector:not([open]) {
 .subagent-inspector-reader-stack {
   position: relative;
   display: grid;
-  flex: 1;
+  flex: 1 0 min(300px, 60%);
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-width: 0;
@@ -2566,8 +2593,11 @@ dialog.subagent-inspector:not([open]) {
   overflow-wrap: anywhere;
 }
 
+.subagent-inspector-context,
 .subagent-inspector-tasks,
+.subagent-ledger-summary,
 .subagent-ledger-scroll,
+.subagent-entry-sections,
 .subagent-entry-scroll,
 .subagent-inspector-error {
   overscroll-behavior: contain;
@@ -2580,26 +2610,57 @@ dialog.subagent-inspector:not([open]) {
   flex: none;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 8px;
-  min-height: 34px;
-  padding: 8px 21px;
+  gap: 7px;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  padding: 11px 20px;
   background: #242427;
   color: #93959f;
   font-size: 11px;
 }
 
-.subagent-inspector-meta > span:first-child {
+.subagent-inspector-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+  min-height: 24px;
+  max-width: 100%;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: #2b2b2f;
   overflow-wrap: anywhere;
 }
 
+.subagent-inspector-agent > span {
+  flex: none;
+  white-space: nowrap;
+}
+
 .subagent-inspector-meta code {
-  color: #b0b1b9;
+  min-width: 0;
+  color: #e9e9ed;
   font-size: inherit;
+  font-weight: 400;
 }
 
 .subagent-inspector-meta .subagent-task-status {
   margin-left: 0;
+}
+
+.subagent-inspector-meta .subagent-task-status::before {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
+
+.subagent-inspector-meta .status-running {
+  border-color: rgb(176 162 244 / 32%);
+  background: rgb(176 162 244 / 13%);
+  color: #b0a2f4;
 }
 
 .subagent-inspector-prompt,
@@ -2623,6 +2684,16 @@ dialog.subagent-inspector:not([open]) {
   cursor: pointer;
 }
 
+.subagent-inspector-prompt,
+.subagent-ledger-latest-heading button {
+  border: 1px solid #3d3d44;
+  border-radius: 7px;
+  padding: 3px 12px;
+  background: #2b2b30;
+  color: #e9e9ed;
+  font-weight: 550;
+}
+
 .subagent-inspector-prompt {
   margin-left: auto;
   white-space: nowrap;
@@ -2642,33 +2713,63 @@ dialog.subagent-inspector:not([open]) {
   overflow: hidden;
 }
 
+.subagent-ledger-summary {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 .subagent-ledger-latest {
   flex: none;
-  border-bottom: 1px solid #37373b;
-  padding: 15px 22px 16px;
-  background: #242427;
+  margin: 14px 16px 8px;
+  border: 1px solid #3d3d44;
+  border-radius: 11px;
+  padding: 14px 16px 15px;
+  background: #26262b;
 }
 
 .subagent-ledger-latest-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 8px;
-  color: #93959f;
-  font-size: 11px;
-  font-weight: 500;
+  margin-bottom: 10px;
+  color: #e9e9ed;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 .subagent-ledger-latest-heading > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   min-width: 0;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+}
+
+.subagent-ledger-icon,
+.subagent-ledger-latest-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #3a3a41;
+  border-radius: 8px;
+  background: #26262b;
+  color: #b0b1b9;
+}
+
+.subagent-ledger-latest-icon {
+  border-color: rgb(176 162 244 / 32%);
+  background: rgb(176 162 244 / 13%);
+  color: #b0a2f4;
 }
 
 .subagent-ledger-latest-heading button {
+  min-height: 26px;
   margin-left: auto;
-  color: #c8c6d1;
+  font-size: 11.5px;
   white-space: nowrap;
 }
 
@@ -2677,10 +2778,10 @@ dialog.subagent-inspector:not([open]) {
   overflow: hidden;
   margin: 0 0 6px;
   color: #e9e9ed;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 550;
   letter-spacing: -0.012em;
-  line-height: 1.55;
+  line-height: 1.6;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -2692,40 +2793,49 @@ dialog.subagent-inspector:not([open]) {
   margin: 0;
   color: #b0b1b9;
   font-size: 13px;
-  line-height: 1.7;
+  line-height: 1.65;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.subagent-ledger-labels,
 .subagent-ledger-row {
   display: grid;
-  grid-template-columns: 61px minmax(0, 1fr) 72px;
-  gap: 8px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 11px;
 }
 
 .subagent-ledger-labels {
+  display: flex;
   flex: none;
-  border-bottom: 1px solid #303034;
-  padding: 9px 22px;
-  background: #1c1c1f;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0 16px;
+  border-bottom: 1px solid rgb(255 255 255 / 6%);
+  padding: 8px 6px 7px;
   color: #93959f;
   font-size: 11px;
-  letter-spacing: 0.02em;
 }
 
-.subagent-ledger-labels > span:last-child {
+.subagent-ledger-activity-label {
+  color: #b0b1b9;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.subagent-ledger-read-hint {
+  margin-left: auto;
   text-align: right;
 }
 
 .subagent-ledger-scroll {
-  flex: 1;
+  flex: 1 0 112px;
   min-width: 0;
-  min-height: 0;
+  min-height: 112px;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 0 12px 12px;
+  padding: 0 16px 12px;
 }
 
 .subagent-ledger-rows {
@@ -2737,9 +2847,9 @@ dialog.subagent-inspector:not([open]) {
   align-items: start;
   width: 100%;
   border: 1px solid transparent;
-  border-top-color: rgb(255 255 255 / 4.3%);
+  border-top-color: rgb(255 255 255 / 6%);
   border-radius: 0;
-  padding: 11px 9px;
+  padding: 11px 6px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -2804,38 +2914,20 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-ledger-action {
-  min-width: 0;
-  overflow: hidden;
-  padding-top: 2px;
+  margin-right: 8px;
   color: #93959f;
-  font-size: 11px;
-  line-height: 1.6;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subagent-ledger-number {
-  display: flex;
-  align-items: center;
-  gap: 9px;
   font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  line-height: 16px;
-}
-
-.subagent-ledger-number svg {
-  width: 11px;
-  height: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .subagent-ledger-body {
   min-width: 0;
 }
 
-.subagent-ledger-target {
+.subagent-ledger-line {
   display: -webkit-box;
   overflow: hidden;
-  color: #e9e9ed;
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -2843,12 +2935,18 @@ dialog.subagent-inspector:not([open]) {
   -webkit-line-clamp: 2;
 }
 
+.subagent-ledger-target {
+  color: #e9e9ed;
+  font-size: 13px;
+  font-weight: 520;
+}
+
 .subagent-ledger-excerpt {
   display: block;
   overflow: hidden;
   margin-top: 4px;
-  color: #b0b1b9;
-  font-size: 11px;
+  color: #93959f;
+  font-size: 12px;
   line-height: 1.6;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2878,10 +2976,12 @@ dialog.subagent-inspector:not([open]) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding-top: 3px;
+  min-height: 21px;
+  border-radius: 999px;
+  padding: 2px 8px;
   color: #93959f;
-  font-size: 10px;
-  line-height: 1.6;
+  font-size: 10.5px;
+  line-height: 1.4;
   white-space: nowrap;
 }
 
@@ -2919,46 +3019,34 @@ dialog.subagent-inspector:not([open]) {
 
 .subagent-ledger-size {
   display: block;
-  padding-top: 6px;
+  padding-top: 4px;
   color: #93959f;
-  font-size: 9px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.subagent-ledger-hint {
+.subagent-entry-sections {
   display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  border-top: 1px solid rgb(255 255 255 / 4.3%);
-  padding: 9px 21px;
-  color: #93959f;
-  font-size: 11px;
-}
-
-.subagent-ledger-hint > span:first-child {
-  flex: none;
-}
-
-.subagent-ledger-hint > span:last-child {
-  min-width: 0;
-  color: #b0b1b9;
-  text-align: right;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
 }
 
 .subagent-entry-header {
   flex: none;
-  padding: 12px 21px 14px;
+  padding: 0 21px 14px;
   background: #242427;
 }
 
 .subagent-entry-nav {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  padding: 12px 21px;
+  background: #242427;
   color: #93959f;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
@@ -3036,9 +3124,9 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-entry-scroll {
-  flex: 1;
+  flex: 1 0 96px;
   min-width: 0;
-  min-height: 0;
+  min-height: 96px;
   overflow: auto;
   padding: 21px 24px 30px;
   overflow-wrap: anywhere;
@@ -3316,7 +3404,7 @@ dialog.subagent-inspector:not([open]) {
   justify-content: space-between;
   gap: 10px;
   min-height: 46px;
-  border-top: 1px solid #37373b;
+  border-top: 1px solid rgb(255 255 255 / 7%);
   padding: 8px 20px;
   background: #242427;
   color: #93959f;
@@ -3366,7 +3454,7 @@ dialog.subagent-inspector:not([open]) {
   outline-offset: -2px;
 }
 
-.subagent-inspector :is(.subagent-ledger-scroll, .subagent-entry-scroll):focus-visible {
+.subagent-inspector :is(.subagent-inspector-context, .subagent-ledger-summary, .subagent-ledger-scroll, .subagent-entry-scroll):focus-visible {
   outline: 1px solid #bdb6cc;
   outline-offset: -1px;
 }
@@ -3418,6 +3506,7 @@ dialog.subagent-inspector[open] {
   }
 
   .subagent-inspector-header {
+    flex-wrap: wrap;
     gap: 4px;
     padding: 11px 16px 10px;
   }
@@ -3427,11 +3516,15 @@ dialog.subagent-inspector[open] {
   }
 
   .subagent-inspector-header .subagent-summary {
+    order: 1;
+    flex-basis: 100%;
+    justify-content: flex-start;
     gap: 2px 6px;
+    max-width: none;
   }
 
   .subagent-inspector-tasks {
-    max-height: 29%;
+    max-height: 142px;
     padding: 0 8px 9px;
   }
 
@@ -3452,69 +3545,43 @@ dialog.subagent-inspector[open] {
   }
 
   .subagent-inspector-meta {
-    padding: 6px 16px;
+    padding: 8px 16px;
   }
 
   .subagent-ledger-latest {
-    padding: 13px 16px;
+    margin: 12px 12px 6px;
+    padding: 12px;
   }
 
   .subagent-ledger-latest p {
     -webkit-line-clamp: 3;
   }
 
-  .subagent-ledger-labels,
-  .subagent-ledger-row {
-    grid-template-columns: 46px minmax(0, 1fr) 50px;
-    gap: 6px;
-  }
-
   .subagent-ledger-labels {
-    padding: 9px 16px;
+    margin: 0 12px;
+    padding: 8px 4px;
   }
 
-  .subagent-ledger-scroll {
-    padding: 0 8px 8px;
-  }
-
-  .subagent-ledger-row {
-    padding: 10px 7px;
-  }
-
-  .subagent-ledger-number {
-    gap: 6px;
-    font-size: 9px;
-    line-height: 15px;
-  }
-
-  .subagent-ledger-target {
-    font-size: 12px;
-  }
-
-  .subagent-ledger-outcome .subagent-ledger-status {
-    gap: 4px;
-    font-size: 9px;
-  }
-
-  .subagent-ledger-outcome .subagent-ledger-status svg {
+  .subagent-ledger-read-hint {
     display: none;
   }
 
-  .subagent-ledger-size {
-    font-size: 8px;
+  .subagent-ledger-scroll {
+    padding: 0 12px 8px;
   }
 
-  .subagent-ledger-hint {
-    padding: 9px 16px;
+  .subagent-ledger-row {
+    gap: 8px;
+    padding: 10px 4px;
   }
 
   .subagent-entry-header {
-    padding: 11px 16px 12px;
+    padding: 0 16px 12px;
   }
 
   .subagent-entry-nav {
     gap: 6px;
-    margin-bottom: 8px;
+    padding: 11px 16px 8px;
   }
 
   .subagent-entry-title {
@@ -3593,8 +3660,8 @@ dialog.subagent-inspector[open] {
   }
 
   .subagent-inspector-meta {
-    padding-top: 0;
-    padding-bottom: 0;
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
 
   .subagent-ledger-latest {

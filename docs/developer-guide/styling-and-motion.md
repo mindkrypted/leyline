@@ -52,7 +52,9 @@ Activity cards retain full message width and assistant-message colors. The colla
 
 The subagent inspector floats on the right, with a 700-pixel width cap and 16-pixel desktop margins. At 760 pixels or less, it becomes a full-width bottom sheet at roughly 90 percent of the available viewport height. Its bounded task list and reader scroll independently. Opening the inspector does not expand the transcript layout.
 
-The refined Graphite treatment uses `#242427` for chrome and `#1c1c1f` for the reading area. Task selection uses a flat neutral background. Action ledger rows use fine separators, without raised cards or inner shadows. Only the outer sheet has a shadow.
+The Contained Graphite treatment uses `#242427` for chrome and `#1c1c1f` for the reading area. Separate small chips show the agent, status, and connection state beside a neutral **Full task prompt** button. One neutral bordered inset card contains the latest response or thought, an icon, and **Read full**. A compact **Activity** heading shows entry and call counts.
+
+Task selection uses a flat neutral background. Ledger rows use small icon tiles, action labels, targets or excerpts, outcome pills, and secondary character counts. Keep rows flat with fine separators, without raised cards or inner shadows. Only the outer sheet has a shadow.
 
 Single-task inspectors use the task title directly, without a duplicate summary strip. Each ledger row shows an action, source-derived content or target, outcome, and character count. Full entries and the full task prompt open in the same sheet. The follow control stays in the footer. New output must not move a paused reader.
 

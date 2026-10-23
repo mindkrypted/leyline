@@ -110,11 +110,13 @@ The fixtures give every child an explicit `title`, separate from its full `task`
 
 The inspector helpers open a single-call Activity card from its header, check task titles, stopped outcomes, and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. Desktop captures show the ledger; mobile and export captures open a full result. The helpers wait for one active reader with no outgoing reader or footer layers. The export capture blocks the external preview renderer to verify that the inspector works offline.
 
-For task-switch layout changes, refresh only the five inspector images:
+For inspector layout changes, refresh only the five inspector images:
 
 ```bash
 DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,subagent-outcomes.png,subagent-inspector-mobile.png,subagent-inspector-export.png npm run docs:screenshots
 ```
+
+Check the Contained treatment: separate agent/status/connection chips, a neutral **Full task prompt** button, and one inset latest-response card with **Read full**. Ledger captures show the compact **Activity** counts and flat rows with icons, outcomes, and character counts. Reader captures show the intended entry title and **Back to activity** above the scroll sections. On mobile, check that task details and the latest card remain reachable without displacing the ledger or footer.
 
 PNG captures show the settled layout with reduced motion enabled. Use separate fixture-based visual checks with motion enabled for cold previews, overlapping reader transitions, and rapid task changes. Also check manual scrollback, reduced motion, and closure during a handoff. Do not infer smooth motion from a static capture.
 
@@ -205,7 +207,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Git review captures: `release-safety` with four sanitized changed files
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
-- Settled subagent captures: compact Activity rows and separate Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
+- Settled subagent captures: compact Activity rows and separate Contained Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
 - Live subagent captures: one running explorer, two reads and one search in the ledger, active verification output, and **Following live** in the footer
 - Sidebar child captures: an inset guide with hollow nodes, a fixed chevron gutter on every parent row, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview

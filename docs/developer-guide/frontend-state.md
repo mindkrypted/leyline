@@ -292,6 +292,8 @@ A changed branch or an assistant message after the cached anchor causes a rebase
 
 `SubagentInspector.vue` owns the full-entry reader, format, last-read marker, and scroll positions per task, entry, and format. **Back to activity** restores the ledger position. An open reader retains its entry if that entry leaves the preview tail. Scrolling up pauses following. **New output** and **Jump to latest** return to the tail. Live updates preserve task selection and manual scrollback.
 
+Task details and the latest-activity summary have bounded scroll containers that preserve space for the ledger. The reader keeps **Back to activity** outside `.subagent-entry-sections`, so it stays visible while the sections scroll. The `body` ref remains on the ledger or full-entry content for scroll tracking and restoration.
+
 `useModalFocus()` contains focus and restores the opener on close. Opening the subagent inspector pauses transcript auto-follow.
 
 Both the component and global Escape handlers call `dismissReader()` before closing the inspector. Escape returns from an entry reader to the ledger. From the ledger, Escape closes the inspector. The close button, backdrop, session or backend changes, selected-call removal, and new pending extension confirmations also close it. An existing pending confirmation prevents it from opening.
