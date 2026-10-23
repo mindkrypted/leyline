@@ -253,11 +253,7 @@ async function piApiHandler(req, res) {
         const body = await readJson(req)
         const handle = requireActiveHandle()
         await bashSession(handle, body.command, body.excludeFromContext, responseAbortSignal(res))
-        return json(res, {
-          ok: true,
-          active: activeSessionDto(handle),
-          detail: toActiveSessionDetailDto(handle),
-        })
+        return json(res, { ok: true, queued: true, active: activeSessionDto(handle) })
       }
   
       if (url.pathname === '/compact') {
@@ -704,11 +700,7 @@ async function piApiHandler(req, res) {
         }
         if (action === 'bash') {
           await bashSession(handle, body.command, body.excludeFromContext, responseAbortSignal(res))
-          return json(res, {
-            ok: true,
-            active: activeSessionDto(handle),
-            detail: toActiveSessionDetailDto(handle),
-          })
+          return json(res, { ok: true, queued: true, active: activeSessionDto(handle) })
         }
         if (action === 'compact') {
           await compactSession(handle, body.customInstructions)

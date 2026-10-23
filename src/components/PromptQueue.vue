@@ -223,7 +223,7 @@ defineExpose({ dismiss, closeOutside, hasDrafts, surfaceOpen: expanded })
             <span class="queue-number" aria-hidden="true">{{ index + 1 }}</span>
             <span class="queue-text" :title="item.text">{{ item.text || 'Image attachment' }}</span>
             <span v-if="item.imageCount" class="queue-images">{{ item.imageCount }} {{ item.imageCount === 1 ? 'image' : 'images' }}</span>
-            <span v-if="item.status === 'sending'" class="queue-sending" :title="boundaryTitle">Sending</span>
+            <span v-if="item.status === 'sending'" class="queue-sending" :title="item.shell ? 'Preparing the shell command. No agent reply is requested.' : boundaryTitle">Sending</span>
             <button v-else class="queue-icon" type="button" :disabled="busy" :aria-label="`Actions for queued message ${index + 1}`" :aria-expanded="menuId === item.id" title="Message actions" @click="menuId = menuId === item.id ? '' : item.id">
               <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3" cy="8" r=".7" /><circle cx="8" cy="8" r=".7" /><circle cx="13" cy="8" r=".7" /></svg>
             </button>
@@ -232,7 +232,7 @@ defineExpose({ dismiss, closeOutside, hasDrafts, surfaceOpen: expanded })
             <button type="button" :disabled="busy" @click="beginEdit(item)">Edit</button>
             <button type="button" :disabled="busy || index === 0 || items[index - 1]?.status === 'sending'" @click="request('move', { id: item.id, direction: 'up' })">Move up</button>
             <button type="button" :disabled="busy || index === items.length - 1 || items[index + 1]?.status === 'sending'" @click="request('move', { id: item.id, direction: 'down' })">Move down</button>
-            <button type="button" :disabled="busy || held || !!editor" :title="boundaryTitle" @click="request('steer', { id: item.id })">Steer now</button>
+            <button type="button" :disabled="busy || held || !!editor || item.shell" :title="item.shell ? 'Shell commands run in queue order' : boundaryTitle" @click="request('steer', { id: item.id })">Steer now</button>
             <button type="button" :disabled="busy || editor?.id === item.id" @click="request('remove', { id: item.id })">Remove</button>
           </div>
         </li>

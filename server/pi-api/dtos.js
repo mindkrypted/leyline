@@ -99,6 +99,8 @@ export function activeSessionStateDto(handle) {
       handle.pendingToolResults,
       handle.compactionActive === true,
     ),
+    isBashRunning: Boolean(handle.bashPromise || handle.runtime.session.isBashRunning),
+    bashExecution: handle.bashExecution ? { ...handle.bashExecution } : null,
     promptQueue: handle.promptQueue?.snapshot()
       || { revision: 0, held: false, error: '', items: [] },
   }

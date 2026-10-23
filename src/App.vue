@@ -200,7 +200,6 @@ let reviewDesktopQuery = null
 let reviewExpansionTimer = null
 const promptSubmitting = ref(false)
 const manualCompactionSessions = ref(new Set())
-const shellRunningSessions = ref(new Set())
 const interrupting = ref(false)
 const activityInterruptingSessionId = ref('')
 const activityActionError = ref('')
@@ -401,7 +400,6 @@ const {
 } = workbenchScroll
 const liveTurn = useLiveTurnProjection({ onIntent: handleLiveTurnIntent })
 const {
-  addTool: upsertLiveTool,
   agentRunning,
   beginUserTurn,
   clearLiveOutput,
@@ -409,7 +407,6 @@ const {
   compactingContext,
   dispose: disposeLiveTurn,
   entries,
-  finishTools: finishLiveTools,
   liveActivity,
   liveItems,
   liveTurnActive,
@@ -993,10 +990,7 @@ const {
     if (activeSession.id && activeSession.cwd) {
       runtimeCwdBySessionId.set(activeSession.id, activeSession.cwd)
     }
-    updateRuntimeSessionSnapshot(activeSession)
-    if (activeSession.id === selectedSessionId.value) {
-      activeRuntimeSession.value = activeSession
-    }
+    applyQueueSnapshot(activeSession)
     appendRuntimeEvent({
       type: 'active_session',
       summary: projectName(activeSession.cwd),
@@ -1179,7 +1173,7 @@ const canToggleEmptySessionResearch = computed(() => {
 })
 const composerCompacting = computed(() => compactingContext.value
   || manualCompactionSessions.value.has(selectedSessionId.value))
-const composerShellRunning = computed(() => shellRunningSessions.value.has(selectedSessionId.value))
+const composerShellRunning = computed(() => composerRuntime.value?.state?.isBashRunning === true)
 const sendButtonLabel = computed(() => {
   if (promptSubmitting.value || sessionActivating.value) return '…'
   if (shellModeDraft.value) return 'Run'
@@ -1582,6 +1576,8 @@ function patchEntryFeedback(entryId, label, feedbackText = '') {
 
 function applyQueueSnapshot(session) {
   if (!session) return
+  if (session.id === activeRuntimeSession.value?.id
+    && session.snapshotRevision < activeRuntimeSession.value.snapshotRevision) return
   updateRuntimeSessionSnapshot(session)
   if (session.id === selectedSessionId.value) activeRuntimeSession.value = session
 }
@@ -2299,7 +2295,7 @@ function runtimeCwd(sessionId) {
 }
 
 function runtimeEventSettled(event) {
-  return ['agent_end', 'error', 'aborted'].includes(event?.type)
+  return ['agent_end', 'error', 'aborted', 'bash_execution_end'].includes(event?.type)
 }
 
 function collapseReviewExpanded() {
@@ -3095,7 +3091,7 @@ async function submitDraft(streamingBehavior) {
     return
   }
 
-  if (!editingEntry.value && (agentRunning.value || composerCompacting.value
+  if (!editingEntry.value && (agentRunning.value || composerShellRunning.value || composerCompacting.value
     || reloadingSession.value || switchingModel.value || switchingUltrafast.value
     || promptQueue.value.held || promptQueue.value.items.length)) {
     const sessionId = selectedSessionId.value
@@ -3112,7 +3108,7 @@ async function submitDraft(streamingBehavior) {
         streamingBehavior || 'followUp',
       )
       if (data.active && selectedSessionId.value === sessionId) {
-        activeRuntimeSession.value = data.active
+        applyQueueSnapshot(data.active)
       }
     } catch (error) {
       if (selectedSessionId.value === sessionId) {
@@ -3200,7 +3196,7 @@ async function submitDraft(streamingBehavior) {
       )
     if (editing) completeComposerEdit(composerDraftKey(sessionId), editing)
     if (selectedSessionId.value === sessionId) {
-      if (data.active) activeRuntimeSession.value = data.active
+      if (data.active) applyQueueSnapshot(data.active)
       if (initializesResearchSession) emptySessionKind.value = 'session'
       if (isHandledSlashCommand(text) || data.queued) {
         removeOptimisticEntry(localEntry, data.queued === true)
@@ -3316,20 +3312,11 @@ async function submitShellCommand(shellCommand, images) {
   }
 
   const sessionId = selectedSessionId.value
-  if (shellRunningSessions.value.has(sessionId)) return
   const submittedDraft = draft.value
-  shellRunningSessions.value = new Set([...shellRunningSessions.value, sessionId])
+  promptSubmitting.value = true
   promptError.value = ''
   draft.value = ''
-  if (!agentRunning.value && !composerCompacting.value) resetLiveState()
   refocusComposer()
-  upsertLiveTool({
-    type: 'tool_execution_start',
-    toolName: 'bash',
-    args: { command: shellCommand.command },
-  }, 'running')
-
-  const shellCwd = settingsCwd.value
   try {
     const data = await runShellCommand(
       sessionId,
@@ -3337,25 +3324,17 @@ async function submitShellCommand(shellCommand, images) {
       shellCommand.excludeFromContext,
     )
     if (data.active && selectedSessionId.value === sessionId) {
-      activeRuntimeSession.value = data.active
+      applyQueueSnapshot(data.active)
       emptySessionKind.value = 'session'
     }
-    if (data.detail && selectedSessionId.value === sessionId) {
-      sessionDetail.value = data.detail
-    }
-    await loadSessions({ selectFirst: false, showLoading: false })
-    if (selectedSessionId.value === sessionId) await scrollToLatest()
   } catch (error) {
     if (selectedSessionId.value === sessionId) {
-      finishLiveTools('error')
       if (!draft.value && !attachedImages.value.length) draft.value = submittedDraft
       promptError.value = error.message
     }
   } finally {
-    invalidateReview(shellCwd)
-    const running = new Set(shellRunningSessions.value)
-    running.delete(sessionId)
-    shellRunningSessions.value = running
+    promptSubmitting.value = false
+    refocusComposer()
   }
 }
 

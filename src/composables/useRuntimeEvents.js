@@ -4,6 +4,7 @@ import { openEventSocket } from '../lib/event-socket'
 const transientRuntimeEventTypes = new Set([
   'message_update',
   'tool_execution_update',
+  'bash_execution_update',
 ])
 
 export function useRuntimeEvents({

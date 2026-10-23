@@ -191,14 +191,13 @@ const sendMenuOpen = ref(false)
 const queueUiOpen = computed(() => sendMenuOpen.value || Boolean(queue.value?.surfaceOpen))
 const shellMode = computed(() => props.draft.trimStart().startsWith('!'))
 const hiddenShellMode = computed(() => props.draft.trimStart().startsWith('!!'))
-const queueMode = computed(() => !shellMode.value && !props.editingLabel
-  && (props.agentRunning || props.compacting || props.reloadingSession
+const queueMode = computed(() => !props.editingLabel
+  && (props.agentRunning || props.shellRunning || props.compacting || props.reloadingSession
     || props.switchingModel || props.switchingUltrafast
     || props.promptQueue?.held || props.promptQueue?.items?.length > 0))
 const submitDisabled = computed(() => props.dictationSubmitting
   || (props.promptSubmitting && (!props.compacting || props.editingLabel))
   || !props.canSubmitDraft
-  || (props.shellRunning && shellMode.value)
   || (props.reloadingSession && Boolean(props.editingLabel)))
 const shellModeLabel = computed(() => {
   return hiddenShellMode.value ? 'shell · hidden' : 'shell · context'
@@ -527,8 +526,8 @@ async function insertNewline() {
               <button type="button" :disabled="submitDisabled" @click="submitFromMenu('followUp')"><span>Queue next task</span><kbd>Enter</kbd></button>
               <button
                 type="button"
-                :disabled="submitDisabled || promptQueue.held"
-                :title="promptQueue.held ? 'Resume the queue before steering' : 'Deliver at the agent’s next input boundary'"
+                :disabled="submitDisabled || promptQueue.held || shellMode || shellRunning"
+                :title="shellMode || shellRunning ? 'Shell commands run in queue order' : promptQueue.held ? 'Resume the queue before steering' : 'Deliver at the agent’s next input boundary'"
                 @click="submitFromMenu('steer')"
               ><span>Steer current run</span><kbd>Option+Enter</kbd></button>
             </div>
