@@ -127,6 +127,14 @@ Use **Add to message** for images, a new line, or research mode when available.
 
 Open **Session details** through **Session actions** for enabled tools, context usage, and terminal access.
 
+### Read composer issues
+
+The **1 issue** chip appears in a separate row above the mobile controls. Select it to read the full error, then select **Dismiss**. You can also select **×** on the chip.
+
+![Mobile composer issue details with a Dismiss control above the retained draft and settings capsule](../assets/screenshots/composer-issue-mobile.png)
+
+Dismissing the notice keeps your draft and attachments. If Send remains blocked, select **Details** beside **Send unavailable**. See [Composer issues](./composer#read-and-dismiss-an-issue).
+
 ## Open research sources
 
 A [deep research](./deep-research) source pane opens across the full viewport. It has **Cited** and **Research ledger** views.

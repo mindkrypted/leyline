@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import ComposerIssue from './ComposerIssue.vue'
 import DictationStatus from './DictationStatus.vue'
 import ModelPicker from './ModelPicker.vue'
 import MobileComposerControls from './MobileComposerControls.vue'
@@ -49,6 +50,7 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  issue: { type: Object, default: null },
   visionDelegationNotice: {
     type: String,
     default: '',
@@ -119,6 +121,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits([
+  'dismiss-issue',
   'composition-start',
   'composition-end',
   'input-blur',
@@ -144,6 +147,8 @@ const emit = defineEmits([
 
 const form = ref(null)
 const textarea = ref(null)
+const issueControl = ref(null)
+const issueDetailsOpen = computed(() => Boolean(issueControl.value?.opened))
 const mobileControls = ref(null)
 const mobileSheetOpen = ref(false)
 useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
@@ -269,6 +274,14 @@ function dismissMobileSheet() {
   return mobileControls.value?.dismiss() || false
 }
 
+function dismissIssueDetails() {
+  return issueControl.value?.dismissDetails() || false
+}
+
+function closePopovers(event) {
+  issueControl.value?.closeOutside(event)
+}
+
 function openMobileDetails(event) {
   mobileControls.value?.open('details', event)
 }
@@ -289,7 +302,7 @@ async function restoreSelection(input, value, caret, valid, restoreFocus) {
   input.setSelectionRange(caret, caret)
 }
 
-defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileSheetOpen, dismissMobileSheet, openMobileDetails })
+defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileSheetOpen, dismissMobileSheet, openMobileDetails, issueDetailsOpen, dismissIssueDetails, closePopovers })
 </script>
 
 <template>
@@ -367,16 +380,18 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
     </div>
     </Transition>
     <Transition name="composer-reveal">
-      <div v-if="imageSupportWarning" class="composer-error">
-        {{ imageSupportWarning }}
-      </div>
-    </Transition>
-    <Transition name="composer-reveal">
       <div v-if="visionDelegationNotice" class="composer-notice">{{ visionDelegationNotice }}</div>
     </Transition>
     <DictationStatus :dictation="dictation" />
     <div class="start-composer-bar">
       <div class="composer-primary-row">
+        <ComposerIssue
+          ref="issueControl"
+          :issue="issue"
+          :blocking-message="imageSupportWarning"
+          @dismiss="emit('dismiss-issue', $event); focus()"
+          @focus-composer="focus"
+        />
         <div class="composer-row-spacer"></div>
         <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
           <MobileComposerControls

@@ -223,6 +223,24 @@ The capture disables remaining motion.
 
 The script blocks unrecognized `/api/` requests instead of sending them to a live backend. Before capture, it checks visible text and form values for home paths, usernames, repository paths, email addresses, and common credential prefixes.
 
+## Composer issue captures
+
+Refresh the composer issue images with:
+
+```bash
+DOCS_SCREENSHOT_FILTER=composer-issue.png,composer-issue-mobile.png,composer-send-unavailable.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `composer-issue.png` | Desktop issue chip and open details, with the full error message and Dismiss control. |
+| `composer-issue-mobile.png` | The same error above the mobile composer controls. |
+| `composer-send-unavailable.png` | A dismissed image warning with the attachment retained, Send disabled, and **Send unavailable** details accessible. |
+
+Desktop captures use a 1440 by 900 CSS-pixel viewport and crop to the composer and open details. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2 and the `local/minimax-m2.7` fixture.
+
+The helper sends a synthetic extension error through the mock runtime WebSocket. The image-warning fixture has no vision model and uses the real attachment chooser. Checks confirm that dismissal retains the draft, attachment, and disabled Send state. No provider request or configuration change reaches a backend.
+
 ## Dictation captures
 
 Refresh the dictation images with:

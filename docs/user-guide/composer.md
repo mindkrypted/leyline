@@ -64,6 +64,21 @@ The hold applies only to unsent tasks, not inputs under **Sent to agent**.
 
 **Escape** closes an open menu, tray, drawer, dialog, preview, or edit mode first. With no open surface, **Escape** stops the active run.
 
+## Read and dismiss an issue
+
+Errors appear as a **1 issue** chip in the composer. The same control is available on Home.
+
+1. Select **1 issue** to read the full error message.
+2. Select **Dismiss**, or **×** on the chip, to hide the notice.
+
+![Composer issue chip with the full error message and Dismiss control open](../assets/screenshots/composer-issue.png)
+
+Dismissing a notice does not retry a request, stop a run, or change your draft and attachments. A new failure shows the chip again. **Escape** closes the details before it can stop an active run.
+
+If an image requirement still blocks Send, **Send unavailable** remains visible. Select **Details** to read the requirement. Correct the problem before you send the draft.
+
+![Dismissed image warning with Send unavailable, the retained attachment, and a disabled send arrow](../assets/screenshots/composer-send-unavailable.png)
+
 ## Run shell commands
 
 ![Composer in hidden shell mode with shell tool context labels in the transcript](../assets/screenshots/composer-shell.png)

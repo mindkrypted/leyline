@@ -230,6 +230,8 @@ const toolsPickerOpen = ref(false)
 const slashActiveIndex = ref(0)
 const slashPickerDismissed = ref(false)
 const promptError = ref('')
+const dismissedConnectionIssueId = ref('')
+const dismissedImageIssueId = ref('')
 const composerScannerSettling = ref(false)
 const composerCommitPulse = ref(false)
 const vFocusSelect = {
@@ -981,6 +983,7 @@ const {
   eventLog,
   eventStreamConnected,
   eventStreamError,
+  eventStreamErrorRevision,
   openEventStream,
   runtimeEvents,
   setEventSessionId,
@@ -1129,6 +1132,39 @@ const imageSupportWarning = computed(() => {
   if (visionConfigData.value?.model) return ''
   return `${modelChip(model)} does not support images and no vision model is configured. Open Settings → Agent defaults to set a default vision model.`
 })
+const composerIssueScope = computed(() => JSON.stringify([
+  activeBackendConnectionId.value,
+  selectedSessionId.value || newSessionCwd.value,
+]))
+const imageComposerIssue = computed(() => {
+  const message = imageSupportWarning.value
+  const id = JSON.stringify([composerIssueScope.value, 'image', message])
+  return message && id !== dismissedImageIssueId.value ? { id, kind: 'image', message } : null
+})
+const composerIssue = computed(() => {
+  if (promptError.value) {
+    return { id: `${composerIssueScope.value}:prompt`, kind: 'prompt', message: promptError.value }
+  }
+  if (eventStreamError.value) {
+    const id = JSON.stringify([composerIssueScope.value, 'connection', eventStreamErrorRevision.value])
+    if (id !== dismissedConnectionIssueId.value) {
+      return { id, kind: 'connection', message: eventStreamError.value }
+    }
+  }
+  return imageComposerIssue.value
+})
+watch(imageSupportWarning, () => { dismissedImageIssueId.value = '' }, { flush: 'sync' })
+
+function dismissComposerIssue(issue) {
+  if (issue.kind === 'prompt' && issue.id === composerIssue.value?.id && issue.message === promptError.value) {
+    promptError.value = ''
+  } else if (issue.kind === 'connection' && issue.id === composerIssue.value?.id) {
+    dismissedConnectionIssueId.value = issue.id
+  } else if (issue.kind === 'image' && issue.id === imageComposerIssue.value?.id) {
+    dismissedImageIssueId.value = issue.id
+  }
+}
+
 const visionDelegationNotice = computed(() => {
   if (shellModeDraft.value || !attachedImages.value.length) return ''
   const model = composerRuntime.value?.state?.model
@@ -3864,6 +3900,8 @@ function handleGlobalKeydown(event) {
 function anyEscapeTargetOpen(ignoreQueue = false, ignoreEditing = false) {
   return Boolean(
     mobileComposerSheetOpen.value
+    || startComposerRef.value?.issueDetailsOpen
+    || composerRef.value?.issueDetailsOpen
     || (!ignoreQueue && composerRef.value?.queueUiOpen)
     || fullscreenImage.value
     || fullscreenTool.value
@@ -3951,6 +3989,15 @@ function handleEscape(event) {
     event?.stopPropagation?.()
     return
   }
+  const issueCovered = eventLogOpen.value || sessionDetailsOpen.value || projectDetailCwd.value
+    || memoryOpen.value || researchSourcesOpen.value || systemPromptEntry.value
+    || researchCitationPreview.value || (reviewPaneExpanded.value && window.innerWidth > 1120)
+  if (!issueCovered
+    && (startComposerRef.value?.dismissIssueDetails() || composerRef.value?.dismissIssueDetails())) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    return
+  }
   if (!anyEscapeTargetOpen(true) && composerRef.value?.dismissQueue?.()) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
@@ -4016,6 +4063,7 @@ function closeMenusOnOutsideClick(event) {
   if (!event.target.closest('.topbar-meta')) headerMoreOpen.value = false
   if (!event.target.closest('.terminal-header, .terminal-keys')) terminalKeysOpen.value = false
   composerRef.value?.closePopovers?.(event)
+  startComposerRef.value?.closePopovers?.(event)
   if (event.target.closest('.project-browser-modal')) return
   if (event.target.closest('.model-picker')) return
   if (event.target.closest('.start-project-button, .start-project-menu')) return
@@ -4913,6 +4961,7 @@ function closePickerMenus() {
             :current-model-label="startupDraftSnapshot?.modelLabel || currentModelLabel"
             :current-thinking-label="startupDraftSnapshot?.thinkingLabel || currentThinkingLabel"
             :image-support-warning="imageSupportWarning"
+            :issue="imageComposerIssue"
             :vision-delegation-notice="visionDelegationNotice"
             :model-key="modelKey"
             :model-picker-open="modelPickerOpen"
@@ -4940,6 +4989,7 @@ function closePickerMenus() {
             :tool-names="activeToolNames"
             :tools-chip-label="toolsChipLabel"
             :tools-picker-open="toolsPickerOpen"
+            @dismiss-issue="dismissComposerIssue"
             @keydown="handleStartComposerKeydown"
             @composition-start="handleComposerCompositionStart"
             @composition-end="handleComposerCompositionEnd"
@@ -4991,7 +5041,8 @@ function closePickerMenus() {
             :context-usage-percent="contextUsagePercent"
             :context-usage-title="contextUsageTitle"
             :editing-label="editingLabel"
-            :error="promptError || eventStreamError || imageSupportWarning"
+            :issue="composerIssue"
+            :image-support-warning="imageSupportWarning"
             :vision-delegation-notice="visionDelegationNotice"
             :interrupting="interrupting"
             :class="{
@@ -5030,6 +5081,7 @@ function closePickerMenus() {
             :ultrafast-available="ultrafastAvailable"
             :ultrafast-enabled="ultrafastEnabled"
             @cancel-edit="cancelEditingEntry"
+            @dismiss-issue="dismissComposerIssue"
             @interrupt="interruptAgent"
             @keydown="handleComposerKeydown"
             @composition-start="handleComposerCompositionStart"

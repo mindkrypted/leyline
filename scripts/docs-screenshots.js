@@ -1140,6 +1140,9 @@ const allowedNames = new Set([
   ...networkAssetNames,
   ...subagentAssetNames,
   'tool-activity.png',
+  'composer-issue.png',
+  'composer-issue-mobile.png',
+  'composer-send-unavailable.png',
   'dictation.png',
   'dictation-settings.png',
   'dictation-mobile.png',
@@ -1611,6 +1614,33 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'composer-issue.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    interact: openComposerIssue,
+    clipSelectors: ['.composer', '.composer-issue-popover'],
+    padding: 18,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'composer-issue-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-model-control',
+    viewport: { width: 390, height: 844 },
+    interact: openComposerIssue,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'composer-send-unavailable.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'composer-blocked',
+    interact: dismissComposerImageIssue,
+    clipSelectors: ['.composer'],
+    padding: 18,
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'composer-queue.png'),
     route: '/sessions/demo-session',
     ready: '.queue-toggle',
@@ -1996,6 +2026,48 @@ try {
 }
 
 console.log('Screenshot capture complete')
+
+async function openComposerIssue(page) {
+  const draft = 'Review the release checklist and keep the current layout.'
+  const message = 'Request failed (502): Bad Gateway.\nThe provider is temporarily unavailable.'
+  const input = page.locator('.composer textarea')
+  await input.fill(draft)
+  await page.waitForFunction(() => window.__docsEventSockets.some(socket => {
+    return socket.readyState === 1 && new URL(socket.url).searchParams.get('sessionId') === 'demo-session'
+  }))
+  await page.evaluate(message => {
+    const socket = window.__docsEventSockets.find(socket => {
+      return socket.readyState === 1 && new URL(socket.url).searchParams.get('sessionId') === 'demo-session'
+    })
+    socket.emit({ type: 'extension_error', data: { activeSessionId: 'demo-session', error: { name: 'Error', message } } })
+  }, message)
+  await page.getByRole('button', { name: '1 composer issue. Show details', exact: true }).click()
+  const popover = page.getByRole('dialog', { name: 'Composer issue', exact: true })
+  await popover.waitFor()
+  await popover.getByRole('button', { name: 'Dismiss', exact: true }).waitFor()
+  if (await popover.locator('.composer-issue-message').textContent() !== message
+    || await input.inputValue() !== draft) throw new Error('Composer issue capture lost its message or draft')
+}
+
+async function dismissComposerImageIssue(page) {
+  const draft = 'Review the attached release checklist.'
+  const input = page.locator('.composer textarea')
+  await input.fill(draft)
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Add image', exact: true }).click()
+  await (await chooser).setFiles({
+    name: 'release-check.webp',
+    mimeType: visionAlertImage.mimeType,
+    buffer: Buffer.from(visionAlertImage.data, 'base64'),
+  })
+  await page.waitForFunction(() => document.querySelector('.composer-issue-live')?.textContent.includes('no vision model is configured'))
+  await page.getByRole('button', { name: 'Dismiss composer issue', exact: true }).click()
+  await page.getByRole('button', { name: 'Send unavailable Details', exact: true }).waitFor()
+  if (!await page.locator('.composer .send-button').isDisabled()
+    || await input.inputValue() !== draft || await page.locator('.attachment-chip').count() !== 1) {
+    throw new Error('Composer dismissal changed the image requirement, draft, or attachment')
+  }
+}
 
 async function startDictationCapture(page) {
   await page.locator('.dictation-button[aria-label^="Start local dictation"]').click()
@@ -2821,7 +2893,15 @@ async function capture({
     if (key === 'GET /api/pi/memories') return json(memoryPayload)
     if (key === 'GET /api/pi/subagents') return json(subagentPayload)
     if (key === 'GET /api/pi/vision/config') {
-      return json(visionConfigPayload(url.searchParams.has('sessionPath')))
+      const config = visionConfigPayload(url.searchParams.has('sessionPath'))
+      return json(scenario === 'composer-blocked' ? {
+        ...config,
+        overrides: {},
+        model: null,
+        modelSource: 'default',
+        thinking: '',
+        thinkingSource: 'default',
+      } : config)
     }
     if (key === `GET /api/pi/sessions/${runtime.id}/export`) {
       const html = await renderSessionExportHtml(detail)

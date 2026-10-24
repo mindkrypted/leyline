@@ -18,6 +18,7 @@ export function useRuntimeEvents({
 } = {}) {
   const runtimeEvents = ref([])
   const eventStreamError = ref('')
+  const eventStreamErrorRevision = ref(0)
   const eventStreamConnected = ref(false)
   const eventLog = computed(() =>
     [...runtimeEvents.value]
@@ -55,14 +56,17 @@ export function useRuntimeEvents({
         }
       },
       onDisconnect() {
+        const message = 'Runtime event stream disconnected'
+        if (eventStreamError.value !== message) eventStreamErrorRevision.value++
         eventStreamConnected.value = false
-        eventStreamError.value = 'Runtime event stream disconnected'
+        eventStreamError.value = message
         appendRuntimeEvent({ type: 'disconnected' })
         console.warn('pi event stream disconnected')
       },
       onError(error) {
         const message = `Invalid runtime event: ${error.message}`
         eventStreamError.value = message
+        eventStreamErrorRevision.value++
         appendRuntimeEvent({ type: 'error', message })
       },
     })
@@ -122,6 +126,7 @@ export function useRuntimeEvents({
     eventLog,
     eventStreamConnected,
     eventStreamError,
+    eventStreamErrorRevision,
     openEventStream,
     runtimeEvents,
     setEventSessionId,
