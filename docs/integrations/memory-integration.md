@@ -20,11 +20,13 @@ The `memories` table uses three scopes:
 
 Leyline finds the nearest parent directory that contains `.git`. If it finds no Git root, it uses the current working directory. It derives project and session IDs from SHA-256 hashes of canonical paths.
 
-Other modules use the same database for `backend_connections`, `leyline_settings`, `subagent_overrides`, `vision_overrides`, and `rollout_feedback`. Tables appear when their owning modules initialize storage.
+Other modules use the same database for `backend_connections`, `leyline_settings`, `subagent_overrides`, `subagent_batch_overrides`, `vision_overrides`, and `rollout_feedback`. Tables appear when their owning modules initialize storage.
 
 Display preferences and saved connections use the native app backend's database. Memory, file-editor settings, feedback, and agent overrides use the selected backend's database. A global memory or override applies to that backend, not every saved connection.
 
 Agent defaults, Project settings, and Session details edit global, project, and session subagent/vision overrides. These controls share `AgentSettings.vue`. They are no longer separate Subagents or Vision drawers. The Memory Inspector remains a separate surface.
+
+Subagent batch size has only global and session scopes. `leyline_settings` stores the global `subagents.batch_size` value. `subagent_batch_overrides` stores session values. See [Batch configuration](./subagents#batch-scheduling-and-configuration).
 
 Pi provider/model overrides in `models.json` are different from Leyline's subagent and vision overrides. Pi owns global provider, MCP, and credential files outside SQLite. See [Pi configuration storage](../reference/environment#pi-configuration-storage).
 

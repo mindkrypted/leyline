@@ -145,6 +145,7 @@ export default function researchExtension(pi: ExtensionAPI) {
   let active = false;
   let sessionId = "";
   let toolRegistered = false;
+  const subagentThreads = new Map<string, string[]>();
 
   function updateUi(ctx?: ExtensionContext) {
     if (!ctx) return;
@@ -159,6 +160,7 @@ export default function researchExtension(pi: ExtensionAPI) {
   }
 
   function restore(ctx: ExtensionContext) {
+    subagentThreads.clear();
     sessionId = ctx.sessionManager.getSessionId();
     state = researchStateFromEntries(ctx.sessionManager.getBranch(), sessionId);
     active = Boolean(state);
@@ -262,7 +264,7 @@ export default function researchExtension(pi: ExtensionAPI) {
     return ` Mismatched examples:${samples}.`;
   }
 
-  function processSubagentDetails(value: unknown, ctx?: ExtensionContext) {
+  function processSubagentDetails(value: unknown, toolCallId: string, ctx?: ExtensionContext) {
     if (!state || !isObject(value)) return;
     const details = isObject(value.details) ? value.details : value;
     const results = Array.isArray(details.results) ? details.results : [];
@@ -272,6 +274,7 @@ export default function researchExtension(pi: ExtensionAPI) {
       const threadId = String(
         research.threadId
           || threadIdFromTask(result.task)
+          || subagentThreads.get(toolCallId)?.[index]
           || state?.threads[index]?.id
           || `T${index + 1}`,
       );
@@ -356,6 +359,7 @@ export default function researchExtension(pi: ExtensionAPI) {
 
       if (params.action === "plan") {
         if (!params.threads?.length) throw new Error("plan requires threads");
+        subagentThreads.clear();
         persist({
           kind: "plan",
           strategy: params.strategy || "",
@@ -414,31 +418,57 @@ export default function researchExtension(pi: ExtensionAPI) {
 
   pi.on("tool_execution_start", async (event, ctx) => {
     if (!active || !state || state.status !== "running" || event.toolName !== "subagent") return;
-    const tasks = Array.isArray(event.args?.tasks) ? event.args.tasks : [];
+    const args = event.args;
+    const mode = args?.mode || (args?.tasks?.length ? "parallel" : args?.chain?.length ? "chain" : "single");
+    const tasks = mode === "single" ? [args] : mode === "parallel" && Array.isArray(args?.tasks) ? args.tasks : [];
     if (!tasks.length) return;
     persistPhase("gather", {}, ctx);
+    const reserved = new Set([...subagentThreads.values()].flat());
+    const ids: string[] = [];
+    subagentThreads.set(event.toolCallId, ids);
     tasks.forEach((task, index) => {
-      const planned = state?.threads[index];
-      const id = threadIdFromTask(task?.task) || planned?.id || `T${index + 1}`;
+      const planned = state?.threads.find((thread) => !reserved.has(thread.id)
+        && (thread.task === task?.task || thread.title === task?.title))
+        || state?.threads.find((thread) => thread.status === "queued" && !reserved.has(thread.id));
+      let id = threadIdFromTask(task?.task) || planned?.id || `T${index + 1}`;
+      if (!threadIdFromTask(task?.task) && !planned) {
+        let next = 1;
+        while (state?.threads.some((thread) => thread.id === `T${next}`)) next++;
+        id = `T${next}`;
+      }
+      ids.push(id);
+      reserved.add(id);
+      const current = state?.threads.find((thread) => thread.id === id);
       persistThread({
-        ...planned,
+        ...current,
         id,
-        title: planned?.title || String(task?.title || task?.task || id),
-        task: planned?.task || String(task?.task || ""),
-        status: index < 4 ? "running" : "queued",
-        startedAt: index < 4 ? Date.now() : 0,
+        title: current?.title || String(task?.title || task?.task || id),
+        task: current?.task || String(task?.task || ""),
+        status: "queued",
+        startedAt: 0,
       }, ctx);
     });
   });
 
   pi.on("tool_execution_update", async (event, ctx) => {
     if (!active || !state || state.status !== "running" || event.toolName !== "subagent") return;
-    processSubagentDetails(event.partialResult, ctx);
+    processSubagentDetails(event.partialResult, event.toolCallId, ctx);
   });
 
   pi.on("tool_execution_end", async (event, ctx) => {
     if (!active || !state || state.status !== "running" || event.toolName !== "subagent") return;
-    processSubagentDetails(event.result, ctx);
+    processSubagentDetails(event.result, event.toolCallId, ctx);
+    if (event.isError && !event.result?.details?.results?.length) {
+      for (const id of subagentThreads.get(event.toolCallId) || []) {
+        persistThread({
+          id,
+          status: "error",
+          error: messageText(event.result?.content) || "Subagent failed",
+          completedAt: Date.now(),
+        }, ctx);
+      }
+    }
+    subagentThreads.delete(event.toolCallId);
     const settled = state.threads.length > 0 && state.threads.every((thread) => {
       return thread.status === "done" || thread.status === "error";
     });
@@ -491,6 +521,7 @@ export default function researchExtension(pi: ExtensionAPI) {
   });
 
   pi.on("session_shutdown", () => {
+    subagentThreads.clear();
     state = null;
     active = false;
     sessionId = "";

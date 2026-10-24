@@ -47,6 +47,7 @@ export function createPiApiHandler(api) {
     runtimeState,
     setMemoryStatus,
     setRolloutFeedback,
+    setSubagentBatchSize,
     setSubagentModelOverride,
     setVisionOverride,
     clearVisionOverride,
@@ -475,6 +476,17 @@ async function piApiHandler(req, res) {
           sessionPath: body.sessionPath,
           staticModel: body.staticModel,
           staticThinking: body.staticThinking,
+        }))
+      }
+
+      if (url.pathname === '/subagents/batching') {
+        if (req.method !== 'PUT') return json(res, { error: 'Method not allowed' }, 405)
+        const body = await readJson(req)
+        return json(res, setSubagentBatchSize({
+          batchSize: body.batchSize,
+          cwd: body.cwd,
+          scope: body.scope,
+          sessionPath: body.sessionPath,
         }))
       }
 

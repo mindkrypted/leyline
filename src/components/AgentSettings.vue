@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { formatMode } from '../lib/format'
+import { DEFAULT_SUBAGENT_BATCH_SIZE } from '../../lib/leyline-settings.js'
 
 const props = defineProps({
   scope: { type: String, required: true, validator: (value) => ['global', 'project', 'session'].includes(value) },
@@ -15,7 +16,11 @@ const props = defineProps({
   visionError: { type: String, default: '' },
 })
 
-const emit = defineEmits(['set-model', 'reset-model', 'save-vision', 'refresh'])
+const emit = defineEmits(['set-model', 'reset-model', 'save-batch-size', 'save-vision', 'refresh'])
+const batching = computed(() => props.subagentData?.batching || {
+  global: DEFAULT_SUBAGENT_BATCH_SIZE, session: null, effective: DEFAULT_SUBAGENT_BATCH_SIZE,
+})
+const batchSize = computed(() => props.scope === 'global' ? batching.value.global : batching.value.effective)
 const scopeOrder = computed(() => {
   return ['session', 'project', 'global'].slice(['session', 'project', 'global'].indexOf(props.scope))
 })
@@ -30,6 +35,8 @@ const visionUnavailable = computed(() => props.scope === 'session' && !props.vis
 const subagentUnavailable = computed(() => props.scope === 'session' && !props.subagentData?.context?.sessionAvailable)
 const visionDisabled = computed(() => visionUnavailable.value || busy.value || !props.visionData?.context?.cwd)
 const subagentDisabled = computed(() => subagentUnavailable.value || busy.value || !props.subagentData?.context?.cwd)
+const batchInputDisabled = computed(() => subagentUnavailable.value || props.subagentLoading || props.visionLoading
+  || !props.subagentData?.context?.cwd || !props.subagentData?.batching)
 const busy = computed(() => props.visionLoading || props.subagentLoading || props.visionSaving || props.subagentSaving)
 const visionOverride = computed(() => props.visionData?.overrides?.[props.scope] || {})
 const selectedVisionModel = computed(() => visionOverride.value.model || '')
@@ -120,6 +127,12 @@ function updateThinking(event) {
   })
 }
 
+function updateBatchSize(event) {
+  if (subagentDisabled.value || !props.subagentData?.batching) return
+  if (!event.target.reportValidity()) return
+  emit('save-batch-size', { scope: props.scope, batchSize: Number(event.target.value) })
+}
+
 function updateSubagentModel(agent, event) {
   if (subagentDisabled.value) return
   const model = event.target.value
@@ -165,12 +178,37 @@ function updateSubagentModel(agent, event) {
     </section>
 
     <section :aria-busy="subagentLoading || subagentSaving" aria-label="Subagents">
-      <h3 class="settings-section-heading">Subagents <small>{{ scope === 'global' ? 'Default models' : 'Model overrides' }}</small></h3>
+      <h3 class="settings-section-heading">Subagents <small>{{ scope === 'project' ? 'Model overrides' : scope === 'global' ? 'Defaults' : 'Overrides' }}</small></h3>
       <p v-if="subagentError" class="settings-error" role="alert">{{ subagentError }}</p>
       <small v-if="subagentLoading" class="settings-note" role="status">Loading subagents…</small>
       <small v-if="subagentUnavailable" class="settings-note">Create a transcript to set subagent overrides.</small>
       <small v-if="!subagentLoading && !agents.length" class="settings-note">No subagent definitions found.</small>
-      <div v-if="agents.length" class="settings-rows">
+      <div v-if="agents.length || scope !== 'project'" class="settings-rows">
+        <div v-if="scope !== 'project'" class="settings-row settings-batch-size">
+          <span>
+            <label :for="`subagent-batch-size-${scope}`"><strong>Batch size</strong></label>
+            <small>Concurrent subagents per batch. Chains stay sequential.</small>
+            <small class="settings-inherited">{{ scope === 'session' && batching.session === null ? 'Inherited' : 'Effective' }}: {{ batchSize }} · {{ scope === 'session' && batching.session !== null ? 'this transcript' : 'global default' }}</small>
+            <button
+              v-if="scope === 'session' && batching.session !== null"
+              class="settings-text-link"
+              type="button"
+              :disabled="subagentDisabled"
+              @click="emit('save-batch-size', { scope, batchSize: null })"
+            >Use global default ({{ batching.global }})</button>
+          </span>
+          <input
+            :id="`subagent-batch-size-${scope}`"
+            type="number"
+            min="1"
+            step="1"
+            required
+            :value="batchSize"
+            :disabled="batchInputDisabled"
+            :readonly="subagentSaving || visionSaving"
+            @change="updateBatchSize"
+          >
+        </div>
         <label v-for="agent in agents" :key="agent.key" class="settings-row">
           <span>
             <strong>{{ agent.name }}</strong>

@@ -67,6 +67,20 @@ The model editor temporarily hides the category and provider selectors. **Model*
 
 Copying **Model details** opens **Model**, where you can edit a new model's imported ID. **Back to editor** keeps your draft. See [Catalog lookup](./settings#find-a-configuration-in-the-catalog) for copied fields and exclusions.
 
+## Set a session batch size
+
+1. Open **Session actions** in the session header.
+2. Select **Session details**.
+3. Find **Subagents**.
+4. Change **Batch size**.
+5. Leave the field to save the value.
+
+![Mobile Session details with subagent batch size 2 and global default 4](../assets/screenshots/subagent-batch-size-mobile.png)
+
+Select **Use global default** to remove the session override. The global default is in **Settings → Agent defaults → Subagents**. There is no project batch-size override.
+
+Batch size limits work within each batch, not total concurrent work across the session. See [Configure batch size](./subagents#configure-batch-size) for values, scope, and when changes apply.
+
 ## Supervise activity on mobile
 
 ![Full-screen mobile Activity view with session status and controls](../assets/screenshots/activity-mobile.png)

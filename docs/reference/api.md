@@ -2262,7 +2262,7 @@ A configuration response can return `200` with an `error`, even when `enabled` i
 
 ## Subagent routes
 
-These routes store Leyline overrides in SQLite on the selected backend. Agent defaults uses `global`, Project settings uses `project`, and Session details uses `session`. The UI surface fixes the scope. These overrides are separate from pi `models.json` definitions and overrides.
+These routes store Leyline configuration in SQLite on the selected backend, separate from pi `models.json`. Model overrides use `global`, `project`, or `session` scope. Batch size uses only `global` or `session`. Agent defaults sets global values, Project settings sets project models, and Session details sets session overrides.
 
 ### `GET /api/pi/subagents`
 
@@ -2288,6 +2288,12 @@ Response:
     sessionFile: string | null,
     sessionId: string | null
   },
+  batching: {
+    global: number,
+    session: number | null,
+    effective: number,
+    source: "global" | "session"
+  },
   agents: Array<{
     key: string,
     name: string,
@@ -2303,6 +2309,33 @@ Response:
   }>
 }
 ```
+
+`batching.global` defaults to 4. A null `batching.session` means that the session inherits the global value. `effective` and `source` identify the applicable size. Without `sessionPath`, the response uses the global value. There is no project batch-size override.
+
+### `PUT /api/pi/subagents/batching`
+
+**Designation:** Browser configuration route.
+
+Request:
+
+```text
+{
+  cwd: string,
+  sessionPath?: string,
+  scope: "global" | "session",
+  batchSize: number | null
+}
+```
+
+Response: The same object as `GET /api/pi/subagents`, including `batching`.
+
+A numeric value must be a safe integer from 1 through 9007199254740991. Numeric strings are invalid. `null` removes only a session override. Global scope requires a numeric value. Session scope requires `sessionPath`.
+
+The global value uses `subagents.batch_size` in `leyline_settings`. Session values use `subagent_batch_overrides`. Forks copy session values. Session and project deletion remove batch overrides for the deleted sessions.
+
+Each implicit group or explicit parallel call reads its effective size once. Changes apply to future groups and calls without reload. Running groups retain their size. This setting does not limit total concurrent work across a session or backend.
+
+Unsupported methods return `405`. Validation errors and malformed JSON currently return `500` with `{ error }`. This includes invalid scope or batch size, missing cwd, and missing sessionPath for session scope.
 
 ### `PUT /api/pi/subagents/:agentKey/model`
 
@@ -2349,7 +2382,7 @@ Request:
 
 ```text
 {
-  agentKey: string,
+  agentKey?: string,
   cwd: string,
   sessionPath?: string,
   staticModel?: string,
@@ -2357,7 +2390,13 @@ Request:
 }
 ```
 
-Response:
+Without `agentKey`, the response contains only the effective batch size:
+
+```text
+{ batchSize: number }
+```
+
+With `agentKey`, the response retains the model and thinking fields:
 
 ```text
 {
@@ -2373,6 +2412,8 @@ Stored model precedence is session, project, global, then `staticModel`. Thinkin
 ### `POST /api/pi/subagent`
 
 **Designation:** Internal bundled-extension execution route.
+
+The extension schedules batches before it calls this route. Direct requests run one child each without a backend batch limiter.
 
 Request:
 

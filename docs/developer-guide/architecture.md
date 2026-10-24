@@ -117,7 +117,7 @@ Settings and trace surfaces use distinct owners and storage:
 | --- | --- |
 | Display and Connections | Native app backend, in Leyline SQLite. Connections includes live network access for that native backend. The active connection remains per window. |
 | Files | Selected backend, with editor values in `leyline_settings`. |
-| Agent defaults | Selected backend, with global subagent and vision overrides in SQLite. |
+| Agent defaults | Selected backend, with global subagent models, batch size, and vision overrides in SQLite. |
 | Models & providers | Selected backend's pi global `models.json` and native provider authentication. |
 | MCP servers | Selected backend's pi global `mcp.json` and native MCP authentication. |
 | Project settings | Selected backend, with project overrides and project/session metadata. |
@@ -181,7 +181,7 @@ Vision delegation adds `leyline-vision-delegation` records to the parent branch.
 
 Pasted delegated images are stored in `LEYLINE_MEMORY_DIR/attachments/<session-id>/`. Without `LEYLINE_MEMORY_DIR`, the path is `~/.local/share/leyline/attachments/<session-id>/`. The session and project trash operations remove the related attachment directory after they move the JSONL file.
 
-Forks use `AgentSessionRuntime.fork(entryId, { position: 'at' })`. A fork gets a new JSONL file and keeps normal session visibility. It copies session-level subagent and vision-model overrides.
+Forks use `AgentSessionRuntime.fork(entryId, { position: 'at' })`. A fork gets a new JSONL file and keeps normal session visibility. It copies session-level subagent model, batch-size, and vision-model overrides.
 
 A research fork replays the retained branch state as events bound to the new session ID. The backend revalidates a retained report before it marks the fork complete.
 
@@ -208,13 +208,18 @@ The database currently contains these application tables:
 - `memories`
 - `rollout_feedback`
 - `subagent_overrides`
+- `subagent_batch_overrides`
 - `vision_overrides`
 
-`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, `server.network_access_port`, backend file-editor settings, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
+`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, `server.network_access_port`, backend file-editor settings, `subagents.batch_size`, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
 
 The app reads connection records, display preferences, network-access state, and pinned sessions from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
 
 `subagent_overrides` and `vision_overrides` supply Agent defaults, Project settings, and Session details. Their global scope means all projects on that backend. It does not mean all saved backend connections. Vision model and thinking fields inherit independently.
+
+`subagents.batch_size` supplies the global batch size, defaulting to 4. `subagent_batch_overrides` supplies session values only. There is no project batch-size override. Forks copy session values, and session/project deletion removes values for the deleted sessions. Canonical path hashes retain session identity through symlinked directories, including before the session file exists.
+
+The subagent extension schedules implicit single-call groups and explicit parallel calls independently. Batch size does not limit total concurrent work across a session or backend. See [Subagent scheduling](../integrations/subagents#batch-scheduling-and-configuration).
 
 Pi provider/model configuration, MCP configuration, and native credentials do not use SQLite. They remain in the pi agent directory. See [Pi configuration storage](../reference/environment#pi-configuration-storage) for file ownership and environment boundaries.
 

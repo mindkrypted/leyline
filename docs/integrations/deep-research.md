@@ -42,7 +42,7 @@ The worker prompt prohibits file changes. It permits `bash` for CLI tools only w
 
 Each worker returns a bounded `<research_result>` block. The block contains its thread ID, summary, and sources that it read.
 
-Parallel execution runs up to four workers at one time. Additional tasks wait for a later batch.
+Parallel execution uses the research session's effective subagent batch size, which defaults to 4. Additional tasks wait until the whole preceding batch finishes. Global and session controls follow [subagent batch configuration](./subagents#batch-scheduling-and-configuration).
 
 The lead and workers use inline Elune capture independently of trace views. Worker markers retain available parent trace and tool anchors. See [Elune integration](./elune#usage-and-child-accounting) for child usage and duplicate-counting rules.
 

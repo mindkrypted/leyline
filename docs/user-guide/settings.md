@@ -357,11 +357,19 @@ When the active model cannot receive images, Leyline tells it to call `vision_ag
 
 Open **Agent defaults** and find **Subagents** to set global model defaults. Use **Project settings** or **Session details** for narrower overrides. See [Subagents](./subagents) for precedence and inheritance.
 
+## Set subagent batch size
+
+Open **Agent defaults → Subagents**. Change **Batch size** to a positive whole number. Leave the field to save it. The default is 4. The value must be a positive safe integer.
+
+For a session override, open **Session details → Subagents**. Select **Use global default** to remove that override. Forks copy the override. There is no project batch-size override.
+
+Batch size limits concurrent subagents within each batch, not total work across a session or backend. Changes apply to future groups and parallel calls without reload. Running groups keep their size. See [Configure batch size](./subagents#configure-batch-size) for execution behavior.
+
 ## Inspect runtime state
 
 Select **Session details** in the workbench header. In Electron on macOS, **Command+Shift+E** opens or closes this drawer. The shortcut does nothing on Home.
 
-![Session details with read-only runtime state and session overrides](../assets/screenshots/session-details.png)
+![Session details with read-only runtime state, subagent batch size, and model overrides](../assets/screenshots/session-details.png)
 
 The **Runtime** section shows the model, thinking level, enabled tool count, context usage, and event connection state. These values are read-only. Change the active model and thinking level in the composer.
 

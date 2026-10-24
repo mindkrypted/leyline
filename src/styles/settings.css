@@ -454,6 +454,7 @@
 }
 
 .settings-row select,
+.settings-row input[type="number"],
 .global-settings-mobile-nav select {
   flex: none;
   width: 185px;
@@ -467,6 +468,10 @@
   font: inherit;
   font-size: 10px;
   text-overflow: ellipsis;
+}
+
+.settings-row input[type="number"] {
+  width: 80px;
 }
 
 .context-settings-drawer .settings-row {
@@ -2299,6 +2304,12 @@
   .settings-choice-options button {
     padding: 6px;
     font-size: 9px;
+  }
+
+  .settings-batch-size input,
+  .settings-batch-size button {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 

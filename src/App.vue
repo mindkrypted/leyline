@@ -79,6 +79,7 @@ import {
   interruptPiSession,
   runShellCommand,
   setEntryFeedback,
+  setSubagentBatchSize,
   setSubagentModelOverride,
   setVisionOverride,
   submitPrompt,
@@ -2841,6 +2842,26 @@ async function saveSubagentModel(payload) {
   }
 }
 
+async function saveSubagentBatchSize(payload) {
+  const target = agentSettingsLoadedTarget.value
+  if (!target || payload.scope !== agentSettingsScope.value || !['global', 'session'].includes(payload.scope)
+    || subagentConfigLoading.value || subagentConfigSaving.value || visionConfigSaving.value) return
+  const token = agentSettingsRequestToken
+  const key = agentSettingsKey.value
+  const current = () => token === agentSettingsRequestToken && key === agentSettingsKey.value
+  subagentConfigSaving.value = true
+  subagentConfigError.value = ''
+  try {
+    const data = await setSubagentBatchSize(target, payload.scope, payload.batchSize)
+    if (current()) subagentConfigData.value = data
+    else if (agentSettingsKey.value) void loadAgentSettings()
+  } catch (error) {
+    if (current()) subagentConfigError.value = error.message
+  } finally {
+    subagentConfigSaving.value = false
+  }
+}
+
 async function saveVisionModel(payload) {
   const target = agentSettingsLoadedTarget.value
   if (!target || payload.scope !== agentSettingsScope.value
@@ -5502,6 +5523,7 @@ function closePickerMenus() {
           v-bind="agentSettingsProps"
           @set-model="saveSubagentModel"
           @reset-model="saveSubagentModel"
+          @save-batch-size="saveSubagentBatchSize"
           @save-vision="saveVisionModel"
           @refresh="loadAgentSettings"
         />
@@ -5538,6 +5560,7 @@ function closePickerMenus() {
               v-bind="agentSettingsProps"
               @set-model="saveSubagentModel"
               @reset-model="saveSubagentModel"
+              @save-batch-size="saveSubagentBatchSize"
               @save-vision="saveVisionModel"
               @refresh="loadAgentSettings"
             />

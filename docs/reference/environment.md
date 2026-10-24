@@ -29,11 +29,13 @@ Use an absolute path for `LEYLINE_MEMORY_DIR`. Without this variable, Leyline us
 ~/.local/share/leyline/elune/elune.db
 ```
 
-The database can contain the `backend_connections`, `leyline_settings`, `pinned_sessions`, `memories`, `rollout_feedback`, `subagent_overrides`, and `vision_overrides` tables.
+The database can contain the `backend_connections`, `leyline_settings`, `pinned_sessions`, `memories`, `rollout_feedback`, `subagent_overrides`, `subagent_batch_overrides`, and `vision_overrides` tables.
 
-The `leyline_settings` table contains the default backend ID, display preferences, `server.network_access`, `server.network_access_port`, file-editor settings, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
+The `leyline_settings` table contains the default backend ID, display preferences, `server.network_access`, `server.network_access_port`, file-editor settings, `subagents.batch_size`, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
 
 Display, network access, saved connections, and pinned sessions belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
+
+Subagent batch size defaults to 4 on each backend. `subagent_batch_overrides` stores session overrides. There is no project batch-size override. See [Batch configuration](../user-guide/subagents#configure-batch-size).
 
 Set `LEYLINE_SERVER_ALLOWED_ORIGINS` on a backend when a browser UI connects
 from a different non-loopback origin. Separate origins with commas. Each value

@@ -12,7 +12,7 @@
 | `usePinnedSessions.js` | Pinned session IDs for the active connection, load revisions, pending toggles, errors, and batched cleanup |
 | `useTranscriptPreferences.js` | App-wide transcript display settings, loading state, and save errors |
 | `GlobalSettingsModal.vue` | Category navigation, capability filtering, modal focus, and scope labels |
-| `AgentSettings.vue` | Fixed-scope subagent and vision controls, inheritance display, and available model choices |
+| `AgentSettings.vue` | Fixed-scope subagent models, global/session batch size, vision controls, inheritance display, and available model choices |
 | `ProviderSettings.vue` / `McpSettings.vue` | Inventories, selection, drafts, revisions, mutation errors, connection tests or MCP checks, and leave guards |
 | `PiSettingsWorkspace.vue` | Searchable list, narrow-layout selector, and bounded detail pane |
 | `useSettingsOperation.js` | Private operation polling, answers, cancellation, and backend-bound cleanup |
@@ -203,6 +203,10 @@ The component shows actual sharing URLs and the unauthenticated full-access warn
 `App.vue` loads settings against an explicit cwd and optional session path. Request generations and backend/scope/target keys reject stale results. Mutations use the loaded target and require its displayed scope. Session overrides require a saved session context and copy to forks.
 
 The component resolves values from the displayed scope toward broader scopes. A global or project editor must not display a narrower session override as its effective value. Subagent models fall back to the agent definition. Vision model and thinking inherit independently. The vision picker contains only image-capable models.
+
+Batch size appears under **Subagents** only in Agent defaults and Session details. Project settings retains model controls without batch size. `AgentSettings.vue` displays `batching.global` in global scope and `batching.effective` in session scope. A field change emits `save-batch-size`. **Use global default** sends a null session value through `PUT /api/pi/subagents/batching`.
+
+`App.vue` saves against the loaded target and rejects stale responses through the existing generation and target guards. Successful saves replace the subagent configuration, including `batching`. Batch changes do not reload the runtime. The extension reads the size for each future group or parallel call.
 
 These overrides use the existing subagent and vision APIs and Leyline SQLite. They are separate from pi `models.json` overrides. See [Settings surfaces and ownership](./architecture#settings-surfaces-and-ownership).
 

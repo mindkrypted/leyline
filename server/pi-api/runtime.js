@@ -63,9 +63,11 @@ import {
 } from './sessions.js'
 import {
   copySessionSubagentOverrides,
+  deleteSessionSubagentBatchOverride,
   deleteSubagentModelOverride,
   listSubagentConfigs,
   resolveSubagentConfig,
+  setSubagentBatchSize,
   setSubagentModelOverride,
 } from './subagents.js'
 import {
@@ -1755,7 +1757,9 @@ async function trashProject(cwd) {
 
 async function moveSessionToTrash(session, stamp, allowMissing) {
   let path = null
+  let sessionPath = session.path
   if (session.path && existsSync(session.path)) {
+    sessionPath = realpathSync(session.path)
     const trashPath = trashSessionPath(session, stamp)
     await mkdir(dirname(trashPath), { recursive: true })
     try {
@@ -1767,6 +1771,7 @@ async function moveSessionToTrash(session, stamp, allowMissing) {
   } else if (!allowMissing) {
     throw new Error('Session file not found')
   }
+  deleteSessionSubagentBatchOverride({ cwd: session.cwd, sessionPath })
   await removeVisionAttachments(session.id)
   return { path }
 }
@@ -2491,6 +2496,7 @@ export function createPiRuntimeApi() {
   runtimeState,
   settingsRuntime,
   setMemoryStatus,
+  setSubagentBatchSize,
   setSubagentModelOverride,
   deleteSubagentModelOverride,
   setVisionOverride,

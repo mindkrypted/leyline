@@ -62,6 +62,13 @@ interface SingleResult {
   error?: string;
 }
 
+interface SingleWave {
+  remaining: Set<string>;
+  ready: Promise<void>;
+  open: boolean;
+  release: () => void;
+}
+
 interface SubagentDetails {
   mode: "single" | "parallel" | "chain";
   results: SingleResult[];
@@ -213,6 +220,17 @@ async function resolveSubagentConfig(params: {
   }, params.signal) as Promise<{ model?: string; thinking?: string }>;
 }
 
+async function resolveSubagentBatchSize(ctx: ExtensionContext, signal?: AbortSignal): Promise<number> {
+  const config = await callLeylineApi("/subagents/resolve", {
+    cwd: ctx.cwd,
+    sessionPath: getParentSessionPath(ctx),
+  }, signal) as { batchSize: number };
+  if (!Number.isSafeInteger(config.batchSize) || config.batchSize < 1) {
+    throw new Error("Invalid subagent batch size from backend");
+  }
+  return config.batchSize;
+}
+
 async function runSubagentViaApi(params: {
   title: string;
   task: string;
@@ -333,8 +351,8 @@ function selectedAgentThinking(
 
 const SUBAGENT_TOOL_DESCRIPTION =
   "Delegate self-contained tasks to specialized child agents with isolated context; keep small or interactive work in the parent. Item: { agent, title, task, model?, thinking? }; title is a short, descriptive session name, separate from task.\n" +
-  "- single (default): top-level item\n" +
-  "- parallel: { tasks: [item] } independent tasks, no shared file writes; concurrent, batches of 4\n" +
+  "- single (default): top-level item; singles in one message run in configured batches\n" +
+  "- parallel: { tasks: [item] } independent tasks, no shared file writes; concurrent, configured batch size\n" +
   "- chain: { chain: [item] } sequential via {previous}; stops on failure. Prefer separate singles to inspect between steps.";
 
 function subagentDescription(agents: AgentDef[]) {
@@ -417,6 +435,97 @@ function subagentParameters(agentNames: string[]) {
 export default function subagentExtension(pi: ExtensionAPI) {
   let knownAgents = new Map<string, AgentDef>();
   let updateSubagentTool = () => {};
+  let batchPending = false;
+  let singleBatch: {
+    controller: AbortController;
+    members: Set<string>;
+    completed: Set<string>;
+    ready: Promise<void>;
+    error?: unknown;
+    slots: Map<string, SingleWave>;
+    waves: SingleWave[];
+    currentWave: number;
+  } | undefined;
+
+  function clearSingleBatch() {
+    singleBatch?.controller.abort();
+    singleBatch?.waves.forEach((wave) => wave.release());
+    singleBatch = undefined;
+    batchPending = false;
+  }
+
+  pi.on("message_end", (event) => {
+    if (event.message.role !== "assistant") return;
+    clearSingleBatch();
+    batchPending = true;
+  });
+
+  pi.on("tool_execution_start", (event, ctx) => {
+    if (event.parentToolCallId || !batchPending) return;
+    batchPending = false;
+    const entry = [...ctx.sessionManager.getBranch()].reverse().find((entry) => {
+      return entry.type === "message" && entry.message.role === "assistant";
+    });
+    if (entry?.type !== "message" || entry.message.role !== "assistant") return;
+    const message = entry.message;
+    if (!["stop", "toolUse"].includes(message.stopReason)) return;
+    const calls = message.content.filter((block) => block.type === "toolCall");
+    if (!calls.some((call) => call.id === event.toolCallId)) return;
+    const singles = calls.filter((call) => call.name === "subagent" && subagentMode(call.arguments) === "single");
+    if (singles.length < 2) return;
+    const batch: NonNullable<typeof singleBatch> = {
+      controller: new AbortController(),
+      members: new Set(singles.map((call) => call.id)),
+      completed: new Set(),
+      ready: Promise.resolve(),
+      slots: new Map(),
+      waves: [],
+      currentWave: 0,
+    };
+    singleBatch = batch;
+    const signal = AbortSignal.any([batch.controller.signal, ...(ctx.signal ? [ctx.signal] : [])]);
+    batch.ready = resolveSubagentBatchSize(ctx, signal).then((limit) => {
+      signal.throwIfAborted();
+      for (let i = 0; i < singles.length; i += limit) {
+        let release = () => {};
+        const ready = new Promise<void>((resolve) => { release = resolve; });
+        const wave = {
+          remaining: new Set(singles.slice(i, i + limit).map((call) => call.id).filter((id) => !batch.completed.has(id))),
+          ready,
+          open: false,
+          release,
+        };
+        batch.waves.push(wave);
+        wave.remaining.forEach((id) => batch.slots.set(id, wave));
+      }
+      advanceSingleBatch(batch);
+    }).catch((error) => { batch.error = error; });
+  });
+
+  pi.on("tool_execution_end", (event) => {
+    if (event.parentToolCallId) return;
+    const batch = singleBatch;
+    if (!batch?.members.has(event.toolCallId)) return;
+    batch.completed.add(event.toolCallId);
+    batch.slots.get(event.toolCallId)?.remaining.delete(event.toolCallId);
+    batch.slots.delete(event.toolCallId);
+    advanceSingleBatch(batch);
+  });
+
+  function advanceSingleBatch(batch: NonNullable<typeof singleBatch>) {
+    while (batch.waves[batch.currentWave]?.remaining.size === 0) batch.currentWave++;
+    const wave = batch.waves[batch.currentWave];
+    if (wave) {
+      wave.open = true;
+      wave.release();
+    }
+  }
+
+  pi.on("turn_end", clearSingleBatch);
+  pi.on("agent_end", clearSingleBatch);
+  pi.on("session_start", clearSingleBatch);
+  pi.on("session_tree", clearSingleBatch);
+  pi.on("session_shutdown", clearSingleBatch);
 
   function refreshAgents(ctx: ExtensionContext) {
     knownAgents = discoverAgents(ctx.cwd);
@@ -475,7 +584,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
         };
       }
 
-      const mode = params.mode || (params.tasks?.length ? "parallel" : params.chain?.length ? "chain" : "single");
+      const mode = subagentMode(params);
       const agent = params.agent ? knownAgents.get(params.agent) : undefined;
       if (mode === "single" && (!params.agent || !params.task)) {
         throw new Error("Single mode requires 'agent' and 'task'");
@@ -500,9 +609,42 @@ export default function subagentExtension(pi: ExtensionAPI) {
       const baseCwd = params.cwd || ctx.cwd;
 
       if (mode === "single") {
+        const batch = singleBatch?.members.has(_toolCallId) ? singleBatch : undefined;
+        if (batch) {
+          await batch.ready;
+          if (batch.error) throw batch.error;
+        }
+        const wave = batch?.slots.get(_toolCallId);
+        const executionSignal = wave && batch
+          ? AbortSignal.any([batch.controller.signal, ...(signal ? [signal] : [])])
+          : signal;
+        if (wave && !wave.open && !executionSignal?.aborted) {
+          onUpdate?.({
+            content: [{ type: "text", text: `${agent!.name} subagent queued` }],
+            details: {
+              mode: "single",
+              results: [{
+                ...pendingResult(childTasks[0], "queued"),
+                agentSource: agent!.source,
+                requestedModel: params.model,
+                requestedThinking: params.thinking,
+              }],
+              background: true,
+            } as SubagentDetails,
+          });
+          await new Promise<void>((resolve) => {
+            const finish = () => {
+              executionSignal?.removeEventListener("abort", finish);
+              resolve();
+            };
+            executionSignal?.addEventListener("abort", finish, { once: true });
+            if (executionSignal?.aborted) finish();
+            else void wave.ready.then(finish);
+          });
+        }
         const result = await executeSingle(
           agent!, childTasks[0].title, params.task, baseCwd, parentPath, params.model, params.thinking,
-          parentThinkingLevel, _toolCallId, signal, ctx, (started) => {
+          parentThinkingLevel, _toolCallId, executionSignal, ctx, (started) => {
             onUpdate?.({
               content: [{ type: "text", text: `${started.agent} subagent running` }],
               details: {
@@ -531,7 +673,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
           throw new Error("Parallel mode requires 'tasks' array");
         }
 
-        const maxConcurrency = 4;
+        const maxConcurrency = await resolveSubagentBatchSize(ctx, signal);
         const progress = tasks.map((task: any, index: number) => pendingResult(
           task,
           index < maxConcurrency ? "running" : "queued",
@@ -697,6 +839,10 @@ export default function subagentExtension(pi: ExtensionAPI) {
   pi.registerTool(subagentTool);
 }
 
+function subagentMode(params: any): string {
+  return params?.mode || (params?.tasks?.length ? "parallel" : params?.chain?.length ? "chain" : "single");
+}
+
 function pendingResult(
   task: any,
   status: "queued" | "running",
@@ -786,6 +932,7 @@ async function executeSingle(
   let dispatched = false;
 
   try {
+    signal?.throwIfAborted();
     const configured = await resolveSubagentConfig({ agent, cwd: ctx.cwd, parentSessionPath, signal });
     const selectedModel = modelOverride?.trim() || configured.model;
     const selectedThinking = thinkingOverride?.trim() || configured.thinking;

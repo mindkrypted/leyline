@@ -20,7 +20,7 @@ metadata can appear as a normal session.
 ## Modes
 
 - `single`: Run one agent for one task. This is the default.
-- `parallel`: Run concurrent tasks in batches of up to four.
+- `parallel`: Run concurrent tasks with the configured batch size.
 - `chain`: Run tasks in order. Each step can use `{previous}` to include the
   prior step output.
 
@@ -36,6 +36,28 @@ The server saves the title as the child's native pi session name before runtime
 startup. The sidebar shows the current session name. The inspector and HTML
 export show the supplied title and keep the full task prompt separate.
 Older sessions retain their existing label fallbacks.
+
+## Batch size
+
+Multiple top-level `single` calls in one assistant message form one implicit
+group. Calls run in message order, in waves of up to the configured size. Each
+wave waits for the whole preceding wave to finish. Original tool-call IDs,
+individual progress, and results stay unchanged. Grouping does not rewrite the
+transcript or reject calls for retry.
+
+Singles still form a group when the message also contains `parallel` or `chain`
+calls. Each explicit parallel call has a separate batch schedule. Chains stay
+sequential. Nested tool calls do not enter the implicit group. Batch size does
+not limit total concurrent work across a session or backend.
+
+The default is 4. Set **Settings → Agent defaults → Subagents → Batch size**
+for the selected backend. **Session details → Subagents** supplies a session
+override. **Use global default** removes it. There is no project override.
+Values must be positive safe integers.
+
+Each implicit group or explicit parallel call reads its effective size once.
+Changes apply to future groups and calls without a runtime reload. Running
+groups keep their size.
 
 ## Agent definitions
 
@@ -103,7 +125,7 @@ The thinking precedence is:
 4. Pi runtime default
 
 `inherit` selects the parent session's current thinking level. Leyline Settings
-currently stores model overrides only. It does not store thinking overrides.
+stores model overrides and batch size. It does not store thinking overrides.
 
 ## Tool-call forms
 

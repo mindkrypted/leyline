@@ -89,6 +89,26 @@ DOCS_SCREENSHOT_FILTER=backend-connections.png,models-providers.png,provider-mod
 
 These images show Connections with network access off, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
 
+For subagent batch configuration:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagents.png,vision-agent.png,session-details.png,subagent-batch-size.png,subagent-batch-size-mobile.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `subagents.png` | Agent defaults with global batch size 4 and subagent model choices. |
+| `vision-agent.png` | Agent defaults with vision controls and the updated Subagents section. |
+| `session-details.png` | Session drawer with runtime state, inherited batch size, and model overrides. |
+| `subagent-batch-size.png` | Desktop Session details with session batch size 2 and **Use global default (4)**. |
+| `subagent-batch-size-mobile.png` | The same session override in the mobile drawer. |
+
+Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2. Keep the parent model at `local/minimax-m2.7` and the image-capable vision fixture unchanged.
+
+Use intercepted fixtures for configuration reads, saves, and resets. No request may change real backend settings or start a model run. Keep paths and session content synthetic. Check the saved value, source label, and reset control before capture. Batch size has no project override, so do not show a project control.
+
+See [Configure batch size](../user-guide/subagents#configure-batch-size) and [Mobile batch settings](../user-guide/mobile#set-a-session-batch-size) for the image references.
+
 For subagent inspection and the affected research views:
 
 ```bash
@@ -209,6 +229,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
 - Settled subagent captures: compact Activity rows and separate Contained Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
 - Live subagent captures: one running explorer, two reads and one search in the ledger, active verification output, and **Following live** in the footer
+- Subagent batch captures: global default 4, desktop/mobile session override 2, the effective source, and **Use global default (4)**
 - Sidebar child captures: an inset guide with hollow nodes, a fixed chevron gutter on every parent row, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation

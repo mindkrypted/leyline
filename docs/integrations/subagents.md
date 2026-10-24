@@ -22,10 +22,24 @@ The reserved researcher receives all tools discovered by its child runtime excep
 The `subagent` tool supports these modes:
 
 - `single` runs one agent for one task.
-- `parallel` runs tasks concurrently in batches of four.
+- `parallel` runs tasks concurrently in batches of the configured size.
 - `chain` runs tasks in order and replaces `{previous}` with the prior result.
 
 Parallel and chain items can set their own model, thinking level, and working directory. An item setting takes priority over the top-level tool setting.
+
+## Batch scheduling and configuration
+
+The extension groups multiple top-level `single` calls from one assistant message into one implicit group. Calls run in message order, in waves. Each wave waits for all calls in the preceding wave to finish. Each call keeps its original ID, progress, and result. Grouping does not rewrite the transcript or reject calls for retry.
+
+Singles still form a group when explicit `parallel` or `chain` calls coexist. Each explicit parallel call has a separate batch schedule. Chains stay sequential. Nested tool calls do not enter the implicit group. Batch size is not a limit on total concurrent work across a session or backend.
+
+The default size is 4. **Settings → Agent defaults → Subagents → Batch size** sets the selected backend's global default. **Session details → Subagents** supplies a session override. **Use global default** removes it. There is no project batch-size override. Values must be positive safe integers.
+
+Each implicit group or explicit parallel call resolves its effective size once. Changes apply to future groups and calls without reload. Running groups keep their size.
+
+The `leyline_settings` key `subagents.batch_size` stores the global value. The `subagent_batch_overrides` table stores session values in the same backend-local database as model overrides. Session identity uses a hash of the canonical path. For a missing file, path resolution uses its nearest existing ancestor, preserving identity through symlinked session directories.
+
+Forks copy session batch overrides. Session deletion removes its batch override. Project deletion removes batch overrides for the deleted sessions.
 
 ## Required session titles
 
@@ -56,7 +70,7 @@ Thinking selection uses the tool or item setting first, then the agent definitio
 
 The extension uses two internal integration routes:
 
-1. `POST /api/pi/subagents/resolve` resolves stored model overrides.
+1. `POST /api/pi/subagents/resolve` resolves batch size without `agentKey`, or model and thinking values with `agentKey`.
 2. `POST /api/pi/subagent` creates and runs the child session.
 
 The server creates a pi session with `parentSession` set to the parent session file. Before runtime startup, it saves the normalized title with `SessionManager.appendSessionInfo()`. The sidebar prefers this session name over task metadata.
@@ -71,7 +85,7 @@ Children with an isolated custom system prompt retain output-budget and inline E
 
 Bundled requests include `parentSessionId` and `_toolCallId` for trace linkage. The child marker retains available parent trace and observation anchors. Proven committed child usage can reconcile parent totals after the tool result. Unknown attribution remains explicit. See [Elune integration](./elune#usage-and-child-accounting).
 
-The child execution route waits for the child run to finish. If its caller disconnects before the response finishes, the server aborts the child run. See the [API reference](../reference/api#subagent-routes).
+The child execution route waits for the child run to finish. If its caller disconnects before the response finishes, the server aborts the child run. Scheduling belongs to the extension. Direct execution requests do not use a backend batch limiter. See the [API reference](../reference/api#subagent-routes).
 
 ## Live child inspection
 

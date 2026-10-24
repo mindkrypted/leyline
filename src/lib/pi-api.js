@@ -145,6 +145,13 @@ export function fetchSubagentConfigs(session) {
   return apiRequest(`/api/pi/subagents?${params}`, 'Failed to load subagents')
 }
 
+export function setSubagentBatchSize(session, scope, batchSize) {
+  return apiRequest('/api/pi/subagents/batching', 'Failed to update subagent batch size', {
+    method: 'PUT',
+    body: scopedBody(session, { scope, batchSize }),
+  })
+}
+
 export function setSubagentModelOverride(session, agentKey, scope, model) {
   return apiRequest(
     `/api/pi/subagents/${encodeURIComponent(agentKey)}/model`,
