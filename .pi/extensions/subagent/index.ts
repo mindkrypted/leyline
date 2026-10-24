@@ -332,12 +332,10 @@ function selectedAgentThinking(
 }
 
 const SUBAGENT_TOOL_DESCRIPTION =
-  "Delegate tasks to specialized child agents with isolated context.\n" +
-  "Modes:\n" +
-  "- single (default): { agent, title, task, model?, thinking? }\n" +
-  "- parallel: { tasks: [{ agent, title, task, model?, thinking? }] } — runs concurrently\n" +
-  "- chain: { chain: [{ agent, title, task, model?, thinking? }] } — sequential, {previous} replaced by prior output\n" +
-  "Every child requires a short, descriptive session title, separate from its full task prompt.";
+  "Delegate self-contained tasks to specialized child agents with isolated context; keep small or interactive work in the parent. Item: { agent, title, task, model?, thinking? }; title is a short, descriptive session name, separate from task.\n" +
+  "- single (default): top-level item\n" +
+  "- parallel: { tasks: [item] } independent tasks, no shared file writes; concurrent, batches of 4\n" +
+  "- chain: { chain: [item] } sequential via {previous}; stops on failure. Prefer separate singles to inspect between steps.";
 
 function subagentDescription(agents: AgentDef[]) {
   if (!agents.length) return SUBAGENT_TOOL_DESCRIPTION;
