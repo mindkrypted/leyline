@@ -342,7 +342,8 @@ function launch(executable, args, cwd) {
       else resolveLaunch()
     }
     try {
-      child = spawn(executable, args, { cwd, shell: false, stdio: 'ignore', detached: process.platform !== 'win32', windowsHide: true })
+      // Launch desktop actions visibly and independently of the backend.
+      child = spawn(executable, args, { cwd, shell: false, stdio: 'ignore', detached: true, windowsHide: false })
       child.once('error', finish)
       child.once('spawn', () => { timer = setTimeout(() => finish(), 750) })
       child.once('exit', (code, signal) => {
