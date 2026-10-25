@@ -1741,6 +1741,7 @@ const vFocusSelect = {
         <button
           class="sidebar-project-shortcut"
           type="button"
+          aria-keyshortcuts="Meta+Shift+A Control+Shift+A"
           @click="openNavigator('activity', $event)"
         >
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -1750,7 +1751,7 @@ const vFocusSelect = {
             <strong>{{ activitySummary }}</strong>
             <small>Activity</small>
           </span>
-          <span aria-hidden="true">›</span>
+          <kbd class="sidebar-project-shortcut-key" aria-hidden="true"><span class="key-mod">⌘⇧</span>A</kbd>
         </button>
         <button
           class="sidebar-project-shortcut"
@@ -1767,7 +1768,7 @@ const vFocusSelect = {
             <strong>Go to</strong>
             <small>Projects and sessions</small>
           </span>
-          <kbd class="sidebar-project-shortcut-key" aria-hidden="true">⌘K</kbd>
+          <kbd class="sidebar-project-shortcut-key" aria-hidden="true"><span class="key-mod">⌘</span>K</kbd>
         </button>
         <button
           class="sidebar-project-shortcut"

@@ -29,9 +29,10 @@ These shortcuts apply while the slash command picker is open.
 | Shortcut | Action |
 | --- | --- |
 | **Command+K** or **Ctrl+K** | Open **Go to** for projects and sessions. |
+| **Command+Shift+A** or **Ctrl+Shift+A** | Open **Activity**. |
 | **Escape** | Close the open navigator. |
 
-Leyline ignores the **Go to** shortcut during deletion confirmation, transcript editing, or session renaming.
+Leyline ignores the **Go to** and **Activity** shortcuts during deletion confirmation, transcript editing, or session renaming.
 
 ## Open a target in another window
 

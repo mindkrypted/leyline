@@ -3898,6 +3898,9 @@ function handleGlobalKeydown(event) {
       closeGlobalSettings()
     } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
       event.preventDefault()
+    } else if ((event.metaKey || event.ctrlKey) && event.shiftKey
+      && event.key.toLowerCase() === 'a') {
+      event.preventDefault()
     }
     return
   }
@@ -3913,6 +3916,19 @@ function handleGlobalKeydown(event) {
     closeProjectBrowser()
     closeResearchCitationPreview()
     sidebarRef.value?.openNavigator('quick', event)
+    return
+  }
+  if ((event.metaKey || event.ctrlKey) && event.shiftKey
+    && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    if (filePreview.value || fileMenu.value
+      || deleteConfirmActive.value || editingEntry.value || renamingSessionId.value) {
+      return
+    }
+    closePickerMenus()
+    closeProjectBrowser()
+    closeResearchCitationPreview()
+    sidebarRef.value?.openNavigator('activity', event)
     return
   }
   if (event.key === 'Escape') handleEscape(event)

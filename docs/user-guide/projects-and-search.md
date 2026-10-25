@@ -47,7 +47,7 @@ Press **Escape** or select the shaded area to close the navigator.
 
 *Activity keeps live session state and controls in one compact view.*
 
-Select **Activity** at the bottom of the sidebar.
+Select **Activity** at the bottom of the sidebar, or press **Command+Shift+A**. On other platforms, press **Ctrl+Shift+A**.
 
 The navigator excludes the selected session. It includes activity from every project, including other sessions in the current project:
 
