@@ -353,7 +353,7 @@ function captureShortcut(event) {
           <input class="dictation-checkbox" type="checkbox" :checked="settings.keepModelWarm" :disabled="locked" @change="changeSetting('keepModelWarm', $event)" />
         </label>
         <label v-if="settings.keepModelWarm" class="dictation-row">
-          <span><strong>Unload after idle</strong><small>0 keeps the model ready until the speech service stops on {{ host }}. Files stay on disk.</small></span>
+          <span><strong>Unload after idle</strong><small>Use a value above 0 to unload the model after inactivity. Use 0 to leave it loaded.</small></span>
           <span class="dictation-number-field"><input type="number" :value="settings.idleMinutes" min="0" max="60" step="1" required :disabled="locked" @change="changeIdle" /><span>minutes</span></span>
         </label>
       </div>
