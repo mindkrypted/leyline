@@ -6,6 +6,7 @@ export function useTerminal({ maxHeight } = {}) {
   const terminalEl = ref(null)
   const terminalStatus = ref('closed')
   const terminalCwd = ref('')
+  const terminalShell = ref('')
   const preferredHeight = ref(310)
   const terminalDrawerHeight = computed(() => Math.min(
     preferredHeight.value,
@@ -56,6 +57,7 @@ export function useTerminal({ maxHeight } = {}) {
     terminalOpen.value = false
     terminalStatus.value = 'closed'
     terminalCwd.value = ''
+    terminalShell.value = ''
     disposeTerminalResize()
     disposeTerminalConnection()
   }
@@ -65,6 +67,7 @@ export function useTerminal({ maxHeight } = {}) {
     terminalRunId = runId
     terminalStatus.value = 'connecting'
     terminalCwd.value = ''
+    terminalShell.value = ''
     disposeTerminalConnection()
 
     await nextTick()
@@ -78,7 +81,7 @@ export function useTerminal({ maxHeight } = {}) {
 
     terminalInstance = new Terminal({
       cursorBlink: true,
-      fontFamily: 'SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      fontFamily: 'Cascadia Code, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
       fontSize: 12,
       lineHeight: 1.25,
       scrollback: 10000,
@@ -134,6 +137,7 @@ export function useTerminal({ maxHeight } = {}) {
       if (payload.type === 'ready') {
         terminalReady = true
         terminalCwd.value = payload.cwd
+        terminalShell.value = payload.shell
         terminalStatus.value = 'connected'
         resizeTerminal()
         for (const data of pendingInput.splice(0)) {
@@ -147,7 +151,10 @@ export function useTerminal({ maxHeight } = {}) {
         terminalStatus.value = 'error'
         term.write(`\r\n${payload.message}\r\n`)
       }
-      if (payload.type === 'exit') terminalStatus.value = 'exited'
+      if (payload.type === 'exit') {
+        terminalStatus.value = 'exited'
+        term.write(`\r\n[process exited with code ${payload.exitCode}]\r\n`)
+      }
     })
 
     socket.addEventListener('close', () => {
@@ -245,6 +252,7 @@ export function useTerminal({ maxHeight } = {}) {
     connectTerminal,
     openEditorTerminal,
     terminalCwd,
+    terminalShell,
     terminalEl,
     terminalOpen,
     terminalStatus,
