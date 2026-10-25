@@ -10,7 +10,7 @@ const loading = ref(false)
 const capturingShortcut = ref(false)
 const shortcutError = ref('')
 const testOwned = ref(false)
-const platform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : 'win32'
+const platform = computed(() => props.dictation.platform)
 const engine = computed(() => props.dictation.engine)
 const localSelected = computed(() => engine.value === 'local')
 const localAvailable = computed(() => props.dictation.localAvailable && props.dictation.state?.supported !== false)
@@ -31,7 +31,7 @@ const testing = computed(() => props.dictation.phase === 'testing' || (testOwned
 const error = computed(() => props.dictation.error || localError.value)
 const shortcutLabel = computed(() => {
   try {
-    return formatDictationShortcut(settings.value.shortcut, platform)
+    return formatDictationShortcut(settings.value.shortcut, platform.value)
   } catch {
     return 'Set shortcut'
   }
@@ -192,13 +192,13 @@ function captureShortcut(event) {
     return
   }
   if ((!meta && !ctrl && !/^F(1[3-9]|2[0-4])$/.test(code))
-    || (platform !== 'darwin' && meta)
+    || (platform.value !== 'darwin' && meta)
     || ((meta || ctrl) && !alt && ['KeyG', 'KeyY'].includes(code))) {
     shortcutError.value = 'Use a Control or Command combination without a system conflict, or F13–F24.'
     return
   }
   try {
-    const { shortcut } = normalizeDictationSettings({ ...settings.value, shortcut: { code, meta, ctrl, alt, shift } }, platform)
+    const { shortcut } = normalizeDictationSettings({ ...settings.value, shortcut: { code, meta, ctrl, alt, shift } }, platform.value)
     capturingShortcut.value = false
     shortcutError.value = ''
     void save({ shortcut })
