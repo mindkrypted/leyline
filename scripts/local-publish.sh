@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "Local publishing is only supported on macOS." >&2
