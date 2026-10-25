@@ -58,7 +58,7 @@
     `assets/readme/tracing.png`. Desktop documentation uses 1440x900,
     mobile 390x844, and README 1503x818 CSS pixels, all at scale factor 2.
     Use intercepted fixtures, never real app data or model requests. Keep
-    `local/minimax-m2.7` for general captures and preserve approved eligible
+    `local/glm-5.3-flash` for general captures and preserve approved eligible
     Ultrafast and image-capable vision fixture exceptions.
 - Build check:
   - `npm run build`

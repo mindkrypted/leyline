@@ -63,9 +63,9 @@ export async function docsTraces(entries, sessions) {
         at(turn.timing)
         emit('turn_start', { turnIndex, timestamp: now })
         emit('context', { messages })
-        capture.observe({ type: 'provider_request', provider: 'local', api: 'openai-completions', model: 'minimax-m2.7' }, ctx)
+        capture.observe({ type: 'provider_request', provider: 'local', api: 'openai-completions', model: 'glm-5.3-flash' }, ctx)
         emit('before_provider_request', { payload: {
-          model: 'minimax-m2.7', messages,
+          model: 'glm-5.3-flash', messages,
           tools: tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.parameters } })),
         } })
         const toolCallId = `call-${turnIndex + 1}`
@@ -76,7 +76,7 @@ export async function docsTraces(entries, sessions) {
         ]
         at(turn.timing, true)
         const message = {
-          role: 'assistant', content, provider: 'local', api: 'openai-completions', model: 'minimax-m2.7',
+          role: 'assistant', content, provider: 'local', api: 'openai-completions', model: 'glm-5.3-flash',
           stopReason: turn.tool ? 'toolUse' : 'stop', timestamp: now,
           usage: {
             input: turn.inputTokens, output: turn.outputTokens, cacheRead: turn.cacheRead || 0, cacheWrite: 0,

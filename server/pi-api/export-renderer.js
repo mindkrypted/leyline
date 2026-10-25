@@ -6,7 +6,7 @@ import { parseDiffFromFile } from '@pierre/diffs'
 import { configureMarkdownLinks } from '../../lib/markdown-file-links.js'
 import { projectContextView, systemPromptInfo, systemSectionTitle } from '../../lib/system-prompt.js'
 import { subagentStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
-import { subagentCallTitle, subagentEmptyText, subagentFallback, subagentOutput, subagentTasks, subagentTaskTitle } from '../../lib/subagent-view.js'
+import { subagentCallTitle, subagentEmptyText, subagentFallback, subagentModelChips, subagentOutput, subagentTasks, subagentTaskTitle } from '../../lib/subagent-view.js'
 import { subagentLedgerRows } from '../../lib/subagent-ledger.js'
 import { activityEntry, activitySummary, groupToolActivity, mobileToolStatus, singleSubagentEntry, toolStatusTone } from '../../lib/tool-activity.js'
 import {
@@ -459,6 +459,16 @@ function renderExportSubagentReader(row) {
 </template>`
 }
 
+function exportSubagentModelChips(task) {
+  const chips = subagentModelChips(task)
+  const model = chips.model
+    ? `<span class="subagent-inspector-model"${chips.model.title ? ` title="${escapeHtml(chips.model.title)}"` : ''}><span>Model</span><code>${escapeHtml(chips.model.code)}</code>${chips.model.source ? `<span class="subagent-inspector-model-source">· ${escapeHtml(chips.model.source)}</span>` : ''}</span>`
+    : ''
+  return model + (chips.thinking
+    ? `<span class="subagent-inspector-thinking"><span>Thinking</span><code>${escapeHtml(chips.thinking.level)}</code></span>`
+    : '')
+}
+
 function renderExportSubagent(entry, index) {
   const tasks = subagentTasks(entry)
   const outcome = subagentSummary(entry)
@@ -471,21 +481,21 @@ function renderExportSubagent(entry, index) {
     const key = task ? subagentStatus(task, outcome.active) : fallback.status
     return `<span class="subagent-task-status status-${key}">${task ? subagentStatuses[key].label : escapeHtml(fallback.label)}</span>`
   }
-  const summary = outcome.counts.length
-    ? `<div class="subagent-summary" aria-label="Task outcomes">${outcome.counts.map(count => `<span class="status-${count.status}">${escapeHtml(count.text)}</span>`).join('')}</div>`
-    : status()
+  const summary = `<div class="subagent-summary" aria-label="Task outcomes">${outcome.counts.length
+    ? outcome.counts.map(count => `<span class="status-${count.status}">${escapeHtml(count.text)}</span>`).join('')
+    : status()}</div>`
   const taskTemplates = (tasks.length ? tasks : [undefined]).map((task, taskIndex) => {
     const key = task ? subagentStatus(task, outcome.active) : fallback.status
     const rows = exportSubagentRows(entry, task, outcome.active)
     const latest = rows.findLast(row => ['message', 'result'].includes(row.kind))
     const prompt = task?.task ? exportSubagentRow('prompt', task.task, { kind: 'prompt', action: 'Task prompt', title: 'Full task prompt', status: 'saved', source: 'prompt' }) : null
     return `<template data-subagent-task-content="${taskIndex}">
-<div class="subagent-inspector-meta">${task ? `<span class="subagent-inspector-agent"><span>Agent</span> <code>${escapeHtml(task.agent)}</code></span>` : ''}${task?.research ? `<span>${escapeHtml(task.research.sources?.length || 0)} sources</span>` : ''}${status(task)}<span>Saved task output</span>${prompt ? '<button class="subagent-inspector-prompt" type="button" data-subagent-open="prompt">Full task prompt <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>' : ''}</div>
+<div class="subagent-inspector-meta">${task ? exportSubagentModelChips(task) : ''}${task?.research ? `<span>${escapeHtml(task.research.sources?.length || 0)} sources</span>` : ''}${status(task)}</div>
 <template data-subagent-ledger><div class="subagent-ledger-overview">
 <div class="subagent-ledger-summary" tabindex="0" aria-label="Latest activity">
 ${latest ? `<section class="subagent-ledger-latest"><div class="subagent-ledger-latest-heading"><span><span class="subagent-ledger-latest-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.5h12v8H7l-3.5 3v-3H2z" /></svg></span>Latest response</span><button type="button" data-subagent-open="${escapeHtml(latest.key)}">Read full · ${latest.text.length.toLocaleString()} chars</button></div><h3>${escapeHtml(latest.title)}</h3>${latest.excerpt ? `<p>${escapeHtml(latest.excerpt)}</p>` : ''}</section>` : ''}
 </div>
-<div class="subagent-ledger-labels"><span class="subagent-ledger-activity-label">Activity</span><span>${rows.length} entries · ${rows.filter(row => row.kind === 'tool').length} calls</span><span class="subagent-ledger-read-hint">Select a row to read</span></div>
+<div class="subagent-ledger-labels"><span class="subagent-ledger-activity-label">Activity</span><span>${rows.length} entries · ${rows.filter(row => row.kind === 'tool').length} calls</span><span class="subagent-ledger-connection">Saved task output</span></div>
 <div class="subagent-ledger-scroll" tabindex="0" aria-label="Saved task output"><div class="subagent-ledger-rows">${rows.map(renderExportSubagentRow).join('')}${rows.length ? '' : `<p class="subagent-inspector-empty">${escapeHtml(task ? subagentEmptyText(key) : 'Individual task details are unavailable.')}</p>`}</div></div>
 </div></template>
 ${[...rows, ...(prompt ? [prompt] : [])].map(renderExportSubagentReader).join('')}
@@ -504,10 +514,13 @@ ${[...rows, ...(prompt ? [prompt] : [])].map(renderExportSubagentReader).join(''
 <template id="subagent-template-${index}">
 <div class="subagent-inspector-context" tabindex="0" aria-label="Task details">
 <header class="subagent-inspector-header">
-<div><p>${label}</p><h2 id="subagent-inspector-title">${escapeHtml(title)}</h2></div>
-${tasks.length !== 1 ? summary : ''}
+<div class="subagent-inspector-heading"><p>${label}<span class="subagent-inspector-agent" data-subagent-agent hidden></span></p><h2 id="subagent-inspector-title">${escapeHtml(title)}</h2></div>
+<div class="subagent-inspector-actions">
 <button class="subagent-inspector-icon-button" type="button" title="Copy tool output" aria-label="Copy tool output" data-subagent-copy-tool>${copyIcon}</button>
 <button class="subagent-inspector-icon-button" type="button" aria-label="Close subagent inspector" data-subagent-close><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
+</div>
+<button class="subagent-inspector-prompt" type="button" data-subagent-open="prompt" hidden>Full task prompt <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>
+${tasks.length !== 1 ? summary : ''}
 </header>
 ${tasks.length > 1 ? `<nav class="subagent-inspector-tasks" aria-label="Subagent tasks">${tasks.map((task, taskIndex) => `<button class="subagent-inspector-task" type="button" data-subagent-task="${taskIndex}" aria-pressed="${taskIndex === 0}" title="${escapeHtml(subagentTaskTitle(task, taskIndex))}"><span class="subagent-inspector-index">${taskIndex + 1}</span><span class="subagent-inspector-task-label">${escapeHtml(subagentTaskTitle(task, taskIndex))}</span>${status(task)}</button>`).join('')}</nav>` : ''}
 <div class="subagent-inspector-meta"></div>
@@ -943,6 +956,10 @@ function subagentInspectorJs() {
         for (const task of tasks) task.setAttribute('aria-pressed', String(Number(task.dataset.subagentTask) === selected))
         const content = taskTemplates[selected].content.querySelector('.subagent-inspector-meta')
         meta.replaceChildren(...[...content.childNodes].map(node => node.cloneNode(true)))
+        const agent = pane.querySelector('[data-subagent-agent]')
+        agent.textContent = taskData[selected]?.agent ? ' · ' + taskData[selected].agent : ''
+        agent.hidden = !agent.textContent
+        pane.querySelector('.subagent-inspector-prompt').hidden = !readerTemplate('prompt')
         renderView()
       }
       function openEntry(key) {
@@ -958,7 +975,7 @@ function subagentInspectorJs() {
         state().reader = null
         renderView()
         const row = body.querySelector('[data-subagent-tail-entry="' + CSS.escape(key) + '"]')
-          || meta.querySelector('[data-subagent-open="prompt"]')
+          || pane.querySelector('[data-subagent-open="prompt"]')
         ;(row || scroller()).focus({ preventScroll: true })
       }
       function changeFormat(value) {
@@ -2389,23 +2406,35 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-header {
-  display: flex;
+  display: grid;
   flex: none;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid rgb(255 255 255 / 7%);
   padding: 15px 20px 13px;
 }
 
-.subagent-inspector-header > div:not(.subagent-summary) {
-  flex: 1;
+.subagent-inspector-header:has(> .subagent-inspector-prompt:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.subagent-inspector-heading {
   min-width: 0;
 }
 
+.subagent-inspector-actions {
+  display: flex;
+  gap: 7px;
+}
+
 .subagent-inspector-header p {
+  overflow: hidden;
   margin: 0 0 4px;
   color: #93959f;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subagent-inspector-header h2 {
@@ -2423,11 +2452,9 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-header .subagent-summary {
-  flex: 0 1 auto;
-  justify-content: flex-end;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
   gap: 2px 8px;
-  max-width: 40%;
-  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2632,9 +2659,8 @@ dialog.subagent-inspector:not([open]) {
   overflow-wrap: anywhere;
 }
 
-.subagent-inspector-agent > span {
-  flex: none;
-  white-space: nowrap;
+.subagent-inspector-agent {
+  color: #b0b1b9;
 }
 
 .subagent-inspector-meta code {
@@ -2642,6 +2668,18 @@ dialog.subagent-inspector:not([open]) {
   color: #e9e9ed;
   font-size: inherit;
   font-weight: 400;
+}
+
+.subagent-inspector-model > span,
+.subagent-inspector-thinking > span {
+  flex: none;
+  white-space: nowrap;
+}
+
+.subagent-inspector-model code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subagent-inspector-meta .subagent-task-status {
@@ -2695,7 +2733,7 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-prompt {
-  margin-left: auto;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -2827,6 +2865,25 @@ dialog.subagent-inspector:not([open]) {
 .subagent-ledger-read-hint {
   margin-left: auto;
   text-align: right;
+}
+
+.subagent-ledger-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.subagent-ledger-connection.is-live {
+  color: #b0a2f4;
+}
+
+.subagent-ledger-connection.is-live::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
 }
 
 .subagent-ledger-scroll {
@@ -3505,9 +3562,10 @@ dialog.subagent-inspector[open] {
     content: '';
   }
 
-  .subagent-inspector-header {
-    flex-wrap: wrap;
-    gap: 4px;
+  .subagent-inspector-header,
+  .subagent-inspector-header:has(> .subagent-inspector-prompt:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
     padding: 11px 16px 10px;
   }
 
@@ -3516,11 +3574,14 @@ dialog.subagent-inspector[open] {
   }
 
   .subagent-inspector-header .subagent-summary {
-    order: 1;
-    flex-basis: 100%;
-    justify-content: flex-start;
     gap: 2px 6px;
-    max-width: none;
+  }
+
+  .subagent-inspector-prompt {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 12px;
   }
 
   .subagent-inspector-tasks {

@@ -2329,6 +2329,7 @@ const runSubagent = trackRuntimeCreation(async ({ title, task, cwd, parentSessio
     const messages = []
     let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, turns: 0 }
     let responseModel
+    let responseProvider
     let stopReason
 
     for (const entry of entries) {
@@ -2350,6 +2351,7 @@ const runSubagent = trackRuntimeCreation(async ({ title, task, cwd, parentSessio
           usage.cost = u.cost?.total ?? 0
         }
         if (msg.model) responseModel = msg.model
+        if (msg.provider) responseProvider = msg.provider
         if (msg.stopReason) stopReason = msg.stopReason
         if (msg.errorMessage) messages.push({ role: 'error', content: msg.errorMessage })
       } else if (msg.role === 'toolResult' || msg.role === 'tool') {
@@ -2358,12 +2360,19 @@ const runSubagent = trackRuntimeCreation(async ({ title, task, cwd, parentSessio
     }
 
     const effectiveThinkingLevel = session.thinkingLevel
+    const sessionModel = session.model
+    const modelName = sessionModel && sessionModel.id === responseModel
+      && (!responseProvider || sessionModel.provider === responseProvider)
+      ? sessionModel.name
+      : undefined
 
     const result = {
       childSession: { path: childPath, id: childId, cwd },
       messages,
       usage,
       model: responseModel,
+      modelProvider: responseProvider,
+      modelName,
       thinkingLevel: effectiveThinkingLevel,
       stopReason,
     }

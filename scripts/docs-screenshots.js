@@ -29,8 +29,8 @@ const visionAlertImage = {
 }
 const model = {
   provider: 'local',
-  id: 'minimax-m2.7',
-  name: 'MiniMax M2.7',
+  id: 'glm-5.3-flash',
+  name: 'GLM 5.3 Flash',
   supportsImages: false,
   supportsUltrafast: false,
   contextWindow: 204800,
@@ -725,6 +725,11 @@ const subagentOutcomeResults = [
   { agent: 'general', title: 'Publication conditions', task: 'Review publication conditions' },
 ].map((task, index) => ({
   ...task,
+  model: model.id,
+  modelProvider: model.provider,
+  modelName: model.name,
+  modelSource: 'inherited',
+  thinkingLevel: 'high',
   status: index === 2 ? 'stopped' : 'done',
   stopReason: index === 2 ? 'aborted' : 'stop',
   exitCode: index === 2 ? 1 : 0,
@@ -809,6 +814,7 @@ const subagentSidebarEntries = [
 
 const subagentLiveResult = {
   agent: 'explore',
+  modelSource: 'inherited',
   title: 'Verify release safeguards',
   task: 'Review the release workflow and script. Confirm that verification runs before tagging and publication, and that a failed check stops the release.',
   status: 'running',
@@ -1084,8 +1090,8 @@ const subagentPayload = {
       model: 'inherit',
       thinking: 'high',
       tools: ['read', 'grep'],
-      overrides: { global: 'local/minimax-m2.7', session: 'local/minimax-m2.7' },
-      effectiveModel: 'local/minimax-m2.7',
+      overrides: { global: 'local/glm-5.3-flash', session: 'local/glm-5.3-flash' },
+      effectiveModel: 'local/glm-5.3-flash',
       modelSource: 'session',
     },
     {
@@ -1094,11 +1100,11 @@ const subagentPayload = {
       description: 'Finds source evidence before implementation begins.',
       source: 'user',
       path: '/workspace/agents/researcher.md',
-      model: 'local/minimax-m2.7',
+      model: 'local/glm-5.3-flash',
       thinking: 'medium',
       tools: ['read', 'grep', 'bash'],
-      overrides: { global: 'local/minimax-m2.7', project: 'local/minimax-m2.7' },
-      effectiveModel: 'local/minimax-m2.7',
+      overrides: { global: 'local/glm-5.3-flash', project: 'local/glm-5.3-flash' },
+      effectiveModel: 'local/glm-5.3-flash',
       modelSource: 'project',
     },
   ],
@@ -1566,8 +1572,8 @@ try {
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
       await dialog.getByRole('button', { name: 'Models & providers', exact: true }).click()
       await dialog.locator('.pi-settings-workspace[aria-busy="false"]').waitFor()
-      await dialog.getByRole('button', { name: 'Edit MiniMax M2.7 (minimax-m2.7)', exact: true }).click()
-      await dialog.getByRole('textbox', { name: /^Display name/ }).fill('MiniMax M2.7 (draft)')
+      await dialog.getByRole('button', { name: 'Edit GLM 5.3 Flash (glm-5.3-flash)', exact: true }).click()
+      await dialog.getByRole('textbox', { name: /^Display name/ }).fill('GLM 5.3 Flash (draft)')
       const actions = dialog.locator('.pi-settings-draft-actions')
       await actions.getByRole('button', { name: 'Test connection', exact: true }).click()
       await actions.getByText('Connection test passed in 0.2 seconds (HTTP 200).', { exact: true }).waitFor()
@@ -1804,8 +1810,8 @@ try {
       const section = dialog.locator('section[aria-label="Subagents"][aria-busy="false"]')
       await section.waitFor()
       await section.locator('select:not(:disabled)').nth(1).waitFor()
-      await section.locator('option[value="local/minimax-m2.7"]').nth(1).waitFor({ state: 'attached' })
-      await section.getByRole('combobox', { name: /^reviewer/ }).locator('option[value="local/minimax-m2.7"]:checked').waitFor({ state: 'attached' })
+      await section.locator('option[value="local/glm-5.3-flash"]').nth(1).waitFor({ state: 'attached' })
+      await section.getByRole('combobox', { name: /^reviewer/ }).locator('option[value="local/glm-5.3-flash"]:checked').waitFor({ state: 'attached' })
       await waitForBatchSize(page, 'global', 4)
       await setBatchSize(page, 'global', 3)
       await setBatchSize(page, 'global', 4)
@@ -1913,7 +1919,7 @@ try {
       }
       const options = await modelSelect.locator('option').allTextContents()
       if (options.some((option) => {
-        return option.includes('minimax-m2.7') || option.includes('text-only-coder')
+        return option.includes('glm-5.3-flash') || option.includes('text-only-coder')
       })) {
         throw new Error('Vision model selector includes a model without image support')
       }
@@ -2288,6 +2294,18 @@ async function waitForSubagentReader(page) {
   })
 }
 
+async function checkSubagentHeader(page, agent) {
+  const inspector = page.locator('.subagent-inspector')
+  const header = inspector.locator('.subagent-inspector-header')
+  await header.locator('.subagent-inspector-agent').filter({ hasText: agent }).waitFor()
+  await header.getByRole('button', { name: 'Full task prompt', exact: true }).waitFor()
+  const chips = inspector.locator('.subagent-inspector-meta')
+  await chips.locator('.subagent-inspector-model code').filter({ hasText: `${model.provider}/${model.id}` }).waitFor()
+  await chips.locator('.subagent-inspector-model-source').filter({ hasText: 'inherited' }).waitFor()
+  await chips.locator('.subagent-inspector-thinking code').filter({ hasText: 'high' }).waitFor()
+  if (await chips.locator('button').count()) throw new Error('Task prompt must remain in the header')
+}
+
 async function openSubagentInspector(page, taskCount, exportPage = false) {
   if (!exportPage) await page.locator('.workbench:not(.session-switching):not(.session-loading-workbench)').waitFor()
   await disableMotion(page)
@@ -2331,6 +2349,7 @@ async function openSubagentInspector(page, taskCount, exportPage = false) {
   }
   if (exportPage) await inspector.getByText('Child sessions are available in Leyline', { exact: true }).waitFor()
   else await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
+  await checkSubagentHeader(page, subagentOutcomeResults[0].agent)
   const after = await activity.boundingBox()
   if (before.height !== after.height || before.y !== after.y || await activity.evaluate(element => element.classList.contains('is-expanded'))) {
     throw new Error(`Single-call subagent inspection expanded or moved the Activity card: ${JSON.stringify({ before, after })}`)
@@ -2368,6 +2387,8 @@ async function openLiveSubagentInspector(page) {
   await running.locator('.status-running').waitFor()
   await inspector.locator('.subagent-tail-following').filter({ hasText: 'Following live' }).waitFor()
   await inspector.getByRole('button', { name: 'Open child session', exact: true }).waitFor()
+  await checkSubagentHeader(page, subagentLiveResult.agent)
+  await inspector.locator('.subagent-ledger-connection').filter({ hasText: 'Live updates' }).waitFor()
   const open = await page.evaluate(id => window.__docsEventSockets.filter(socket => new URL(socket.url).searchParams.get('sessionId') === id && socket.readyState === WebSocket.OPEN).length, subagentLiveResult.childSession.id)
   if (open !== 1 || new URL(page.url()).pathname !== '/sessions/demo-session') throw new Error('Live preview must observe only its child without navigation')
   if (await inspector.evaluate(element => element.scrollWidth > element.clientWidth)) throw new Error('Live preview overflows horizontally')
@@ -3282,6 +3303,7 @@ async function assertPrivateDataAbsent(page) {
   ].filter((value) => value && value.length > 2)
   const found = forbidden.find((value) => text.includes(value))
   if (found) throw new Error(`Private text found before capture: ${found}`)
+  if (/minimax[- ]m2\.7/i.test(text)) throw new Error('Previous general model fixture found before capture')
   if (/\b[\w.-]+\.(?:local|internal)\b/.test(text)) {
     throw new Error('Private hostname found before capture')
   }

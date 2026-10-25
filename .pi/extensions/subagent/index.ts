@@ -57,6 +57,9 @@ interface SingleResult {
     turns: number;
   };
   model?: string;
+  modelProvider?: string;
+  modelName?: string;
+  modelSource?: string;
   thinkingLevel?: ThinkingLevel;
   stopReason?: string;
   error?: string;
@@ -210,14 +213,14 @@ async function resolveSubagentConfig(params: {
   cwd: string;
   parentSessionPath: string | null;
   signal?: AbortSignal;
-}): Promise<{ model?: string; thinking?: string }> {
+}): Promise<{ model?: string; modelSource?: string; thinking?: string }> {
   return callLeylineApi("/subagents/resolve", {
     agentKey: params.agent.key,
     cwd: params.cwd,
     sessionPath: params.parentSessionPath,
     staticModel: params.agent.model,
     staticThinking: params.agent.thinking,
-  }, params.signal) as Promise<{ model?: string; thinking?: string }>;
+  }, params.signal) as Promise<{ model?: string; modelSource?: string; thinking?: string }>;
 }
 
 async function resolveSubagentBatchSize(ctx: ExtensionContext, signal?: AbortSignal): Promise<number> {
@@ -251,6 +254,8 @@ async function runSubagentViaApi(params: {
   messages: Array<{ role: string; content: string }>;
   usage: { inputTokens: number; outputTokens: number; totalTokens: number; cost: number; turns: number };
   model?: string;
+  modelProvider?: string;
+  modelName?: string;
   thinkingLevel?: ThinkingLevel;
   stopReason?: string;
 }> {
@@ -620,10 +625,8 @@ export default function subagentExtension(pi: ExtensionAPI) {
             details: {
               mode: "single",
               results: [{
-                ...pendingResult(childTasks[0], "queued"),
+                ...pendingResult(childTasks[0], "queued", params),
                 agentSource: agent!.source,
-                requestedModel: params.model,
-                requestedThinking: params.thinking,
               }],
               background: true,
             } as SubagentDetails,
@@ -673,6 +676,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
         const progress = tasks.map((task: any, index: number) => pendingResult(
           task,
           index < maxConcurrency ? "running" : "queued",
+          params,
         ));
         const publishProgress = () => {
           const completed = progress.filter((result) => {
@@ -718,6 +722,8 @@ export default function subagentExtension(pi: ExtensionAPI) {
                   agentSource: "unknown" as const,
                   title: task.title,
                   task: task.task,
+                  requestedModel: task.model ?? params.model,
+                  requestedThinking: task.thinking ?? params.thinking,
                   status: "error" as const,
                   childSession: null,
                   exitCode: 1,
@@ -756,7 +762,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
         const chainResults = () => [
           ...results,
           ...chain.slice(results.length).map((step: any) => ({
-            ...pendingResult(step, "queued"),
+            ...pendingResult(step, "queued", params),
             status: "not-started" as const,
             exitCode: 1,
             error: "Task did not start",
@@ -772,6 +778,8 @@ export default function subagentExtension(pi: ExtensionAPI) {
               agentSource: "unknown",
               title: step.title,
               task: step.task,
+              requestedModel: step.model ?? params.model,
+              requestedThinking: step.thinking ?? params.thinking,
               childSession: null,
               exitCode: 1,
               messages: [],
@@ -795,7 +803,7 @@ export default function subagentExtension(pi: ExtensionAPI) {
                 content: [{ type: "text", text: `${started.agent} chain step running` }],
                 details: {
                   mode: "chain",
-                  results: [...results, started, ...chain.slice(results.length + 1).map((step: any) => pendingResult(step, "queued"))],
+                  results: [...results, started, ...chain.slice(results.length + 1).map((step: any) => pendingResult(step, "queued", params))],
                   background: true,
                 } as SubagentDetails,
               });
@@ -842,6 +850,7 @@ function subagentMode(params: any): string {
 function pendingResult(
   task: any,
   status: "queued" | "running",
+  params?: any,
 ): SingleResult {
   return {
     agent: String(task.agent || "subagent"),
@@ -849,6 +858,8 @@ function pendingResult(
     title: task.title,
     task: String(task.task || ""),
     status,
+    requestedModel: params ? task.model ?? params.model : undefined,
+    requestedThinking: params ? task.thinking ?? params.thinking : undefined,
     childSession: null,
     exitCode: 0,
     messages: [],
@@ -926,12 +937,16 @@ async function executeSingle(
   const emptyUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cost: 0, turns: 0 };
   let childSession: ChildSession | null = null;
   let dispatched = false;
+  let modelSource: string | undefined;
 
   try {
     signal?.throwIfAborted();
     const configured = await resolveSubagentConfig({ agent, cwd: ctx.cwd, parentSessionPath, signal });
     const selectedModel = modelOverride?.trim() || configured.model;
     const selectedThinking = thinkingOverride?.trim() || configured.thinking;
+    modelSource = !modelOverride?.trim() && configured.model
+      ? (configured.model === "inherit" ? "inherited" : configured.modelSource)
+      : undefined;
     const result = await runSubagentViaApi({
       title,
       task,
@@ -956,6 +971,7 @@ async function executeSingle(
           status: "running",
           requestedModel: modelOverride,
           requestedThinking: thinkingOverride,
+          modelSource,
           childSession,
           exitCode: 0,
           messages: [],
@@ -983,6 +999,9 @@ async function executeSingle(
       messages,
       usage: data.usage || emptyUsage,
       model: data.model,
+      modelProvider: data.modelProvider,
+      modelName: data.modelName,
+      modelSource,
       thinkingLevel: data.thinkingLevel,
       stopReason: data.stopReason,
       error: data.error,
@@ -998,6 +1017,7 @@ async function executeSingle(
       stopReason: stopped ? "aborted" : "error",
       requestedModel: modelOverride,
       requestedThinking: thinkingOverride,
+      modelSource,
       childSession,
       exitCode: 1,
       messages: [],

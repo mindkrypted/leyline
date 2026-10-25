@@ -12,6 +12,8 @@ export function useSubagentPreview(session, status) {
   const runtimeError = ref('')
   const ready = ref(false)
   const cached = shallowRef(null)
+  const model = shallowRef(null)
+  const thinkingLevel = ref('')
   const cache = new Map()
   const cacheLimit = 4 * 1024 * 1024
   const projection = useLiveTurnProjection({
@@ -79,6 +81,8 @@ export function useSubagentPreview(session, status) {
       detail: { entries: (detail?.entries || []).filter(entry => entry.type === 'tool' || entry.role === 'assistant').slice(-80) },
       events,
       anchor,
+      model: model.value,
+      thinkingLevel: thinkingLevel.value,
     }
     if (!snapshot.items.length) return
     let bytes = 0
@@ -120,6 +124,8 @@ export function useSubagentPreview(session, status) {
     connection.value = ''
     error.value = ''
     runtimeError.value = ''
+    model.value = null
+    thinkingLevel.value = ''
     toolGroups.clear()
     messageIds.clear()
     groupSequence = 0
@@ -133,6 +139,8 @@ export function useSubagentPreview(session, status) {
       cached.value = previousPreview.snapshot
       cache.delete(cacheKey)
       cache.set(cacheKey, previousPreview)
+      model.value = previousPreview.snapshot.model || null
+      thinkingLevel.value = previousPreview.snapshot.thinkingLevel || ''
       for (const [key, value] of cached.value.messages) messageIds.set(key, value)
       for (const [key, value] of cached.value.groups) toolGroups.set(key, value)
       groupSequence = cached.value.sequence
@@ -317,6 +325,10 @@ export function useSubagentPreview(session, status) {
             }
             snapshot = data
             rememberEvent(type, data)
+            model.value = data.state?.model?.id
+              ? { id: data.state.model.id, name: data.state.model.name || '', provider: data.state.model.provider || '' }
+              : null
+            thinkingLevel.value = data.state?.thinkingLevel || ''
             projection.setRuntimeState(data.state, data.snapshotRevision)
           } else if (type === 'runtime_event' && data.activeSessionId === id) {
             const event = data.event
@@ -382,6 +394,8 @@ export function useSubagentPreview(session, status) {
     items,
     itemKey: item => `${session.value?.id || ''}:${messageIds.get(activityEntry(item).id) || item.id}`,
     loading,
+    model,
+    thinkingLevel,
     ready: available,
     refresh: () => refresh(),
     runtimeError,
