@@ -12,6 +12,7 @@ const props = defineProps({
   entry: { type: Object, required: true },
   toolStatus: { type: String, default: '' },
   copiedEntryId: { type: String, default: '' },
+  initialTaskIndex: { type: Number, default: 0 },
 })
 const emit = defineEmits(['close', 'copy', 'copy-entry', 'navigate-child-session', 'open-image'])
 const pane = ref(null)
@@ -20,7 +21,7 @@ const tailContent = ref(null)
 const taskList = ref(null)
 const taskMarker = ref(null)
 const hasTaskMarker = ref(false)
-const selectedIndex = ref(0)
+const selectedIndex = ref(props.initialTaskIndex || 0)
 const tasks = computed(() => subagentTasks(props.entry))
 const outcome = computed(() => subagentSummary(props.entry, props.toolStatus))
 const fallback = computed(() => subagentFallback(props.entry, props.toolStatus))

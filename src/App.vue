@@ -39,6 +39,7 @@ import StartComposer from './components/StartComposer.vue'
 import SessionComposer from './components/SessionComposer.vue'
 import MobileToolActivity from './components/MobileToolActivity.vue'
 import { activityEntry, activityStatus, groupToolActivity, singleSubagentEntry } from '../lib/tool-activity.js'
+import { subagentTasks } from '../lib/subagent-view.js'
 import SessionSidebar from './components/SessionSidebar.vue'
 import { useBackendConnections } from './composables/useBackendConnections'
 import { useComposerMotion } from './composables/useComposerMotion'
@@ -103,6 +104,7 @@ const toolOpener = shallowRef(null)
 const subagentInspector = ref(null)
 const subagentOpener = shallowRef(null)
 const subagentSelection = ref('')
+const subagentSidebarInspection = shallowRef(null)
 const reviewPane = ref(null)
 const reviewOpener = shallowRef(null)
 const headerMoreOpen = ref(false)
@@ -437,6 +439,7 @@ const compactionBoundary = computed(() => {
   return { index: index < 0 ? items.length : index, resolved: index >= 0 }
 })
 const inspectedSubagent = computed(() => {
+  if (subagentSidebarInspection.value) return subagentSidebarInspection.value.entry
   if (!subagentSelection.value) return null
   for (const group of [...persistedTranscriptItems.value, ...liveTranscriptItems.value]) {
     if (group.type !== 'tool-activity') continue
@@ -483,12 +486,59 @@ function inspectActivitySubagent(group, entry, event) {
 function openSubagentInspector(entry, event) {
   if (extensionConfirmations.value.length) return
   subagentOpener.value = event?.currentTarget || document.activeElement
+  subagentSidebarInspection.value = null
   subagentSelection.value = entry.toolCallId || entry.id
   closePickerMenus()
   pauseScroll()
 }
 function closeSubagentInspector() {
   subagentSelection.value = ''
+  subagentSidebarInspection.value = null
+}
+function subagentMatchForChild(entry, child) {
+  const tasks = subagentTasks(entry)
+  const taskIndex = tasks.findIndex((task) => {
+    return (task.childSession?.path && task.childSession.path === child.path)
+      || (task.childSession?.id && task.childSession.id === child.id)
+  })
+  return taskIndex >= 0 ? { entry, taskIndex } : null
+}
+function findSubagentInspectionInTranscript(child) {
+  for (const group of [...persistedTranscriptItems.value, ...liveTranscriptItems.value]) {
+    if (group.type !== 'tool-activity') continue
+    for (const item of group.items) {
+      const entry = activityEntry(item)
+      if (entry.toolName !== 'subagent') continue
+      const match = subagentMatchForChild(entry, child)
+      if (match) return match
+    }
+  }
+  return null
+}
+async function openSubagentInspectorForChild(child, parent, opener) {
+  if (!child || extensionConfirmations.value.length) return
+  subagentOpener.value = opener || document.activeElement
+  let match = findSubagentInspectionInTranscript(child)
+  if (!match && child.parentSessionPath) {
+    try {
+      const detail = await fetchSessionDetailByPath(child.parentSessionPath)
+      for (const entry of detail.entries || []) {
+        if (entry.type !== 'tool' || entry.toolName !== 'subagent') continue
+        match = subagentMatchForChild(entry, child)
+        if (match) break
+      }
+    } catch {
+      match = null
+    }
+  }
+  if (!match) {
+    await navigateChildSession(child)
+    return
+  }
+  closePickerMenus()
+  pauseScroll()
+  subagentSidebarInspection.value = match
+  subagentSelection.value = `sidebar:${child.path || child.id}`
 }
 const sessionWorkspace = useSessionWorkspace({
   liveTurn,
@@ -4466,6 +4516,7 @@ function closePickerMenus() {
       @request-delete-session="requestDeleteSession"
       @retry-pins="retryPinnedSessions"
       @retry-sessions="retrySessions"
+      @inspect-subagent-child="openSubagentInspectorForChild"
       @select-backend="selectBackendTarget"
       @select-child-session="navigateChildSession"
       @select-project="selectSidebarProject"
@@ -5653,6 +5704,7 @@ function closePickerMenus() {
           :key="subagentSelection"
           ref="subagentInspector"
           :entry="activityEntry(inspectedSubagent)"
+          :initial-task-index="subagentSidebarInspection?.taskIndex || 0"
           :tool-status="activityStatus(inspectedSubagent)"
           :copied-entry-id="copiedEntryId"
           @close="closeSubagentInspector"

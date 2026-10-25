@@ -1,8 +1,9 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, markRaw, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { backendDisplayAddress } from '../lib/backend'
 import { sessionTime } from '../lib/format'
 import { useModalFocus } from '../composables/useModalFocus'
+import SessionChildMenu from './SessionChildMenu.vue'
 
 const isWindows = /Win/i.test(navigator.platform || navigator.userAgent || '')
 const quickSwitchShortcutLabel = isWindows ? 'Ctrl+K' : '⌘K'
@@ -144,6 +145,7 @@ const emit = defineEmits([
   'cancel-rename-session',
   'commit-rename-session',
   'create-session',
+  'inspect-subagent-child',
   'interrupt-session',
   'open-project-browser',
   'open-project-detail',
@@ -969,6 +971,40 @@ function closeSessionActions() {
   sessionActionTarget.value = null
 }
 
+const childMenu = ref(null)
+
+function openChildMenu(item, event) {
+  childMenu.value = {
+    child: item.session,
+    parent: item.parentSession,
+    x: event.clientX,
+    y: event.clientY,
+    title: item.session.agent
+      ? `${item.session.agent} · ${childTitle(item.session)}`
+      : childTitle(item.session),
+    opener: markRaw(event.currentTarget),
+    canInspectElement: Boolean(window.leylineDevTools?.inspectElement),
+  }
+}
+
+function closeChildMenu() {
+  childMenu.value = null
+}
+
+function childMenuAction(action) {
+  const menu = childMenu.value
+  if (!menu) return
+  if (action === 'inspect-element') {
+    window.leylineDevTools?.inspectElement(menu.x, menu.y)
+    closeChildMenu()
+    return
+  }
+  closeChildMenu()
+  if (action === 'inspect') emit('inspect-subagent-child', menu.child, menu.parent, menu.opener)
+  else if (action === 'open') emit('select-child-session', menu.child)
+  else if (action === 'delete') emit('request-delete-session', menu.child)
+}
+
 defineExpose({ openNavigator, closeSessionActions, sessionActionsOpen })
 
 function isNewWindowClick(event) {
@@ -1690,6 +1726,7 @@ const vFocusSelect = {
                 :aria-hidden="item.collapsing || item.height < SESSION_CHILD_ROW_HEIGHT
                   ? true
                   : undefined"
+                @contextmenu.prevent="openChildMenu(item, $event)"
               >
                 <button
                   class="session-child-link"
@@ -1699,7 +1736,7 @@ const vFocusSelect = {
                     : undefined"
                   :title="item.session.agent
                     ? `${item.session.agent} subagent: ${childTitle(item.session)}`
-                    : childTitle(item.session)"
+                    : `Subagent: ${childTitle(item.session)}`"
                   @keydown.down.prevent="moveSessionFocus(item, 1)"
                   @keydown.up.prevent="moveSessionFocus(item, -1)"
                   @click="emit('select-child-session', item.session, $event)"
@@ -1724,6 +1761,17 @@ const vFocusSelect = {
                     :datetime="sessionDateTime(item.session)"
                     :title="sessionFullTime(item.session)"
                   >{{ sessionListTime(item.session) }}</time>
+                </button>
+                <button
+                  class="session-child-inspect"
+                  type="button"
+                  title="Quick overview"
+                  :aria-label="`Quick overview of ${childTitle(item.session)}`"
+                  @click.stop="emit('inspect-subagent-child', item.session, item.parentSession, $event.currentTarget)"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M13 4h7v7M20 4 10 14M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5" />
+                  </svg>
                 </button>
                 <button
                   class="session-child-delete"
@@ -2180,6 +2228,12 @@ const vFocusSelect = {
         </section>
       </div>
     </Teleport>
+    <SessionChildMenu
+      v-if="childMenu"
+      :menu="childMenu"
+      @close="closeChildMenu"
+      @action="childMenuAction"
+    />
   </aside>
 </template>
 

@@ -20,6 +20,14 @@ ipcRenderer.on(`${prefix}state`, (_event, state) => {
   }
 })
 
+contextBridge.exposeInMainWorld('leylineDevTools', Object.freeze({
+  inspectElement(x, y) {
+    const point = { x: Math.round(Number(x)), y: Math.round(Number(y)) }
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return
+    ipcRenderer.send('leyline:devtools:inspect-element', point)
+  },
+}))
+
 contextBridge.exposeInMainWorld('leylineDictation', Object.freeze({
   getState: () => invoke('getState'),
   updateSettings: patch => invoke('updateSettings', patch),

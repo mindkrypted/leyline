@@ -12,6 +12,7 @@ import {
   BrowserWindow,
   clipboard,
   dialog,
+  ipcMain,
   Menu,
   MenuItem,
   shell,
@@ -195,6 +196,8 @@ function installContextMenu(window) {
   window.webContents.on('context-menu', (_event, params) => {
     // Leyline's renderer already provides a richer menu for local-file links.
     if (isLocalFileLinkContext(params)) return
+    // ...and for subagent child rows in the sidebar (see SessionSidebar.vue).
+    if (isSubagentChildContext(params)) return
     const template = contextMenuTemplate(window, params)
     if (!template.length) return
     Menu.buildFromTemplate(template).popup({ window })
@@ -204,6 +207,13 @@ function installContextMenu(window) {
 function isLocalFileLinkContext(params) {
   return params.titleText?.startsWith('Preview file:')
     || (params.linkURL?.endsWith('#') && Boolean(params.linkText))
+}
+
+function isSubagentChildContext(params) {
+  // Sidebar child rows carry a "... subagent: <title>" tooltip; the renderer
+  // shows its own context menu for them, including an Inspect Element item
+  // that round-trips through the leylineDevTools bridge.
+  return /subagent:/i.test(params.titleText || '')
 }
 
 function contextMenuTemplate(window, params) {
@@ -770,6 +780,13 @@ function installApplicationMenu() {
 }
 
 if (gotSingleInstanceLock) {
+  ipcMain.on('leyline:devtools:inspect-element', (event, payload) => {
+    if (app.isPackaged) return
+    const x = Math.round(Number(payload?.x))
+    const y = Math.round(Number(payload?.y))
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    event.sender.inspectElement(x, y)
+  })
   app.whenReady().then(async () => {
     await environmentReady
     dictationService ||= createDictationService(isWorkspaceUrl)

@@ -640,7 +640,8 @@
   text-align: right;
 }
 
-.session-child-delete {
+.session-child-delete,
+.session-child-inspect {
   display: grid;
   position: absolute;
   top: 3px;
@@ -660,6 +661,24 @@
   transition: opacity var(--motion-fast) var(--ease-decelerate);
 }
 
+.session-child-inspect {
+  right: 29px;
+}
+
+.file-context-menu.session-child-menu {
+  width: min(240px, calc(100vw - 16px));
+}
+
+.session-child-inspect svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .session-child-delete svg {
   width: 12px;
   height: 12px;
@@ -671,12 +690,16 @@
 }
 
 .session-child-delete:hover,
-.session-child-delete:focus-visible {
+.session-child-delete:focus-visible,
+.session-child-inspect:hover,
+.session-child-inspect:focus-visible {
   color: var(--text);
 }
 
 .session-child-row:hover .session-child-delete,
-.session-child-row:has(:focus-visible) .session-child-delete {
+.session-child-row:hover .session-child-inspect,
+.session-child-row:has(:focus-visible) .session-child-delete,
+.session-child-row:has(:focus-visible) .session-child-inspect {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
@@ -684,7 +707,7 @@
 
 .session-child-row:hover .session-child-link,
 .session-child-row:has(:focus-visible) .session-child-link {
-  padding-right: 31px;
+  padding-right: 57px;
 }
 
 .session-child-row:hover .session-status,
@@ -695,7 +718,8 @@
 }
 
 @media (hover: none), (pointer: coarse) {
-  .session-child-delete {
+  .session-child-delete,
+  .session-child-inspect {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
