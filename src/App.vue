@@ -889,10 +889,10 @@ const {
   closeToolFullscreen,
   isSkillExpanded,
   toggleSkill,
-  entryCopyText,
   liveAssistantDisplayBlocks,
   liveAssistantDisplayCopyText,
   copyEntry,
+  copyImageSource,
   copyTranscriptItem,
   copyTitle,
 } = toolExpansion
@@ -5714,6 +5714,15 @@ function closePickerMenus() {
             </div>
             <div>
               <button
+                class="copy-button"
+                type="button"
+                :title="copiedEntryId === 'fullscreen-image' ? 'Copied' : 'Copy image'"
+                aria-label="Copy image"
+                @click="copyImageSource(fullscreenImage.src, 'fullscreen-image')"
+              >
+                <CopyIcon :copied="copiedEntryId === 'fullscreen-image'" />
+              </button>
+              <button
                 type="button"
                 title="Close image preview"
                 aria-label="Close image preview"
@@ -5770,7 +5779,7 @@ function closePickerMenus() {
                 class="copy-button"
                 type="button"
                 :title="copyTitle(fullscreenTool.id)"
-                @click="copyTranscriptItem(fullscreenTool.id, entryCopyText(fullscreenTool))"
+                @click="copyEntry(fullscreenTool)"
               >
                 <CopyIcon :copied="copiedEntryId === fullscreenTool.id" />
               </button>
