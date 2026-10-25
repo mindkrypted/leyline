@@ -39,15 +39,16 @@ export function useDictation(options) {
   const desktopBridge = window.leylineDictation
   const serverBridge = desktopBridge ? null : createDictationClient()
   const bridge = desktopBridge || serverBridge
-  const platform = /Mac|iPhone|iPad/.test(navigator.userAgentData?.platform || navigator.platform) ? 'darwin' : 'win32'
-  const preferences = readClientPreferences(platform)
+  const clientPlatform = /Mac|iPhone|iPad/i.test(navigator.userAgentData?.platform || navigator.platform) ? 'darwin' : 'win32'
+  const state = shallowRef(null)
+  const platform = computed(() => desktopBridge ? state.value?.platform || clientPlatform : clientPlatform)
+  const preferences = readClientPreferences(platform.value)
   const engine = ref(preferences.engine || (desktopBridge ? 'local' : 'browser'))
   const clientSettings = ref(Object.fromEntries(clientSettingKeys.map(key => [key, preferences[key]])))
   const desktopAvailable = computed(() => Boolean(desktopBridge))
   const browserAvailable = computed(() => Boolean(browserRecognition()))
   const settingsAvailable = computed(() => true)
   const connected = ref(false)
-  const state = shallowRef(null)
   const localAvailable = computed(() => connected.value && state.value?.supported === true)
   const nativeAvailable = localAvailable
   const processingLocation = computed(() => desktopAvailable.value ? 'This device' : 'Leyline server')
@@ -71,7 +72,7 @@ export function useDictation(options) {
   const settings = computed(() => normalizeDictationSettings({
     ...(state.value?.settings || {}),
     ...(!desktopBridge ? clientSettings.value : {}),
-  }, desktopBridge ? state.value?.platform || platform : platform))
+  }, platform.value))
   const models = computed(() => state.value?.models || [])
   const supported = computed(() => engine.value === 'browser' ? browserAvailable.value
     : state.value?.supported !== false && (desktopAvailable.value || typeof window.WebSocket === 'function'))
@@ -100,7 +101,7 @@ export function useDictation(options) {
   let engineVersion = 0
 
   function currentClientPreferences() {
-    return readClientPreferences(platform, { engine: engine.value, ...clientSettings.value })
+    return readClientPreferences(platform.value, { engine: engine.value, ...clientSettings.value })
   }
 
   function syncClientPreferences() {
@@ -387,7 +388,7 @@ export function useDictation(options) {
         op.settings = normalizeDictationSettings({
           ...op.settings,
           ...Object.fromEntries(hostSettingKeys.map(key => [key, available.settings[key]])),
-        }, desktopBridge ? available.platform || platform : platform)
+        }, platform.value)
         if (available.supported === false) throw new Error('Local dictation is unavailable on this platform')
         if (available.busy) throw new Error('The microphone is still in use. Wait for cleanup and try again.')
         if (purpose === 'dictation' && !available.models?.some(model => model.id === op.settings.modelId && model.installed)) {
@@ -601,7 +602,7 @@ export function useDictation(options) {
   })
 
   return {
-    engine, setEngine, browserAvailable, settingsAvailable, localAvailable, desktopAvailable, processingLocation, sourceLabel,
+    engine, setEngine, platform, browserAvailable, settingsAvailable, localAvailable, desktopAvailable, processingLocation, sourceLabel,
     nativeAvailable, connected, state, phase, level, meter, elapsed, error, active, busy, clientBusy, hostBusy, releasing, settings, models, inputs,
     supported, listening, title, buttonDisabled, recoveryText, refresh, listInputs,
     updateSettings: async patch => {
@@ -622,8 +623,8 @@ export function useDictation(options) {
           ...settings.value,
           ...patch,
           shortcut: patch.shortcut === undefined ? settings.value.shortcut : { ...settings.value.shortcut, ...patch.shortcut },
-        }, platform)
-        if ((platform !== 'darwin' && next.shortcut.meta)
+        }, platform.value)
+        if ((platform.value !== 'darwin' && next.shortcut.meta)
           || ((next.shortcut.meta || next.shortcut.ctrl) && !next.shortcut.alt && ['KeyG', 'KeyY'].includes(next.shortcut.code))) {
           throw new Error('This shortcut conflicts with an application or system command')
         }

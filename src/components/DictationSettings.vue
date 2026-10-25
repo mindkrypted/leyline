@@ -10,7 +10,7 @@ const loading = ref(false)
 const capturingShortcut = ref(false)
 const shortcutError = ref('')
 const testOwned = ref(false)
-const platform = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : 'win32'
+const platform = computed(() => props.dictation.platform)
 const engine = computed(() => props.dictation.engine)
 const localSelected = computed(() => engine.value === 'local')
 const localAvailable = computed(() => props.dictation.localAvailable && props.dictation.state?.supported !== false)
@@ -31,7 +31,7 @@ const testing = computed(() => props.dictation.phase === 'testing' || (testOwned
 const error = computed(() => props.dictation.error || localError.value)
 const shortcutLabel = computed(() => {
   try {
-    return formatDictationShortcut(settings.value.shortcut, platform)
+    return formatDictationShortcut(settings.value.shortcut, platform.value)
   } catch {
     return 'Set shortcut'
   }
@@ -192,13 +192,13 @@ function captureShortcut(event) {
     return
   }
   if ((!meta && !ctrl && !/^F(1[3-9]|2[0-4])$/.test(code))
-    || (platform !== 'darwin' && meta)
+    || (platform.value !== 'darwin' && meta)
     || ((meta || ctrl) && !alt && ['KeyG', 'KeyY'].includes(code))) {
     shortcutError.value = 'Use a Control or Command combination without a system conflict, or F13–F24.'
     return
   }
   try {
-    const { shortcut } = normalizeDictationSettings({ ...settings.value, shortcut: { code, meta, ctrl, alt, shift } }, platform)
+    const { shortcut } = normalizeDictationSettings({ ...settings.value, shortcut: { code, meta, ctrl, alt, shift } }, platform.value)
     capturingShortcut.value = false
     shortcutError.value = ''
     void save({ shortcut })
@@ -353,7 +353,7 @@ function captureShortcut(event) {
           <input class="dictation-checkbox" type="checkbox" :checked="settings.keepModelWarm" :disabled="locked" @change="changeSetting('keepModelWarm', $event)" />
         </label>
         <label v-if="settings.keepModelWarm" class="dictation-row">
-          <span><strong>Unload after idle</strong><small>0 keeps the model ready until the speech service stops on {{ host }}. Files stay on disk.</small></span>
+          <span><strong>Unload after idle</strong><small>Use a value above 0 to unload the model after inactivity. Use 0 to leave it loaded.</small></span>
           <span class="dictation-number-field"><input type="number" :value="settings.idleMinutes" min="0" max="60" step="1" required :disabled="locked" @change="changeIdle" /><span>minutes</span></span>
         </label>
       </div>
