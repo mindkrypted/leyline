@@ -66,6 +66,10 @@ app.on('second-instance', (_event, argv) => {
   if (command) sendWindowCommand(window, command.name, command.detail)
 })
 
+function hasPrimaryModifier(input) {
+  return process.platform === 'darwin' ? input.meta : input.control
+}
+
 async function createWindow(initialCommand, initialUrl = '') {
   await app.whenReady()
   await environmentReady
@@ -79,7 +83,7 @@ async function createWindow(initialCommand, initialUrl = '') {
     minWidth: 360,
     minHeight: 420,
     backgroundColor: '#0b0b10',
-    autoHideMenuBar: process.platform === 'linux',
+    autoHideMenuBar: process.platform === 'linux' || process.platform === 'win32',
     webPreferences: {
       backgroundThrottling: false,
       contextIsolation: true,
@@ -119,7 +123,7 @@ async function createWindow(initialCommand, initialUrl = '') {
     const key = input.key?.toLowerCase()
     const isNewWindow = input.type === 'keyDown'
       && key === 'n'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isNewSession = input.type === 'keyDown'
       && key === 'n'
@@ -127,22 +131,22 @@ async function createWindow(initialCommand, initialUrl = '') {
       && !input.shift
     const isCloseWindow = input.type === 'keyDown'
       && key === 'w'
-      && input.meta
+      && hasPrimaryModifier(input)
     const isToggleTerminal = input.type === 'keyDown'
       && key === 't'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isToggleSessionDetails = input.type === 'keyDown'
       && key === 'e'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isToggleMemory = input.type === 'keyDown'
       && key === 'm'
-      && input.meta
+      && hasPrimaryModifier(input)
       && input.shift
     const isToggleSidebar = input.type === 'keyDown'
       && key === 'e'
-      && input.meta
+      && hasPrimaryModifier(input)
       && !input.shift
     if (
       !isNewWindow
