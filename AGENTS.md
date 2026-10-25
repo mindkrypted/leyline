@@ -62,6 +62,9 @@
     Ultrafast and image-capable vision fixture exceptions.
 - Build check:
   - `npm run build`
+- Cut releases with `npm run version:patch|minor|major` — they bump the
+  version, create the release commit, and tag. Never bump `package.json`
+  manually.
 - Do not add tests, docs, or broad refactors unless explicitly requested.
 - If the user asks what to work on next and you have not read the code, research
   the codebase before you recommend work. Do not guess from old notes or
