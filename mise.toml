@@ -1,0 +1,4 @@
+# Keep in sync with .nvmrc (used by fnm on macOS). mise ignores .nvmrc, so the
+# pin is duplicated here for Linux machines that manage Node with mise.
+[tools]
+node = "22.19.0"
