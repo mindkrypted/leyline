@@ -388,11 +388,7 @@ function subagentParameters(agentNames: string[]) {
       description: "Optional thinking-level override for child agents. Use 'inherit' for the parent session's current level.",
     })),
     mode: Type.Optional(
-      Type.Enum({
-        single: "single",
-        parallel: "parallel",
-        chain: "chain",
-      } as const, {
+      StringEnum(["single", "parallel", "chain"] as const, {
         description: "Execution mode (default: single)",
       }),
     ),
