@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
+import ComposerIssue from './ComposerIssue.vue'
 import DictationStatus from './DictationStatus.vue'
 import ModelPicker from './ModelPicker.vue'
 import MobileComposerControls from './MobileComposerControls.vue'
@@ -76,10 +77,8 @@ const props = defineProps({
     type: String,
     default: '',
   },
-  error: {
-    type: String,
-    default: '',
-  },
+  issue: { type: Object, default: null },
+  imageSupportWarning: { type: String, default: '' },
   visionDelegationNotice: {
     type: String,
     default: '',
@@ -160,6 +159,7 @@ const props = defineProps({
 
 const emit = defineEmits([
   'cancel-edit',
+  'dismiss-issue',
   'composition-start',
   'composition-end',
   'input-blur',
@@ -185,6 +185,8 @@ const emit = defineEmits([
 const form = ref(null)
 const textarea = ref(null)
 const queue = ref(null)
+const issueControl = ref(null)
+const issueDetailsOpen = computed(() => Boolean(issueControl.value?.opened))
 const mobileControls = ref(null)
 const mobileSheetOpen = ref(false)
 useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
@@ -194,14 +196,13 @@ const sendMenuOpen = ref(false)
 const queueUiOpen = computed(() => sendMenuOpen.value || Boolean(queue.value?.surfaceOpen))
 const shellMode = computed(() => props.draft.trimStart().startsWith('!'))
 const hiddenShellMode = computed(() => props.draft.trimStart().startsWith('!!'))
-const queueMode = computed(() => !shellMode.value && !props.editingLabel
-  && (props.agentRunning || props.compacting || props.reloadingSession
+const queueMode = computed(() => !props.editingLabel
+  && (props.agentRunning || props.shellRunning || props.compacting || props.reloadingSession
     || props.switchingModel || props.switchingUltrafast
     || props.promptQueue?.held || props.promptQueue?.items?.length > 0))
 const submitDisabled = computed(() => props.dictationSubmitting
   || (props.promptSubmitting && (!props.compacting || props.editingLabel))
   || !props.canSubmitDraft
-  || (props.shellRunning && shellMode.value)
   || (props.reloadingSession && Boolean(props.editingLabel)))
 const shellModeLabel = computed(() => {
   return hiddenShellMode.value ? 'shell · hidden' : 'shell · context'
@@ -231,6 +232,11 @@ function dismissQueue() {
 function closePopovers(event) {
   if (!event.composedPath().includes(sendActions.value)) sendMenuOpen.value = false
   queue.value?.closeOutside(event)
+  issueControl.value?.closeOutside(event)
+}
+
+function dismissIssueDetails() {
+  return issueControl.value?.dismissDetails() || false
 }
 
 async function toggleSendMenu() {
@@ -276,7 +282,7 @@ async function restoreSelection(input, value, caret, valid, restoreFocus) {
   input.setSelectionRange(caret, caret)
 }
 
-defineExpose({ focus, form, getSelection, getTextarea, restoreSelection, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet })
+defineExpose({ focus, form, getSelection, getTextarea, restoreSelection, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet, issueDetailsOpen, dismissIssueDetails })
 
 function updateDraft(event) {
   emit('update:draft', event.target.value)
@@ -384,14 +390,18 @@ async function insertNewline() {
     </div>
     </Transition>
     <Transition name="composer-reveal">
-      <div v-if="error" class="composer-error">{{ error }}</div>
-    </Transition>
-    <Transition name="composer-reveal">
       <div v-if="visionDelegationNotice" class="composer-notice">{{ visionDelegationNotice }}</div>
     </Transition>
     <DictationStatus :dictation="dictation" />
     <div class="composer-bar">
       <div class="composer-primary-row">
+        <ComposerIssue
+          ref="issueControl"
+          :issue="issue"
+          :blocking-message="imageSupportWarning"
+          @dismiss="emit('dismiss-issue', $event); focus()"
+          @focus-composer="focus"
+        />
         <div class="composer-row-spacer"></div>
         <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
           <MobileComposerControls
@@ -530,8 +540,8 @@ async function insertNewline() {
               <button type="button" :disabled="submitDisabled" @click="submitFromMenu('followUp')"><span>Queue next task</span><kbd>Enter</kbd></button>
               <button
                 type="button"
-                :disabled="submitDisabled || promptQueue.held"
-                :title="promptQueue.held ? 'Resume the queue before steering' : 'Deliver at the agent’s next input boundary'"
+                :disabled="submitDisabled || promptQueue.held || shellMode || shellRunning"
+                :title="shellMode || shellRunning ? 'Shell commands run in queue order' : promptQueue.held ? 'Resume the queue before steering' : 'Deliver at the agent’s next input boundary'"
                 @click="submitFromMenu('steer')"
               ><span>Steer current run</span><kbd>{{ steerShortcutLabel }}</kbd></button>
             </div>

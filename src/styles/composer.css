@@ -843,11 +843,222 @@ textarea::placeholder {
   color: #605b6c;
 }
 
-.composer-error {
-  margin: 0 20px 9px;
-  color: #f87171;
+.composer-primary-row:has(.composer-issue) {
+  flex-wrap: wrap;
+}
+
+.composer-issue ~ .composer-row-spacer {
+  display: none;
+}
+
+.composer-issue {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  margin-right: auto;
+}
+
+.composer-issue svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.composer-issue-chip {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  border: 1px solid #3a3636;
+  border-radius: 8px;
+  background: #2b2727;
+}
+
+.composer-issue .composer-issue-toggle,
+.composer-issue .composer-issue-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 0 8px;
+  color: #d6bdbd;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.composer-issue .composer-issue-symbol {
+  color: #f0a6a6;
+}
+
+.composer-issue .composer-issue-caret {
+  width: 12px;
+  height: 12px;
+  color: #a99b9b;
+}
+
+.composer-issue .composer-issue-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 0;
+  color: #bca8a8;
+}
+
+.composer-issue button:hover {
+  background: #ffffff08;
+  color: #eee;
+}
+
+.composer-issue button:focus-visible {
+  outline: 2px solid #aaa;
+  outline-offset: 2px;
+}
+
+.composer-issue-popover {
+  position: absolute;
+  z-index: 25;
+  bottom: calc(100% + 9px);
+  left: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  width: min(420px, calc(100cqw - 44px), calc(100vw - 44px));
+  max-height: min(360px, max(120px, calc(var(--app-height, 100dvh) - 180px)));
+  border: 1px solid #414141;
+  border-radius: 12px;
+  background: #242424;
+  padding: 13px;
+  box-shadow: 0 10px 28px #0006;
+  outline: none;
+  transform-origin: bottom left;
+}
+
+.composer-issue-heading {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+}
+
+.composer-issue-heading h3 {
+  flex: 1;
+  margin: 0;
+  color: #e7e1e1;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+}
+
+.composer-issue-heading .composer-issue-close {
+  margin: -6px -5px -6px 0;
+}
+
+.composer-issue-message {
+  min-height: 0;
+  max-height: 240px;
+  overflow: auto;
+  margin: 12px 0;
+  color: #c2c2c2;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+}
+
+.composer-issue-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  gap: 12px;
+}
+
+.composer-issue-footer > span {
+  color: #999;
+  font-size: 10px;
+}
+
+.composer-issue .composer-issue-dismiss {
+  flex: none;
+  border: 1px solid #414141;
+  border-radius: 7px;
+  background: #2b2b2c;
+  padding: 6px 10px;
+  color: #ccc;
+  font-size: 11px;
+}
+
+.composer-issue .composer-issue-blocked {
+  min-width: 0;
+  padding-left: 0;
+  color: #c4ad8f;
+}
+
+.composer-issue-details-label {
+  margin-left: 3px;
+  color: #999;
+}
+
+.composer-issue-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .composer-primary-row:has(.composer-issue) {
+    row-gap: 0;
+  }
+
+  .composer-primary-row > .composer-issue {
+    flex-basis: calc(100% - 24px);
+    min-height: 44px;
+    margin: 0 12px 6px;
+  }
+
+  .composer-issue-chip {
+    height: 32px;
+  }
+
+  .composer-issue-heading .composer-issue-close {
+    margin: -10px -8px -10px 0;
+  }
+}
+
+@media (max-width: 760px), (pointer: coarse) {
+  .composer-issue {
+    min-height: 44px;
+  }
+
+  .composer-issue .composer-issue-toggle,
+  .composer-issue .composer-issue-blocked,
+  .composer-issue .composer-issue-dismiss {
+    min-height: 44px;
+  }
+
+  .composer-issue .composer-issue-close {
+    width: 44px;
+    height: 44px;
+  }
 }
 
 .composer-notice {

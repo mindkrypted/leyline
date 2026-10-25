@@ -130,6 +130,7 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
     updateCompactionState(event)
     agentRunning.value = isRunningEvent(event)
     liveActivity.value = activityText(event)
+    updateLiveBash(event)
     updateLiveTool(event)
     updateLiveSystem(event)
     updateLiveModelChange(event)
@@ -221,6 +222,8 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
 
   function setRuntimeState(state, snapshotRevision) {
     if (!state) return
+    if (snapshotRevision !== undefined && runtimeSnapshotRevision !== undefined
+      && snapshotRevision < runtimeSnapshotRevision) return
     const newSnapshot = snapshotRevision === undefined
       || snapshotRevision !== runtimeSnapshotRevision
     runtimeSnapshotRevision = snapshotRevision
@@ -242,6 +245,14 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
     if (newSnapshot && !agentRunning.value && !compactingContext.value) {
       clearLiveAssistant()
       if (liveActivity.value === 'Thinking…') liveActivity.value = ''
+    }
+    if (newSnapshot && Object.hasOwn(state, 'bashExecution')) {
+      liveTools.value = liveTools.value.filter((tool) => {
+        return tool.role !== 'bashExecution'
+          || tool.executionId === state.bashExecution?.id
+          || tool.entryId || tool.persistedEntry
+      })
+      if (state.bashExecution) upsertLiveBash(state.bashExecution)
     }
     syncPendingTools(state)
     if (!agentRunning.value && !compactingContext.value) return
@@ -432,7 +443,7 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
 
   function startsLiveTurn(event) {
     const type = event?.type
-    if (type === 'agent_start' || type === 'turn_start') return true
+    if (type === 'agent_start' || type === 'turn_start' || type === 'bash_execution_start') return true
     return ['message_start', 'message_update', 'message_end'].includes(type)
       && ['assistant', 'system'].includes(event.message?.role)
   }
@@ -488,6 +499,65 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
     if (!event.error?.name && !event.error?.code
       && ['This operation was aborted', 'Prompt cancelled'].includes(message)) return
     emit({ type: 'surface-error', message })
+  }
+
+  function updateLiveBash(event) {
+    if (event?.type === 'bash_execution_start' || event?.type === 'bash_execution_end') {
+      upsertLiveBash(event)
+    } else if (event?.type === 'bash_execution_update') {
+      const tool = liveTools.value.find((item) => item.executionId === event.id)
+      if (!tool || tool.status !== 'running') return
+      upsertLiveBash({
+        ...tool.bashExecution,
+        revision: event.revision ?? (tool.bashExecution.revision || 0) + 1,
+        output: event.output ?? ((tool.bashExecution.output || '') + event.delta).slice(-65536),
+      })
+    }
+  }
+
+  function upsertLiveBash(execution) {
+    if (!execution.id) return
+    const existing = liveTools.value.find((tool) => tool.executionId === execution.id)
+    if (existing?.persistedEntry || execution.revision < existing?.bashExecution?.revision
+      || (existing && existing.status !== 'running' && execution.status === 'running')) return
+    if (!existing && liveTurnAnchorId.value === null) {
+      clearSettledLiveItems()
+      liveTurnAnchorId.value = persistedDetail.value?.entries.some((entry) => entry.id === execution.anchorId)
+        ? execution.anchorId
+        : persistedDetail.value?.entries.at(-1)?.id || ''
+    }
+    const id = existing?.id || `live-bash-${execution.id}`
+    const resultEntry = projectEntry({
+      id,
+      type: 'message',
+      timestamp: new Date(execution.startedAt).toISOString(),
+      message: {
+        ...execution,
+        role: 'bashExecution',
+        output: [execution.output, execution.error].filter(Boolean).join('\n'),
+      },
+    })
+    const next = {
+      id,
+      seq: existing?.seq || ++liveItemSeq,
+      type: 'tool',
+      role: 'bashExecution',
+      executionId: execution.id,
+      bashExecution: { ...execution },
+      entryId: execution.entryId,
+      toolName: 'bash',
+      label: 'Bash',
+      code: execution.command,
+      status: execution.status,
+      terminalLiveResultReceived: execution.status !== 'running',
+      startedAt: execution.startedAt,
+      resultEntry: { ...resultEntry, persisted: false, isError: execution.status === 'error' },
+    }
+    liveTools.value = existing
+      ? liveTools.value.map((tool) => tool.id === id ? next : tool)
+      : [...liveTools.value, next]
+    if (persistedDetail.value) reconcileLiveTools(persistedDetail.value)
+    if (execution.error) emit({ type: 'surface-error', message: execution.error })
   }
 
   function updateLiveTool(event) {
@@ -584,7 +654,7 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
     const toolName = event.toolName || 'tool'
     const code = liveToolCode(event)
     return [...liveTools.value].reverse().find((tool) => {
-      if (tool.toolName !== toolName) return false
+      if (tool.role === 'bashExecution' || tool.toolName !== toolName) return false
       if (tool.toolCallId) return false
       if (code && tool.code && tool.code !== code) return false
       return !['completed', 'error', 'aborted'].includes(tool.status)
@@ -681,7 +751,7 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
 
   function finishLiveTools(status) {
     liveTools.value = liveTools.value.map((tool) => {
-      if (tool.persistedEntry
+      if (tool.role === 'bashExecution' || tool.persistedEntry
         || ['reading', 'completed', 'error', 'aborted'].includes(tool.status)) {
         return tool
       }
@@ -751,7 +821,7 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
       ...attachPersistedLiveTool(tool, entry),
       label: entry.label || tool.label,
       code: entry.code || tool.code,
-      status: entry.isError ? 'error' : 'completed',
+      status: entry.cancelled ? 'aborted' : entry.isError ? 'error' : 'completed',
     }
   }
 
@@ -769,6 +839,9 @@ export function useLiveTurnProjection({ onIntent, toolArguments = false } = {}) 
 
   function liveToolMatchesEntry(tool, entry) {
     if (tool.persistedEntry?.id) return tool.persistedEntry.id === entry.id
+    if (tool.role === 'bashExecution' || entry.role === 'bashExecution') {
+      return tool.role === entry.role && Boolean(tool.entryId) && tool.entryId === entry.id
+    }
     if (tool.toolCallId || entry.toolCallId) {
       return tool.toolCallId === entry.toolCallId
     }

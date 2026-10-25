@@ -252,6 +252,7 @@ function compactActiveSession(session) {
     session: compactSessionSummary(session?.session),
     state: {
       isStreaming: state.isStreaming === true,
+      isBashRunning: state.isBashRunning === true,
       isCompacting: state.isCompacting === true,
       compactionCutEntryId: state.compactionCutEntryId || '',
       pendingToolCalls,
@@ -291,7 +292,8 @@ function compactRuntimeEvent(event) {
   if (!event?.type
     || event.parentToolCallId
     || event.type === 'message_update'
-    || event.type === 'tool_execution_update') return null
+    || event.type === 'tool_execution_update'
+    || event.type === 'bash_execution_update') return null
   const compact = { type: event.type }
 
   if (event.type === 'message_start' || event.type === 'message_end') {
@@ -312,6 +314,11 @@ function compactRuntimeEvent(event) {
     if (event.input !== undefined) compact.input = compactToolArgs(event.input)
     if (event.isError !== undefined) compact.isError = event.isError === true
     if (event.error !== undefined) compact.error = compactError(event.error)
+    return compact
+  }
+
+  if (event.type === 'bash_execution_start' || event.type === 'bash_execution_end') {
+    copyTextFields(compact, event, ['id', 'status', 'entryId', 'error'])
     return compact
   }
 
@@ -487,6 +494,9 @@ function coalesceKey(type, data) {
   }
   if (event.type === 'queue_update') {
     return `runtime:${data.activeSessionId}:${event.type}`
+  }
+  if (event.type === 'bash_execution_update' && typeof event.output === 'string') {
+    return `runtime:${data.activeSessionId}:${event.type}:${event.id}`
   }
   if (event.type === 'tool_execution_update') {
     const toolCallId = event.toolCallId || event.id || event.callId || ''

@@ -64,7 +64,9 @@ export async function bindRuntimeHandle(handle, events) {
       activeSessionId: handle.sessionId,
       event: event.type === 'compaction_start'
         ? { ...event, compactionCutEntryId: compactionCutEntryId(session) }
-        : event,
+        : event.type === 'bash_execution_update' && event.id === handle.bashExecution?.id
+          ? { ...event, output: handle.bashExecution.output, revision: handle.bashExecution.revision }
+          : event,
       handoffId,
     })
     if (event.type === 'message_end'
@@ -141,7 +143,7 @@ function trackPendingToolResult(handle, event) {
   if (event.type === 'tool_execution_end') results.delete(id)
 }
 
-function trackRuntimeActivity(handle, event) {
+export function trackRuntimeActivity(handle, event) {
   if (!event?.type || event.parentToolCallId) return
   const previous = handle.activityState || {
     active: false,
@@ -153,7 +155,7 @@ function trackRuntimeActivity(handle, event) {
   const next = { ...previous }
   const now = Date.now()
 
-  if (!['message_update', 'tool_execution_update'].includes(event.type)) {
+  if (!['message_update', 'tool_execution_update', 'bash_execution_update'].includes(event.type)) {
     next.activityAt = now
   }
 
@@ -163,7 +165,7 @@ function trackRuntimeActivity(handle, event) {
   }
 
   const assistantEnded = event.type === 'message_end' && event.message?.role === 'assistant'
-  const outcomeEvent = ['error', 'aborted', 'compaction_end'].includes(event.type)
+  const outcomeEvent = ['error', 'aborted', 'compaction_end', 'bash_execution_end'].includes(event.type)
   if (assistantEnded || outcomeEvent) {
     next.error = runtimeActivityError(event)
     const untypedError = !event.error?.name && !event.error?.code
@@ -171,7 +173,7 @@ function trackRuntimeActivity(handle, event) {
     if (event.error?.name === 'AbortError') next.error = ''
   }
 
-  if (event.type === 'agent_settled'
+  if (event.type === 'agent_settled' || event.type === 'bash_execution_end'
     || (event.type === 'compaction_end' && event.reason === 'manual')) {
     settleRuntimeActivity(next, previous, now)
   }
@@ -182,6 +184,7 @@ function trackRuntimeActivity(handle, event) {
 function runtimeActivityStarted(event) {
   return [
     'agent_start',
+    'bash_execution_start',
     'turn_start',
     'compaction_start',
     'auto_retry_start',
@@ -194,6 +197,9 @@ function runtimeActivityStarted(event) {
 }
 
 function runtimeActivityError(event) {
+  if (event.type === 'bash_execution_end') {
+    return event.status === 'error' ? event.error || `Shell command exited with code ${event.exitCode}` : ''
+  }
   if (event.willRetry) return ''
   if (event.type === 'compaction_end' && event.errorMessage) {
     return String(event.errorMessage)

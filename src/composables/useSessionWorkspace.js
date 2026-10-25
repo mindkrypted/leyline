@@ -152,7 +152,7 @@ export function useSessionWorkspace({
       if (!status.label || !session?.cwd || session.isSubagentSession) return []
       return [{
         activityAt: state.activityAt || 0,
-        canStop: state.isStreaming || state.isCompacting,
+        canStop: state.isStreaming || state.isCompacting || state.isBashRunning,
         detail: runtimeActivityDetail(state),
         project: {
           cwd: session.cwd,
@@ -210,7 +210,7 @@ export function useSessionWorkspace({
   })
   const sidebarRuntimeSummary = computed(() => {
     const states = Object.values(runtimeSessionsById.value)
-    const running = states.filter((state) => state.isStreaming).length
+    const running = states.filter((state) => state.isStreaming || state.isBashRunning).length
     const compacting = states.filter((state) => state.isCompacting).length
     const unread = states.filter((state) => state.unread).length
     const parts = [
@@ -674,7 +674,7 @@ export function useSessionWorkspace({
   }
 
   function sessionRefreshDelay(activeSessionId, event) {
-    if (['agent_settled', 'stream_reconnected', 'model_changed'].includes(event?.type)) return 0
+    if (['agent_settled', 'stream_reconnected', 'model_changed', 'bash_execution_end'].includes(event?.type)) return 0
     if (event?.type === 'compaction_end') {
       if (event.reason === 'manual') return 0
       if ((event.reason === 'threshold' || event.reason === 'overflow')
@@ -708,6 +708,7 @@ export function useSessionWorkspace({
         ? runtimeSession.diagnostics
         : [],
       isStreaming: state.isStreaming === true,
+      isBashRunning: state.isBashRunning === true,
       isCompacting: state.isCompacting === true,
       compactionCutEntryId: state.compactionCutEntryId || '',
       snapshotRevision: runtimeSession.snapshotRevision,
@@ -732,8 +733,8 @@ export function useSessionWorkspace({
           settledRevision: finiteRuntimeNumber(activity.settledRevision),
         } : {}),
     }
-    const wasBusy = previous?.isStreaming || previous?.isCompacting
-    const isBusy = patch.isStreaming || patch.isCompacting
+    const wasBusy = previous?.isStreaming || previous?.isCompacting || previous?.isBashRunning
+    const isBusy = patch.isStreaming || patch.isCompacting || patch.isBashRunning
     const newlySettled = previous
       && patch.settledRevision > (previous.settledRevision || 0)
     patchRuntimeSessionState(runtimeSession.id, patch, {
@@ -796,8 +797,8 @@ export function useSessionWorkspace({
     if (!patch || Object.keys(patch).length === 0) return
 
     const next = { ...previous, ...patch }
-    const wasBusy = previous.isStreaming || previous.isCompacting
-    const willBeBusy = next.isStreaming || next.isCompacting
+    const wasBusy = previous.isStreaming || previous.isCompacting || previous.isBashRunning
+    const willBeBusy = next.isStreaming || next.isCompacting || next.isBashRunning
     const finished = wasBusy && !willBeBusy
     const runtimeError = event.type === 'error'
       || (event.type === 'compaction_end' && event.errorMessage)
@@ -840,7 +841,7 @@ export function useSessionWorkspace({
       }
       return { label: research.phase || 'research', tone: 'running' }
     }
-    if (state.isStreaming) return { label: 'running', tone: 'running' }
+    if (state.isStreaming || state.isBashRunning) return { label: 'running', tone: 'running' }
     if (state.unread) return { label: 'unread', tone: 'unread' }
     if (research?.status === 'complete' && showCompleted) {
       return { label: 'ready', tone: 'research' }
@@ -881,6 +882,10 @@ export function useSessionWorkspace({
   }
 
   function runtimePatchFromEvent(event, previous) {
+    if (event.type === 'bash_execution_start') return { isBashRunning: true, error: '' }
+    if (event.type === 'bash_execution_end') {
+      return { isBashRunning: false, error: event.status === 'error' ? event.error || 'Shell command failed' : '' }
+    }
     if (['agent_start', 'turn_start'].includes(event.type)) {
       return {
         isStreaming: true,
@@ -1700,6 +1705,7 @@ export function useSessionWorkspace({
 
   function runtimeProjectActive(state) {
     return state.isStreaming
+      || state.isBashRunning
       || state.isCompacting
       || state.queuedCount > 0
       || state.pendingToolCount > 0
@@ -1710,6 +1716,7 @@ export function useSessionWorkspace({
 
   function runtimeWorkActive(state) {
     return state.isStreaming
+      || state.isBashRunning
       || state.isCompacting
       || (state.queuedCount > 0 && !state.queueHeld)
       || state.pendingToolCount > 0
@@ -1732,6 +1739,7 @@ export function useSessionWorkspace({
       const additional = tools.length > 1 ? ` · +${tools.length - 1}` : ''
       return `${toolLabel(tool.toolName)}${toolTarget(tool.args)}${additional}`
     }
+    if (state.isBashRunning) return 'Running shell command'
     if (state.isCompacting) return 'Compacting context'
     if (state.isStreaming) return 'Waiting for model'
     if (state.queuedCount) return `${state.queuedCount} ${state.queueHeld ? 'held until resumed' : 'queued'}`

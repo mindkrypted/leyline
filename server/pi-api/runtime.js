@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import {
@@ -27,6 +27,7 @@ import {
   bindRuntimeHandle as bindRuntimeHandleExtensions,
   cleanupExtensionConfirmations,
   emptyExtensionUiState,
+  trackRuntimeActivity,
 } from './extension-ui.js'
 import { readDirectory } from './fs-browser.js'
 import { readGitReview, readGitReviewDiff } from './git-review.js'
@@ -62,9 +63,11 @@ import {
 } from './sessions.js'
 import {
   copySessionSubagentOverrides,
+  deleteSessionSubagentBatchOverride,
   deleteSubagentModelOverride,
   listSubagentConfigs,
   resolveSubagentConfig,
+  setSubagentBatchSize,
   setSubagentModelOverride,
 } from './subagents.js'
 import {
@@ -831,6 +834,7 @@ async function promptSession(
     forceOneAtATime(session)
     const waitingForPrompt = () => {
       if (handle.interruptPromise || handle.reloading || (handle.changingBranch && !editing)) return true
+      if (handle.bashPromise || session.isBashRunning || session.hasPendingBashMessages) return true
       if (isExtensionCommand(session, promptText)) return false
       if (handle.settingModel || handle.settingUltrafast
         || handle.compactionPromise || session.isCompacting) return true
@@ -925,6 +929,9 @@ async function promptSession(
 function ensurePromptQueue(handle) {
   handle.promptQueue ||= createPromptQueue({
     isIdle: () => handle.runtime.session.isIdle
+      && !handle.bashPromise
+      && !handle.runtime.session.isBashRunning
+      && !handle.runtime.session.hasPendingBashMessages
       && !handle.pendingPromptControllers?.size
       && !handle.bindingExtensions
       && !handle.reloading
@@ -936,16 +943,18 @@ function ensurePromptQueue(handle) {
       && !handle.changingBranch
       && !handle.disposalPromise
       && !runtimeShuttingDown,
-    submit: (item, streamingBehavior, signal, onAccepted) => promptSession(
-      handle,
-      item.text,
-      item.images,
-      streamingBehavior,
-      signal,
-      item.kind,
-      item.handoffId,
-      onAccepted,
-    ),
+    submit: (item, streamingBehavior, signal, onAccepted) => item.shell
+      ? executeQueuedBash(handle, item, signal, onAccepted)
+      : promptSession(
+        handle,
+        item.text,
+        item.images,
+        streamingBehavior,
+        signal,
+        item.kind,
+        item.handoffId,
+        onAccepted,
+      ),
     onChange: () => events.broadcastActiveSession(handle),
   })
   return handle.promptQueue
@@ -1134,55 +1143,114 @@ function formatModelLabel(model) {
 }
 
 async function bashSession(handle, command, excludeFromContext = false, signal) {
-  requireInitializedSession(handle)
-  if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
-  if (handle.interruptPromise) throw new Error('Wait for the current run to stop.')
-  const session = handle.runtime.session
+  requireSessionAvailable({ id: handle.sessionId, cwd: handle.runtime.cwd })
+  if (runtimeShuttingDown || handle.disposalPromise) throw new Error('Session is closed')
   const bashCommand = typeof command === 'string' ? command.trim() : ''
   if (!bashCommand) throw new Error('shell command is required')
-  if (handle.bashPromise || session.isBashRunning) {
-    throw new Error('A shell command is already running')
-  }
-
   if (signal?.aborted) throw new Error('Shell command cancelled')
+  const queue = ensurePromptQueue(handle)
+  queue.add({
+    text: `${excludeFromContext === true ? '!!' : '!'}${bashCommand}`,
+    images: [],
+    shell: { command: bashCommand, excludeFromContext: excludeFromContext === true },
+  })
+  if (handle.interruptPromise || handle.reloading || handle.changingBranch) queue.hold()
+  return 'queued'
+}
 
+async function executeQueuedBash(handle, item, signal, onAccepted) {
+  requireInitializedSession(handle)
+  const session = handle.runtime.session
+  const { command, excludeFromContext } = item.shell
   const controller = new AbortController()
   const abortBash = () => {
     controller.abort()
     session.abortBash()
   }
-  signal?.addEventListener('abort', abortBash, { once: true })
+  if (signal.aborted) abortBash()
+  else signal.addEventListener('abort', abortBash, { once: true })
   handle.bashController = controller
+  let execution
+  const publish = (type) => {
+    const event = { type, ...execution }
+    trackRuntimeActivity(handle, event)
+    events.broadcastEvent('runtime_event', {
+      activeSessionId: handle.sessionId,
+      event,
+    })
+    events.broadcastActiveSession(handle)
+  }
   handle.bashPromise = Promise.resolve().then(async () => {
-    if (controller.signal.aborted) throw new Error('Shell command cancelled')
-    const eventResult = await session.extensionRunner.emitUserBash({
-      type: 'user_bash',
-      command: bashCommand,
-      excludeFromContext: excludeFromContext === true,
-      cwd: session.sessionManager.getCwd(),
-    })
-    if (controller.signal.aborted) throw new Error('Shell command cancelled')
-    requireInitializedSession(handle)
-    if (handle.changingBranch || handle.interruptPromise || handle.runtime.session !== session) {
-      throw new Error('Session changed before running the shell command')
-    }
-    if (eventResult?.result) {
-      session.recordBashResult(bashCommand, eventResult.result, {
-        excludeFromContext: excludeFromContext === true,
+    try {
+      if (controller.signal.aborted) throw new Error('Shell command cancelled')
+      const eventResult = await waitForSettings(session.extensionRunner.emitUserBash({
+        type: 'user_bash', command, excludeFromContext,
+        cwd: session.sessionManager.getCwd(),
+      }), controller.signal)
+      if (controller.signal.aborted) throw new Error('Shell command cancelled')
+      requireInitializedSession(handle)
+      if (handle.changingBranch || handle.interruptPromise || handle.runtime.session !== session) {
+        throw new Error('Session changed before running the shell command')
+      }
+      const previousIds = new Set(session.sessionManager.getBranch().map((entry) => entry.id))
+      execution = {
+        id: randomUUID(), command, excludeFromContext,
+        anchorId: session.sessionManager.getLeafId() || '',
+        startedAt: Date.now(), status: 'running', output: '', entryId: '', revision: 0,
+      }
+      handle.bashExecution = execution
+      onAccepted()
+      publish('bash_execution_start')
+      let result
+      if (eventResult?.result) {
+        result = eventResult.result
+        session.recordBashResult(command, result, { excludeFromContext })
+      } else {
+        result = await session.executeBash(command, (delta) => {
+          execution.output = (execution.output + delta).slice(-65536)
+          execution.revision += 1
+        }, { id: execution.id, excludeFromContext, operations: eventResult?.operations })
+      }
+      Object.assign(execution, result, {
+        revision: execution.revision + 1,
+        status: result.cancelled ? 'aborted' : typeof result.exitCode === 'number' && result.exitCode !== 0 ? 'error' : 'completed',
       })
-      return eventResult.result
+      if (session.hasPendingBashMessages) {
+        publish('bash_execution_end')
+        await session.waitForIdle()
+      }
+      const entry = session.sessionManager.getBranch().findLast((entry) => {
+        const message = entry.message
+        return !previousIds.has(entry.id) && message?.role === 'bashExecution'
+          && message.command === command && (message.excludeFromContext === true) === excludeFromContext
+          && message.output === result.output && message.exitCode === result.exitCode
+          && message.cancelled === result.cancelled && message.truncated === result.truncated
+          && message.fullOutputPath === result.fullOutputPath
+      })
+      execution.entryId = entry?.id || ''
+      execution.revision += 1
+      if (result.cancelled || execution.status === 'error') handle.promptQueue.hold()
+      publish('bash_execution_end')
+    } catch (error) {
+      if (execution) {
+        execution.revision += 1
+        execution.status = controller.signal.aborted ? 'aborted' : 'error'
+        execution.error = error.message || String(error)
+        handle.promptQueue.hold()
+        publish('bash_execution_end')
+      }
+      throw error
     }
-    return session.executeBash(bashCommand, undefined, {
-      excludeFromContext: excludeFromContext === true,
-      operations: eventResult?.operations,
-    })
   })
+  events.broadcastActiveSession(handle)
   try {
-    return await handle.bashPromise
+    await handle.bashPromise
   } finally {
-    signal?.removeEventListener('abort', abortBash)
+    signal.removeEventListener('abort', abortBash)
     handle.bashController = undefined
     handle.bashPromise = undefined
+    events.broadcastActiveSession(handle)
+    handle.promptQueue?.schedule()
   }
 }
 
@@ -1707,7 +1775,9 @@ async function trashProject(cwd) {
 
 async function moveSessionToTrash(session, stamp, allowMissing) {
   let path = null
+  let sessionPath = session.path
   if (session.path && existsSync(session.path)) {
+    sessionPath = realpathSync(session.path)
     const trashPath = trashSessionPath(session, stamp)
     await mkdir(dirname(trashPath), { recursive: true })
     try {
@@ -1719,6 +1789,7 @@ async function moveSessionToTrash(session, stamp, allowMissing) {
   } else if (!allowMissing) {
     throw new Error('Session file not found')
   }
+  deleteSessionSubagentBatchOverride({ cwd: session.cwd, sessionPath })
   await removeVisionAttachments(session.id)
   return { path }
 }
@@ -2091,6 +2162,7 @@ async function bindRuntimeHandle(handle) {
   idleRuntimeCleanup.touch(handle)
   ensurePromptQueue(handle)
   try {
+    if (handle.bashExecution?.status !== 'running') handle.bashExecution = undefined
     await bindRuntimeHandleExtensions(handle, events)
     handle.runtime.services.requestEvents?.emit('leyline:request-boundary-ready')
     if (runtimeShuttingDown) throw new Error('Runtime is shutting down')
@@ -2442,6 +2514,7 @@ export function createPiRuntimeApi() {
   runtimeState,
   settingsRuntime,
   setMemoryStatus,
+  setSubagentBatchSize,
   setSubagentModelOverride,
   deleteSubagentModelOverride,
   setVisionOverride,

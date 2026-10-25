@@ -67,6 +67,20 @@ The model editor temporarily hides the category and provider selectors. **Model*
 
 Copying **Model details** opens **Model**, where you can edit a new model's imported ID. **Back to editor** keeps your draft. See [Catalog lookup](./settings#find-a-configuration-in-the-catalog) for copied fields and exclusions.
 
+## Set a session batch size
+
+1. Open **Session actions** in the session header.
+2. Select **Session details**.
+3. Find **Subagents**.
+4. Change **Batch size**.
+5. Leave the field to save the value.
+
+![Mobile Session details with subagent batch size 2 and global default 4](../assets/screenshots/subagent-batch-size-mobile.png)
+
+Select **Use global default** to remove the session override. The global default is in **Settings → Agent defaults → Subagents**. There is no project batch-size override.
+
+Batch size limits work within each batch, not total concurrent work across the session. See [Configure batch size](./subagents#configure-batch-size) for values, scope, and when changes apply.
+
 ## Supervise activity on mobile
 
 ![Full-screen mobile Activity view with session status and controls](../assets/screenshots/activity-mobile.png)
@@ -91,7 +105,9 @@ Tool targets can shorten to fit the row. User messages and tool cards use the fu
 
 Subagent calls open a bottom sheet instead of expanding the transcript. If an Activity card contains only one subagent call, select its header or row to open the sheet directly. Parallel tasks still count as one call.
 
-Select a task to see its action ledger, then select a row to read the full entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger. The task list and reader scroll separately. **Copy full text** copies the open entry, and **Open child session** opens the complete transcript.
+Select a task to see its action ledger, then select a row to read the full entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger.
+
+Task details and the latest response use bounded scroll sections to keep space for **Activity**. Reader sections scroll below **Back to activity**, which stays visible. **Copy full text** copies the open entry, and **Open child session** opens the complete transcript.
 
 The current reader stays visible until the next task preview is ready. The task highlight, reader, and footer then change together without moving the sheet. Reduced motion removes the animation.
 
@@ -124,6 +140,14 @@ Select the attached **Up next** tab to open the tray across the composer width. 
 Use **Add to message** for images, a new line, or research mode when available.
 
 Open **Session details** through **Session actions** for enabled tools, context usage, and terminal access.
+
+### Read composer issues
+
+The **1 issue** chip appears in a separate row above the mobile controls. Select it to read the full error, then select **Dismiss**. You can also select **×** on the chip.
+
+![Mobile composer issue details with a Dismiss control above the retained draft and settings capsule](../assets/screenshots/composer-issue-mobile.png)
+
+Dismissing the notice keeps your draft and attachments. If Send remains blocked, select **Details** beside **Send unavailable**. See [Composer issues](./composer#read-and-dismiss-an-issue).
 
 ## Open research sources
 

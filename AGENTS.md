@@ -62,11 +62,18 @@
     Ultrafast and image-capable vision fixture exceptions.
 - Build check:
   - `npm run build`
+- Cut releases with `npm run version:patch|minor|major` — they bump the
+  version, create the release commit, and tag. Never bump `package.json`
+  manually.
 - Do not add tests, docs, or broad refactors unless explicitly requested.
 - If the user asks what to work on next and you have not read the code, research
   the codebase before you recommend work. Do not guess from old notes or
   `MEMORY.md`.
-- `fnm` is used for Node.js version management.
+- Node.js is pinned to v22.19.0 in both `.nvmrc` (honored by fnm on the Mac)
+  and `mise.toml` (mise ignores `.nvmrc`, so Linux machines need this copy).
+  Update both files together when bumping Node, and do not run the dev server
+  on other versions: Node 26 breaks Vite 8 config loading (see
+  `server/pi-api/mcp-settings-transports.js`).
 
 ## Memory maintenance
 

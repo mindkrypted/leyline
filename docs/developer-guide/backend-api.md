@@ -32,7 +32,7 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | --- | --- |
 | `server/backend-connections.js` | Named connections, the default connection, app settings, live network-access routes, and pinned session IDs on the native backend |
 | `server/network-access.js` | Configurable TCP relay, serialized partial updates, live status, self-change response handling, and relay cleanup |
-| `lib/leyline-settings.js` | Setting keys that the native backend and browser share |
+| `lib/leyline-settings.js` | Shared setting keys and defaults, including subagent batch size |
 | `lib/research-state.js` | Branch-local research state folding and source normalization |
 | `lib/research-citations.js` | Report citation checks against canonical ledger sources |
 | `server/pi-api/index.js` | Shared runtime instance, Vite integration, and WebSocket setup |
@@ -62,7 +62,7 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | `server/pi-api/git-review-watch.js` | Shared recursive review watchers and review-change WebSocket clients |
 | `server/pi-api/memories.js` | Memory Inspector queries and mutations |
 | `server/pi-api/rollout-feedback.js` | Assistant-entry feedback storage and DTO application |
-| `server/pi-api/subagents.js` | Agent discovery, scoped model overrides, and effective configuration |
+| `server/pi-api/subagents.js` | Agent discovery, scoped model overrides, global/session batch size, and effective configuration |
 | `server/pi-api/vision.js` | Vision-model overrides, delegation records, and parent-context replacement |
 | `server/pi-api/export-renderer.js` | HTML export rendering, export CSS, and preview code |
 | `server/pi-api/terminal.js` | PTY and terminal WebSocket lifecycle |
@@ -310,6 +310,10 @@ Rollout feedback stores `helpful` or `unhelpful` for an assistant entry. It can 
 Subagent configuration discovers definitions in `~/.pi/agent/agents` and the nearest project `.pi/agents` directory.
 
 Subagent model precedence is session, project, global, then the agent definition. Vision-model precedence is session, project, then global. Session overrides for both features copy to a new fork.
+
+Subagent batch size uses only global and session scopes. `subagents.js` validates positive safe integers and resolves session values before the global default of 4. The global key `subagents.batch_size` uses `leyline_settings`. Session values use `subagent_batch_overrides`, copy to forks, and clear when session/project deletion removes those sessions.
+
+The subagent extension owns batch scheduling. Each implicit single-call group or explicit parallel call reads its effective size once. Changes affect future groups and calls without reload. Direct child execution has no backend batch limiter. See [Subagent scheduling](../integrations/subagents#batch-scheduling-and-configuration) and the [API contract](../reference/api#subagent-routes).
 
 The subagent and vision execution routes create child pi sessions. They write an explicit marker before they start each child runtime. Normal subagents retain the normal runtime resources and their tool policy. Vision children use an isolated prompt, output-budget and inline capture, an empty tool allowlist, and a session-local image setting override.
 

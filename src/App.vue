@@ -79,6 +79,7 @@ import {
   interruptPiSession,
   runShellCommand,
   setEntryFeedback,
+  setSubagentBatchSize,
   setSubagentModelOverride,
   setVisionOverride,
   submitPrompt,
@@ -200,7 +201,6 @@ let reviewDesktopQuery = null
 let reviewExpansionTimer = null
 const promptSubmitting = ref(false)
 const manualCompactionSessions = ref(new Set())
-const shellRunningSessions = ref(new Set())
 const interrupting = ref(false)
 const activityInterruptingSessionId = ref('')
 const activityActionError = ref('')
@@ -231,6 +231,8 @@ const toolsPickerOpen = ref(false)
 const slashActiveIndex = ref(0)
 const slashPickerDismissed = ref(false)
 const promptError = ref('')
+const dismissedConnectionIssueId = ref('')
+const dismissedImageIssueId = ref('')
 const composerScannerSettling = ref(false)
 const composerCommitPulse = ref(false)
 const vFocusSelect = {
@@ -401,7 +403,6 @@ const {
 } = workbenchScroll
 const liveTurn = useLiveTurnProjection({ onIntent: handleLiveTurnIntent })
 const {
-  addTool: upsertLiveTool,
   agentRunning,
   beginUserTurn,
   clearLiveOutput,
@@ -409,7 +410,6 @@ const {
   compactingContext,
   dispose: disposeLiveTurn,
   entries,
-  finishTools: finishLiveTools,
   liveActivity,
   liveItems,
   liveTurnActive,
@@ -984,6 +984,7 @@ const {
   eventLog,
   eventStreamConnected,
   eventStreamError,
+  eventStreamErrorRevision,
   openEventStream,
   runtimeEvents,
   setEventSessionId,
@@ -993,10 +994,7 @@ const {
     if (activeSession.id && activeSession.cwd) {
       runtimeCwdBySessionId.set(activeSession.id, activeSession.cwd)
     }
-    updateRuntimeSessionSnapshot(activeSession)
-    if (activeSession.id === selectedSessionId.value) {
-      activeRuntimeSession.value = activeSession
-    }
+    applyQueueSnapshot(activeSession)
     appendRuntimeEvent({
       type: 'active_session',
       summary: projectName(activeSession.cwd),
@@ -1135,6 +1133,39 @@ const imageSupportWarning = computed(() => {
   if (visionConfigData.value?.model) return ''
   return `${modelChip(model)} does not support images and no vision model is configured. Open Settings → Agent defaults to set a default vision model.`
 })
+const composerIssueScope = computed(() => JSON.stringify([
+  activeBackendConnectionId.value,
+  selectedSessionId.value || newSessionCwd.value,
+]))
+const imageComposerIssue = computed(() => {
+  const message = imageSupportWarning.value
+  const id = JSON.stringify([composerIssueScope.value, 'image', message])
+  return message && id !== dismissedImageIssueId.value ? { id, kind: 'image', message } : null
+})
+const composerIssue = computed(() => {
+  if (promptError.value) {
+    return { id: `${composerIssueScope.value}:prompt`, kind: 'prompt', message: promptError.value }
+  }
+  if (eventStreamError.value) {
+    const id = JSON.stringify([composerIssueScope.value, 'connection', eventStreamErrorRevision.value])
+    if (id !== dismissedConnectionIssueId.value) {
+      return { id, kind: 'connection', message: eventStreamError.value }
+    }
+  }
+  return imageComposerIssue.value
+})
+watch(imageSupportWarning, () => { dismissedImageIssueId.value = '' }, { flush: 'sync' })
+
+function dismissComposerIssue(issue) {
+  if (issue.kind === 'prompt' && issue.id === composerIssue.value?.id && issue.message === promptError.value) {
+    promptError.value = ''
+  } else if (issue.kind === 'connection' && issue.id === composerIssue.value?.id) {
+    dismissedConnectionIssueId.value = issue.id
+  } else if (issue.kind === 'image' && issue.id === imageComposerIssue.value?.id) {
+    dismissedImageIssueId.value = issue.id
+  }
+}
+
 const visionDelegationNotice = computed(() => {
   if (shellModeDraft.value || !attachedImages.value.length) return ''
   const model = composerRuntime.value?.state?.model
@@ -1179,7 +1210,7 @@ const canToggleEmptySessionResearch = computed(() => {
 })
 const composerCompacting = computed(() => compactingContext.value
   || manualCompactionSessions.value.has(selectedSessionId.value))
-const composerShellRunning = computed(() => shellRunningSessions.value.has(selectedSessionId.value))
+const composerShellRunning = computed(() => composerRuntime.value?.state?.isBashRunning === true)
 const sendButtonLabel = computed(() => {
   if (promptSubmitting.value || sessionActivating.value) return '…'
   if (shellModeDraft.value) return 'Run'
@@ -1582,6 +1613,8 @@ function patchEntryFeedback(entryId, label, feedbackText = '') {
 
 function applyQueueSnapshot(session) {
   if (!session) return
+  if (session.id === activeRuntimeSession.value?.id
+    && session.snapshotRevision < activeRuntimeSession.value.snapshotRevision) return
   updateRuntimeSessionSnapshot(session)
   if (session.id === selectedSessionId.value) activeRuntimeSession.value = session
 }
@@ -2299,7 +2332,7 @@ function runtimeCwd(sessionId) {
 }
 
 function runtimeEventSettled(event) {
-  return ['agent_end', 'error', 'aborted'].includes(event?.type)
+  return ['agent_end', 'error', 'aborted', 'bash_execution_end'].includes(event?.type)
 }
 
 function collapseReviewExpanded() {
@@ -2809,6 +2842,26 @@ async function saveSubagentModel(payload) {
   }
 }
 
+async function saveSubagentBatchSize(payload) {
+  const target = agentSettingsLoadedTarget.value
+  if (!target || payload.scope !== agentSettingsScope.value || !['global', 'session'].includes(payload.scope)
+    || subagentConfigLoading.value || subagentConfigSaving.value || visionConfigSaving.value) return
+  const token = agentSettingsRequestToken
+  const key = agentSettingsKey.value
+  const current = () => token === agentSettingsRequestToken && key === agentSettingsKey.value
+  subagentConfigSaving.value = true
+  subagentConfigError.value = ''
+  try {
+    const data = await setSubagentBatchSize(target, payload.scope, payload.batchSize)
+    if (current()) subagentConfigData.value = data
+    else if (agentSettingsKey.value) void loadAgentSettings()
+  } catch (error) {
+    if (current()) subagentConfigError.value = error.message
+  } finally {
+    subagentConfigSaving.value = false
+  }
+}
+
 async function saveVisionModel(payload) {
   const target = agentSettingsLoadedTarget.value
   if (!target || payload.scope !== agentSettingsScope.value
@@ -3095,7 +3148,7 @@ async function submitDraft(streamingBehavior) {
     return
   }
 
-  if (!editingEntry.value && (agentRunning.value || composerCompacting.value
+  if (!editingEntry.value && (agentRunning.value || composerShellRunning.value || composerCompacting.value
     || reloadingSession.value || switchingModel.value || switchingUltrafast.value
     || promptQueue.value.held || promptQueue.value.items.length)) {
     const sessionId = selectedSessionId.value
@@ -3112,7 +3165,7 @@ async function submitDraft(streamingBehavior) {
         streamingBehavior || 'followUp',
       )
       if (data.active && selectedSessionId.value === sessionId) {
-        activeRuntimeSession.value = data.active
+        applyQueueSnapshot(data.active)
       }
     } catch (error) {
       if (selectedSessionId.value === sessionId) {
@@ -3200,7 +3253,7 @@ async function submitDraft(streamingBehavior) {
       )
     if (editing) completeComposerEdit(composerDraftKey(sessionId), editing)
     if (selectedSessionId.value === sessionId) {
-      if (data.active) activeRuntimeSession.value = data.active
+      if (data.active) applyQueueSnapshot(data.active)
       if (initializesResearchSession) emptySessionKind.value = 'session'
       if (isHandledSlashCommand(text) || data.queued) {
         removeOptimisticEntry(localEntry, data.queued === true)
@@ -3316,20 +3369,11 @@ async function submitShellCommand(shellCommand, images) {
   }
 
   const sessionId = selectedSessionId.value
-  if (shellRunningSessions.value.has(sessionId)) return
   const submittedDraft = draft.value
-  shellRunningSessions.value = new Set([...shellRunningSessions.value, sessionId])
+  promptSubmitting.value = true
   promptError.value = ''
   draft.value = ''
-  if (!agentRunning.value && !composerCompacting.value) resetLiveState()
   refocusComposer()
-  upsertLiveTool({
-    type: 'tool_execution_start',
-    toolName: 'bash',
-    args: { command: shellCommand.command },
-  }, 'running')
-
-  const shellCwd = settingsCwd.value
   try {
     const data = await runShellCommand(
       sessionId,
@@ -3337,25 +3381,17 @@ async function submitShellCommand(shellCommand, images) {
       shellCommand.excludeFromContext,
     )
     if (data.active && selectedSessionId.value === sessionId) {
-      activeRuntimeSession.value = data.active
+      applyQueueSnapshot(data.active)
       emptySessionKind.value = 'session'
     }
-    if (data.detail && selectedSessionId.value === sessionId) {
-      sessionDetail.value = data.detail
-    }
-    await loadSessions({ selectFirst: false, showLoading: false })
-    if (selectedSessionId.value === sessionId) await scrollToLatest()
   } catch (error) {
     if (selectedSessionId.value === sessionId) {
-      finishLiveTools('error')
       if (!draft.value && !attachedImages.value.length) draft.value = submittedDraft
       promptError.value = error.message
     }
   } finally {
-    invalidateReview(shellCwd)
-    const running = new Set(shellRunningSessions.value)
-    running.delete(sessionId)
-    shellRunningSessions.value = running
+    promptSubmitting.value = false
+    refocusComposer()
   }
 }
 
@@ -3885,6 +3921,8 @@ function handleGlobalKeydown(event) {
 function anyEscapeTargetOpen(ignoreQueue = false, ignoreEditing = false) {
   return Boolean(
     mobileComposerSheetOpen.value
+    || startComposerRef.value?.issueDetailsOpen
+    || composerRef.value?.issueDetailsOpen
     || (!ignoreQueue && composerRef.value?.queueUiOpen)
     || fullscreenImage.value
     || fullscreenTool.value
@@ -3972,6 +4010,15 @@ function handleEscape(event) {
     event?.stopPropagation?.()
     return
   }
+  const issueCovered = eventLogOpen.value || sessionDetailsOpen.value || projectDetailCwd.value
+    || memoryOpen.value || researchSourcesOpen.value || systemPromptEntry.value
+    || researchCitationPreview.value || (reviewPaneExpanded.value && window.innerWidth > 1120)
+  if (!issueCovered
+    && (startComposerRef.value?.dismissIssueDetails() || composerRef.value?.dismissIssueDetails())) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    return
+  }
   if (!anyEscapeTargetOpen(true) && composerRef.value?.dismissQueue?.()) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
@@ -4037,6 +4084,7 @@ function closeMenusOnOutsideClick(event) {
   if (!event.target.closest('.topbar-meta')) headerMoreOpen.value = false
   if (!event.target.closest('.terminal-header, .terminal-keys')) terminalKeysOpen.value = false
   composerRef.value?.closePopovers?.(event)
+  startComposerRef.value?.closePopovers?.(event)
   if (event.target.closest('.project-browser-modal')) return
   if (event.target.closest('.model-picker')) return
   if (event.target.closest('.start-project-button, .start-project-menu')) return
@@ -4934,6 +4982,7 @@ function closePickerMenus() {
             :current-model-label="startupDraftSnapshot?.modelLabel || currentModelLabel"
             :current-thinking-label="startupDraftSnapshot?.thinkingLabel || currentThinkingLabel"
             :image-support-warning="imageSupportWarning"
+            :issue="imageComposerIssue"
             :vision-delegation-notice="visionDelegationNotice"
             :model-key="modelKey"
             :model-picker-open="modelPickerOpen"
@@ -4961,6 +5010,7 @@ function closePickerMenus() {
             :tool-names="activeToolNames"
             :tools-chip-label="toolsChipLabel"
             :tools-picker-open="toolsPickerOpen"
+            @dismiss-issue="dismissComposerIssue"
             @keydown="handleStartComposerKeydown"
             @composition-start="handleComposerCompositionStart"
             @composition-end="handleComposerCompositionEnd"
@@ -5012,7 +5062,8 @@ function closePickerMenus() {
             :context-usage-percent="contextUsagePercent"
             :context-usage-title="contextUsageTitle"
             :editing-label="editingLabel"
-            :error="promptError || eventStreamError || imageSupportWarning"
+            :issue="composerIssue"
+            :image-support-warning="imageSupportWarning"
             :vision-delegation-notice="visionDelegationNotice"
             :interrupting="interrupting"
             :class="{
@@ -5051,6 +5102,7 @@ function closePickerMenus() {
             :ultrafast-available="ultrafastAvailable"
             :ultrafast-enabled="ultrafastEnabled"
             @cancel-edit="cancelEditingEntry"
+            @dismiss-issue="dismissComposerIssue"
             @interrupt="interruptAgent"
             @keydown="handleComposerKeydown"
             @composition-start="handleComposerCompositionStart"
@@ -5471,6 +5523,7 @@ function closePickerMenus() {
           v-bind="agentSettingsProps"
           @set-model="saveSubagentModel"
           @reset-model="saveSubagentModel"
+          @save-batch-size="saveSubagentBatchSize"
           @save-vision="saveVisionModel"
           @refresh="loadAgentSettings"
         />
@@ -5507,6 +5560,7 @@ function closePickerMenus() {
               v-bind="agentSettingsProps"
               @set-model="saveSubagentModel"
               @reset-model="saveSubagentModel"
+              @save-batch-size="saveSubagentBatchSize"
               @save-vision="saveVisionModel"
               @refresh="loadAgentSettings"
             />

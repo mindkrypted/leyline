@@ -1073,6 +1073,7 @@ const memoryPayload = {
 
 const subagentPayload = {
   context: memoryPayload.context,
+  batching: { global: 4, session: null, effective: 4, source: 'global' },
   agents: [
     {
       key: 'project:/workspace/harbor/.pi/agents/reviewer.md:reviewer',
@@ -1101,6 +1102,27 @@ const subagentPayload = {
       modelSource: 'project',
     },
   ],
+}
+
+function subagentConfigPayload({ cwd, sessionPath }, batching) {
+  const sessionAvailable = Boolean(sessionPath)
+  const session = sessionAvailable ? batching.session : null
+  return {
+    ...subagentPayload,
+    context: {
+      ...memoryPayload.context,
+      cwd,
+      sessionAvailable,
+      sessionFile: sessionPath || null,
+      sessionId: sessionAvailable ? memoryPayload.context.sessionId : null,
+    },
+    batching: { global: batching.global, session, effective: session ?? batching.global, source: session === null ? 'global' : 'session' },
+    agents: subagentPayload.agents.map(agent => {
+      const overrides = Object.fromEntries(Object.entries(agent.overrides).filter(([scope]) => sessionAvailable || scope !== 'session'))
+      const modelSource = ['session', 'project', 'global'].find(scope => overrides[scope]) || 'definition'
+      return { ...agent, overrides, effectiveModel: overrides[modelSource] || agent.model, modelSource }
+    }),
+  }
 }
 
 const visionConfigPayload = (sessionAvailable) => ({
@@ -1139,7 +1161,12 @@ const allowedNames = new Set([
   ...pinnedAssetNames,
   ...networkAssetNames,
   ...subagentAssetNames,
+  'subagent-batch-size.png',
+  'subagent-batch-size-mobile.png',
   'tool-activity.png',
+  'composer-issue.png',
+  'composer-issue-mobile.png',
+  'composer-send-unavailable.png',
   'dictation.png',
   'dictation-settings.png',
   'dictation-mobile.png',
@@ -1573,7 +1600,25 @@ try {
       await drawer.locator('section[aria-label="Vision agent"][aria-busy="false"]').waitFor()
       await drawer.locator('section[aria-label="Subagents"][aria-busy="false"]').waitFor()
       await drawer.getByRole('heading', { name: 'Runtime Read-only', exact: true }).waitFor()
+      await waitForBatchSize(page, 'session', 4, true)
     },
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-batch-size.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'subagent-batching',
+    interact: openSessionBatchSize,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'subagent-batch-size-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-model-control',
+    viewport: { width: 390, height: 844 },
+    scenario: 'subagent-batching',
+    interact: openSessionBatchSize,
   })
   await capture({
     browser,
@@ -1606,6 +1651,33 @@ try {
     route: '/sessions/demo-session',
     ready: '.composer .composer-context-usage',
     scenario: 'ultrafast',
+    clipSelectors: ['.composer'],
+    padding: 18,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'composer-issue.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    interact: openComposerIssue,
+    clipSelectors: ['.composer', '.composer-issue-popover'],
+    padding: 18,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'composer-issue-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-model-control',
+    viewport: { width: 390, height: 844 },
+    interact: openComposerIssue,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'composer-send-unavailable.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'composer-blocked',
+    interact: dismissComposerImageIssue,
     clipSelectors: ['.composer'],
     padding: 18,
   })
@@ -1723,6 +1795,7 @@ try {
     file: path.join(docsOutputDir, 'subagents.png'),
     route: '/sessions/demo-session',
     ready: '.assistant-message',
+    scenario: 'subagent-batching-global',
     interact: async (page) => {
       await page.getByRole('button', { name: 'Open settings', exact: true }).click()
       const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
@@ -1733,6 +1806,9 @@ try {
       await section.locator('select:not(:disabled)').nth(1).waitFor()
       await section.locator('option[value="local/minimax-m2.7"]').nth(1).waitFor({ state: 'attached' })
       await section.getByRole('combobox', { name: /^reviewer/ }).locator('option[value="local/minimax-m2.7"]:checked').waitFor({ state: 'attached' })
+      await waitForBatchSize(page, 'global', 4)
+      await setBatchSize(page, 'global', 3)
+      await setBatchSize(page, 'global', 4)
       await section.getByText('Agent definitions and tools', { exact: true }).click()
       await section.getByRole('heading', { name: 'researcher', exact: true }).waitFor()
       await dialog.getByText('Project and session overrides are edited in their own details panels.', { exact: true }).scrollIntoViewIfNeeded()
@@ -1829,6 +1905,7 @@ try {
       const modelSelect = section.getByRole('combobox', { name: /^Vision model/ })
       await modelSelect.locator('option[value="local/qwen3.6-27b"]:checked:not(:disabled)').waitFor({ state: 'attached' })
       await section.getByRole('combobox', { name: /^Thinking mode/ }).locator('option[value=""]:checked').waitFor({ state: 'attached' })
+      await waitForBatchSize(page, 'global', 4)
       await section.scrollIntoViewIfNeeded()
       const selectedVisionModel = await modelSelect.inputValue()
       if (selectedVisionModel !== 'local/qwen3.6-27b') {
@@ -1996,6 +2073,90 @@ try {
 }
 
 console.log('Screenshot capture complete')
+
+async function waitForBatchSize(page, scope, value, inherited = false) {
+  await page.waitForFunction(({ scope, value, inherited }) => {
+    const input = document.querySelector(`#subagent-batch-size-${scope}`)
+    const row = input?.closest('.settings-batch-size')
+    const source = scope === 'session' && !inherited ? 'this transcript' : 'global default'
+    const label = `${inherited ? 'Inherited' : 'Effective'}: ${value} · ${source}`
+    const reset = row?.querySelector('button')
+    return input && !input.disabled && !input.readOnly && input.value === String(value)
+      && row.closest('section').getAttribute('aria-busy') === 'false'
+      && row.querySelector('.settings-inherited')?.textContent.trim() === label
+      && (scope === 'session' && !inherited ? reset && !reset.disabled && reset.textContent.trim() === 'Use global default (4)' : !reset)
+  }, { scope, value, inherited })
+}
+
+async function setBatchSize(page, scope, value) {
+  const input = page.locator(`#subagent-batch-size-${scope}`)
+  await input.fill(String(value))
+  await input.press('Tab')
+  await waitForBatchSize(page, scope, value)
+}
+
+async function openSessionBatchSize(page) {
+  const more = page.locator('.header-more-button')
+  if (await more.isVisible()) await more.click()
+  await page.getByRole('button', { name: 'Session details', exact: true }).click()
+  await waitForBatchSize(page, 'session', 4, true)
+  await setBatchSize(page, 'session', 2)
+  await page.getByRole('button', { name: 'Use global default (4)', exact: true }).click()
+  await waitForBatchSize(page, 'session', 4, true)
+  await setBatchSize(page, 'session', 2)
+  const drawer = page.locator('aside[aria-label="Session details"]')
+  const section = page.viewportSize().width > 760 ? 'Vision agent' : 'Subagents'
+  await drawer.locator(`section[aria-label="${section}"]`).evaluate(element => element.scrollIntoView({ block: 'start', behavior: 'instant' }))
+  await disableMotion(page)
+  const visible = await drawer.locator('.settings-batch-size').evaluate(row => {
+    const bounds = row.getBoundingClientRect()
+    const body = row.closest('.context-settings-body').getBoundingClientRect()
+    return bounds.top >= body.top && bounds.bottom <= body.bottom && row.scrollWidth <= row.clientWidth
+  })
+  if (!visible) throw new Error('Session batch size or reset control is clipped')
+}
+
+async function openComposerIssue(page) {
+  const draft = 'Review the release checklist and keep the current layout.'
+  const message = 'Request failed (502): Bad Gateway.\nThe provider is temporarily unavailable.'
+  const input = page.locator('.composer textarea')
+  await input.fill(draft)
+  await page.waitForFunction(() => window.__docsEventSockets.some(socket => {
+    return socket.readyState === 1 && new URL(socket.url).searchParams.get('sessionId') === 'demo-session'
+  }))
+  await page.evaluate(message => {
+    const socket = window.__docsEventSockets.find(socket => {
+      return socket.readyState === 1 && new URL(socket.url).searchParams.get('sessionId') === 'demo-session'
+    })
+    socket.emit({ type: 'extension_error', data: { activeSessionId: 'demo-session', error: { name: 'Error', message } } })
+  }, message)
+  await page.getByRole('button', { name: '1 composer issue. Show details', exact: true }).click()
+  const popover = page.getByRole('dialog', { name: 'Composer issue', exact: true })
+  await popover.waitFor()
+  await popover.getByRole('button', { name: 'Dismiss', exact: true }).waitFor()
+  if (await popover.locator('.composer-issue-message').textContent() !== message
+    || await input.inputValue() !== draft) throw new Error('Composer issue capture lost its message or draft')
+}
+
+async function dismissComposerImageIssue(page) {
+  const draft = 'Review the attached release checklist.'
+  const input = page.locator('.composer textarea')
+  await input.fill(draft)
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Add image', exact: true }).click()
+  await (await chooser).setFiles({
+    name: 'release-check.webp',
+    mimeType: visionAlertImage.mimeType,
+    buffer: Buffer.from(visionAlertImage.data, 'base64'),
+  })
+  await page.waitForFunction(() => document.querySelector('.composer-issue-live')?.textContent.includes('no vision model is configured'))
+  await page.getByRole('button', { name: 'Dismiss composer issue', exact: true }).click()
+  await page.getByRole('button', { name: 'Send unavailable Details', exact: true }).waitFor()
+  if (!await page.locator('.composer .send-button').isDisabled()
+    || await input.inputValue() !== draft || await page.locator('.attachment-chip').count() !== 1) {
+    throw new Error('Composer dismissal changed the image requirement, draft, or attachment')
+  }
+}
 
 async function startDictationCapture(page) {
   await page.locator('.dictation-button[aria-label^="Start local dictation"]').click()
@@ -2703,6 +2864,8 @@ async function capture({
   let captureConfig = { enabled: true, error: '' }
   let networkAccess = { available: true, enabled: false, port: null, configuredPort: 0, urls: [], directAccess: false, error: '' }
   const capturedTraces = structuredClone(traceFixtures)
+  const batching = { ...subagentPayload.batching }
+  const batchWrites = []
   await page.route('**/*', (request) => {
     const origin = new URL(request.request().url()).origin
     if (origin === new URL(baseUrl).origin || origin === 'https://esm.sh') return request.continue()
@@ -2819,9 +2982,33 @@ async function capture({
     }
     if (key === 'GET /api/pi/review/diff') return json(reviewDiffPayload)
     if (key === 'GET /api/pi/memories') return json(memoryPayload)
-    if (key === 'GET /api/pi/subagents') return json(subagentPayload)
+    if (key === 'GET /api/pi/subagents') {
+      const target = Object.fromEntries(url.searchParams)
+      if (target.cwd === memoryPayload.context.cwd && (!target.sessionPath || target.sessionPath === memoryPayload.context.sessionFile)) {
+        return json(subagentConfigPayload(target, batching))
+      }
+    }
+    if (key === 'PUT /api/pi/subagents/batching') {
+      const body = req.postDataJSON()
+      const scope = scenario === 'subagent-batching' ? 'session' : scenario === 'subagent-batching-global' ? 'global' : null
+      if (scope && body.scope === scope && body.cwd === memoryPayload.context.cwd
+        && (scope === 'session' ? body.sessionPath === memoryPayload.context.sessionFile : !body.sessionPath)
+        && (Number.isSafeInteger(body.batchSize) && body.batchSize > 0 || scope === 'session' && body.batchSize === null)) {
+        batching[scope] = body.batchSize
+        batchWrites.push(body.batchSize)
+        return json(subagentConfigPayload(body, batching))
+      }
+    }
     if (key === 'GET /api/pi/vision/config') {
-      return json(visionConfigPayload(url.searchParams.has('sessionPath')))
+      const config = visionConfigPayload(url.searchParams.has('sessionPath'))
+      return json(scenario === 'composer-blocked' ? {
+        ...config,
+        overrides: {},
+        model: null,
+        modelSource: 'default',
+        thinking: '',
+        thinkingSource: 'default',
+      } : config)
     }
     if (key === `GET /api/pi/sessions/${runtime.id}/export`) {
       const html = await renderSessionExportHtml(detail)
@@ -2855,6 +3042,8 @@ async function capture({
       })
     }
     if (interact) await interact(page)
+    const expectedBatchWrites = scenario === 'subagent-batching' ? [2, null, 2] : scenario === 'subagent-batching-global' ? [3, 4] : []
+    if (JSON.stringify(batchWrites) !== JSON.stringify(expectedBatchWrites)) throw new Error('Batch size fixture did not save, reset, and restore the expected values')
     if (await page.locator('.subagent-inspector').count()) await waitForSubagentReader(page)
     await sanitizeNativeBackendAddress(page)
     await page.evaluate(async () => {

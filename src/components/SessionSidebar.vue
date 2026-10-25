@@ -743,12 +743,12 @@ const navigatorSubtitle = computed(() => {
 })
 
 watch(
-  () => [
-    currentProject.value?.cwd || '',
-    sessionQuery.value,
-    pinnedOnly.value,
-    props.activeBackendConnection?.id || '',
-    props.activeBackendConnection?.url || '',
+  [
+    () => currentProject.value?.cwd || '',
+    sessionQuery,
+    pinnedOnly,
+    () => props.activeBackendConnection?.id || '',
+    () => props.activeBackendConnection?.url || '',
   ],
   async ([cwd], [previousCwd] = []) => {
     finishSessionFolds()
@@ -763,10 +763,15 @@ watch(
 )
 
 watch(
-  () => [
-    props.selectedSessionId,
-    currentProject.value?.cwd || '',
-    orderedProjectSessions.value.length,
+  [
+    () => props.selectedSessionId,
+    () => currentProject.value?.cwd || '',
+    () => orderedProjectSessions.value.length,
+    () => props.pinnedVersion,
+    () => sessionListItems.value.some((item) => {
+      return item.type === 'session-child'
+        && item.session.id === props.selectedSessionId
+    }),
   ],
   async () => {
     await nextTick()

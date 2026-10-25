@@ -28,6 +28,7 @@ export function createPromptQueue({ isIdle, submit, onChange }) {
         id: item.id,
         text: item.text,
         imageCount: item.images.length,
+        shell: Boolean(item.shell),
         status: job?.item === item ? 'sending' : 'pending',
       })),
     }
@@ -111,9 +112,16 @@ export function createPromptQueue({ isIdle, submit, onChange }) {
       if (typeof request.text !== 'string' || (!request.text.trim() && !item.images.length)) {
         throw new Error('Text or an image is required')
       }
+      const text = request.text.trim()
+      if (item.shell) {
+        const excludeFromContext = text.startsWith('!!')
+        const command = text.slice(excludeFromContext ? 2 : 1).trim()
+        if (!text.startsWith('!') || !command) throw new Error('A queued shell command must start with ! or !!')
+        item.shell = { command, excludeFromContext }
+      }
       held = true
       if (job && !job.accepted) job.controller.abort()
-      item.text = request.text.trim()
+      item.text = text
       error = ''
     } else if (request.action === 'move') {
       if (!['up', 'down'].includes(request.direction)) throw new Error('Invalid queue direction')
@@ -123,6 +131,7 @@ export function createPromptQueue({ isIdle, submit, onChange }) {
       items.splice(index, 1)
       items.splice(next, 0, item)
     } else if (request.action === 'steer') {
+      if (item.shell) throw new Error('Shell commands run in queue order and cannot steer the agent')
       if (held) throw new Error('Resume the queue before steering')
       await send(item, 'steer')
       return

@@ -38,8 +38,11 @@ function findProjectRoot(cwd) {
 export function safeRealpath(path) {
   try {
     return realpathSync(path)
-  } catch {
-    return resolve(path)
+  } catch (error) {
+    const absolute = resolve(path)
+    const parent = dirname(absolute)
+    if (error.code !== 'ENOENT' || parent === absolute) return absolute
+    return join(safeRealpath(parent), basename(absolute))
   }
 }
 

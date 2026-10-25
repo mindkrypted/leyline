@@ -47,6 +47,7 @@ export function createPiApiHandler(api) {
     runtimeState,
     setMemoryStatus,
     setRolloutFeedback,
+    setSubagentBatchSize,
     setSubagentModelOverride,
     setVisionOverride,
     clearVisionOverride,
@@ -253,11 +254,7 @@ async function piApiHandler(req, res) {
         const body = await readJson(req)
         const handle = requireActiveHandle()
         await bashSession(handle, body.command, body.excludeFromContext, responseAbortSignal(res))
-        return json(res, {
-          ok: true,
-          active: activeSessionDto(handle),
-          detail: toActiveSessionDetailDto(handle),
-        })
+        return json(res, { ok: true, queued: true, active: activeSessionDto(handle) })
       }
   
       if (url.pathname === '/compact') {
@@ -479,6 +476,17 @@ async function piApiHandler(req, res) {
           sessionPath: body.sessionPath,
           staticModel: body.staticModel,
           staticThinking: body.staticThinking,
+        }))
+      }
+
+      if (url.pathname === '/subagents/batching') {
+        if (req.method !== 'PUT') return json(res, { error: 'Method not allowed' }, 405)
+        const body = await readJson(req)
+        return json(res, setSubagentBatchSize({
+          batchSize: body.batchSize,
+          cwd: body.cwd,
+          scope: body.scope,
+          sessionPath: body.sessionPath,
         }))
       }
 
@@ -704,11 +712,7 @@ async function piApiHandler(req, res) {
         }
         if (action === 'bash') {
           await bashSession(handle, body.command, body.excludeFromContext, responseAbortSignal(res))
-          return json(res, {
-            ok: true,
-            active: activeSessionDto(handle),
-            detail: toActiveSessionDetailDto(handle),
-          })
+          return json(res, { ok: true, queued: true, active: activeSessionDto(handle) })
         }
         if (action === 'compact') {
           await compactSession(handle, body.customInstructions)

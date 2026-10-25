@@ -89,6 +89,26 @@ DOCS_SCREENSHOT_FILTER=backend-connections.png,models-providers.png,provider-mod
 
 These images show Connections with network access off, provider Connection and Models tabs, draft connection-test feedback, MCP configuration, Agent defaults, project/session drawers, and mobile provider selection. Provider fixtures include a keyless local endpoint. The model editor capture shows its sections and fixed Save/Test controls.
 
+For subagent batch configuration:
+
+```bash
+DOCS_SCREENSHOT_FILTER=subagents.png,vision-agent.png,session-details.png,subagent-batch-size.png,subagent-batch-size-mobile.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `subagents.png` | Agent defaults with global batch size 4 and subagent model choices. |
+| `vision-agent.png` | Agent defaults with vision controls and the updated Subagents section. |
+| `session-details.png` | Session drawer with runtime state, inherited batch size, and model overrides. |
+| `subagent-batch-size.png` | Desktop Session details with session batch size 2 and **Use global default (4)**. |
+| `subagent-batch-size-mobile.png` | The same session override in the mobile drawer. |
+
+Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2. Keep the parent model at `local/minimax-m2.7` and the image-capable vision fixture unchanged.
+
+Use intercepted fixtures for configuration reads, saves, and resets. No request may change real backend settings or start a model run. Keep paths and session content synthetic. Check the saved value, source label, and reset control before capture. Batch size has no project override, so do not show a project control.
+
+See [Configure batch size](../user-guide/subagents#configure-batch-size) and [Mobile batch settings](../user-guide/mobile#set-a-session-batch-size) for the image references.
+
 For subagent inspection and the affected research views:
 
 ```bash
@@ -110,11 +130,13 @@ The fixtures give every child an explicit `title`, separate from its full `task`
 
 The inspector helpers open a single-call Activity card from its header, check task titles, stopped outcomes, and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. Desktop captures show the ledger; mobile and export captures open a full result. The helpers wait for one active reader with no outgoing reader or footer layers. The export capture blocks the external preview renderer to verify that the inspector works offline.
 
-For task-switch layout changes, refresh only the five inspector images:
+For inspector layout changes, refresh only the five inspector images:
 
 ```bash
 DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,subagent-outcomes.png,subagent-inspector-mobile.png,subagent-inspector-export.png npm run docs:screenshots
 ```
+
+Check the Contained treatment: separate agent/status/connection chips, a neutral **Full task prompt** button, and one inset latest-response card with **Read full**. Ledger captures show the compact **Activity** counts and flat rows with icons, outcomes, and character counts. Reader captures show the intended entry title and **Back to activity** above the scroll sections. On mobile, check that task details and the latest card remain reachable without displacing the ledger or footer.
 
 PNG captures show the settled layout with reduced motion enabled. Use separate fixture-based visual checks with motion enabled for cold previews, overlapping reader transitions, and rapid task changes. Also check manual scrollback, reduced motion, and closure during a handoff. Do not infer smooth motion from a static capture.
 
@@ -205,8 +227,9 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Git review captures: `release-safety` with four sanitized changed files
 - Queue captures: the open **Up next** corner tray and the closed **Held** tab with **Resume**
 - Activity captures: one selected run, one same-project run, one runtime error, one session with an editable queued task, and a shared-CWD warning
-- Settled subagent captures: compact Activity rows and separate Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
+- Settled subagent captures: compact Activity rows and separate Contained Graphite inspectors; five tasks on desktop/export, three on mobile, with one stopped task in each group. Desktop shows saved activity rows; mobile and export show the entry reader.
 - Live subagent captures: one running explorer, two reads and one search in the ledger, active verification output, and **Following live** in the footer
+- Subagent batch captures: global default 4, desktop/mobile session override 2, the effective source, and **Use global default (4)**
 - Sidebar child captures: an inset guide with hollow nodes, a fixed chevron gutter on every parent row, and one completed child beside two running children
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
@@ -220,6 +243,24 @@ Each state uses a new browser context. The script uses a fixed date with increas
 The capture disables remaining motion.
 
 The script blocks unrecognized `/api/` requests instead of sending them to a live backend. Before capture, it checks visible text and form values for home paths, usernames, repository paths, email addresses, and common credential prefixes.
+
+## Composer issue captures
+
+Refresh the composer issue images with:
+
+```bash
+DOCS_SCREENSHOT_FILTER=composer-issue.png,composer-issue-mobile.png,composer-send-unavailable.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `composer-issue.png` | Desktop issue chip and open details, with the full error message and Dismiss control. |
+| `composer-issue-mobile.png` | The same error above the mobile composer controls. |
+| `composer-send-unavailable.png` | A dismissed image warning with the attachment retained, Send disabled, and **Send unavailable** details accessible. |
+
+Desktop captures use a 1440 by 900 CSS-pixel viewport and crop to the composer and open details. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2 and the `local/minimax-m2.7` fixture.
+
+The helper sends a synthetic extension error through the mock runtime WebSocket. The image-warning fixture has no vision model and uses the real attachment chooser. Checks confirm that dismissal retains the draft, attachment, and disabled Send state. No provider request or configuration change reaches a backend.
 
 ## Dictation captures
 

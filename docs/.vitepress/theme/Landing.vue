@@ -6,6 +6,7 @@ import activity from '../../assets/screenshots/activity.png'
 import composerQueue from '../../assets/screenshots/composer-queue.png'
 import deepResearch from '../../assets/screenshots/deep-research.png'
 import gitReview from '../../assets/screenshots/git-review.png'
+import subagentLiveTail from '../../assets/screenshots/subagent-live-tail.png'
 import terminal from '../../assets/screenshots/terminal.png'
 import traceWorkspace from '../../assets/screenshots/trace-workspace.png'
 import workbench from '../../assets/screenshots/workbench.png'
@@ -48,7 +49,7 @@ const views = [
 
 const capabilities = [
   { title: 'Memory', text: 'Inspect and edit global, project, and session memory.' },
-  { title: 'Subagents', text: 'Follow live subagent activity without leaving the parent session.' },
+  { title: 'Subagents', text: 'Delegate tasks to child agents with their own model and context.' },
   { title: 'Tracing', text: 'Record runs, then inspect model calls, tools, and usage.' },
   { title: 'Images and vision', text: 'Attach images, or let a vision model describe them.' },
   { title: 'Models and MCP', text: 'Configure providers, custom models, and MCP servers.' },
@@ -147,18 +148,25 @@ onMounted(() => {
   const targets = root.value?.querySelectorAll('.reveal')
   if (!targets?.length) return
 
+  const threshold = 0.08
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
-        if (!entry.isIntersecting) continue
-        entry.target.classList.add('is-visible')
+        if (!entry.isIntersecting || entry.intersectionRatio < threshold) continue
+        const section = entry.target.closest('.reveal') ?? entry.target
+        section.classList.add('is-visible')
         observer.unobserve(entry.target)
       }
     },
-    { rootMargin: '0px 0px -10% 0px', threshold: 0.08 },
+    { rootMargin: '0px 0px -10% 0px', threshold },
   )
 
-  for (const target of targets) observer.observe(target)
+  // Observe the band copy rather than the whole section: the section's
+  // height depends on whether its screenshot has loaded, which made the
+  // reveal fire unpredictably at page load.
+  for (const target of targets) {
+    observer.observe(target.querySelector('.band-copy') ?? target)
+  }
 })
 
 onUnmounted(() => {
@@ -202,6 +210,26 @@ onUnmounted(() => {
 
     <section class="band reveal">
       <div class="band-copy">
+        <p class="band-label">Subagents</p>
+        <h2>Watch every subagent as it works.</h2>
+        <p>
+          Open a subagent from the transcript to tail its thoughts, tool calls,
+          and output as they happen. Jump into the child session when you need
+          the full transcript.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          :src="subagentLiveTail"
+          alt="Subagent inspector tailing live tool activity beside the parent transcript, with the child session nested under its parent in the sidebar"
+          loading="lazy"
+          decoding="async"
+        />
+      </figure>
+    </section>
+
+    <section class="band band-flip reveal">
+      <div class="band-copy">
         <p class="band-label">Sessions</p>
         <h2>See which sessions need attention.</h2>
         <p>
@@ -220,7 +248,7 @@ onUnmounted(() => {
       </figure>
     </section>
 
-    <section class="band band-flip reveal">
+    <section class="band reveal">
       <div class="band-copy">
         <p class="band-label">Composer</p>
         <h2>Send the next task before this one ends.</h2>
@@ -239,7 +267,7 @@ onUnmounted(() => {
       </figure>
     </section>
 
-    <section class="band reveal">
+    <section class="band band-flip reveal">
       <div class="band-copy">
         <p class="band-label">Git review</p>
         <h2>Read diffs beside the conversation.</h2>
@@ -533,7 +561,7 @@ onUnmounted(() => {
 .band {
   max-width: var(--page);
   margin: 0 auto;
-  padding: 104px 24px 0;
+  padding: 144px 24px 0;
 }
 
 .band-flip .band-copy {
@@ -593,7 +621,7 @@ onUnmounted(() => {
 .caps {
   max-width: var(--page);
   margin: 0 auto;
-  padding: 112px 24px 0;
+  padding: 144px 24px 0;
 }
 
 .caps h2 {
@@ -655,7 +683,7 @@ onUnmounted(() => {
 .cta {
   max-width: var(--page);
   margin: 0 auto;
-  padding: 118px 24px 136px;
+  padding: 144px 24px 136px;
   text-align: center;
 }
 
@@ -931,7 +959,7 @@ onUnmounted(() => {
   }
 
   .band {
-    padding-top: 76px;
+    padding-top: 100px;
   }
 
   .band-shot {
@@ -939,11 +967,11 @@ onUnmounted(() => {
   }
 
   .caps {
-    padding-top: 84px;
+    padding-top: 100px;
   }
 
   .cta {
-    padding-top: 88px;
+    padding-top: 100px;
     padding-bottom: 104px;
   }
 }

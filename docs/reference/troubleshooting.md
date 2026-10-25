@@ -124,9 +124,12 @@ Deleting a session, trashing a project, or resetting history does not delete its
 
 ## Prompt submission fails
 
-Check the selected session, model, provider credentials, and error text in the
-composer. The composer cannot submit while the runtime activates, reloads, or
-compacts.
+Check the selected session, model, and provider credentials. Select **1 issue**
+in the composer to read the full error. Dismissing the notice does not retry the
+request or resolve the cause. If **Send unavailable** remains visible, select
+**Details** to read the blocking requirement. See [Composer issues](../user-guide/composer#read-and-dismiss-an-issue).
+
+The composer cannot submit while the runtime activates, reloads, or compacts.
 
 During an active run, use these keys:
 

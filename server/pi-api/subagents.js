@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { getAgentDir } from '@earendil-works/pi-coding-agent'
+import { DEFAULT_SUBAGENT_BATCH_SIZE, SUBAGENT_BATCH_SIZE_SETTING_KEY } from '../../lib/leyline-settings.js'
 import { openMemoryDb } from './leyline-db.js'
 import { overrideContext, safeRealpath, scopeIdentity } from './override-context.js'
 
@@ -14,6 +15,7 @@ export function listSubagentConfigs({ cwd, sessionPath }) {
     const overrides = visibleOverrides(db, context)
     return {
       context,
+      batching: batchConfig(db, context),
       agents: agents.map((agent) => ({
         ...agent,
         overrides: Object.fromEntries(overrides
@@ -22,6 +24,47 @@ export function listSubagentConfigs({ cwd, sessionPath }) {
         ...effectiveConfig(agent, overrides),
       })),
     }
+  } finally {
+    db.close()
+  }
+}
+
+export function setSubagentBatchSize({ batchSize, cwd, scope, sessionPath }) {
+  if (!['global', 'session'].includes(scope)) throw new Error('Invalid subagent batch size scope')
+  if (batchSize !== null && (!Number.isSafeInteger(batchSize) || batchSize < 1)) {
+    throw new Error('Batch size must be a positive safe integer')
+  }
+  if (scope === 'global' && batchSize === null) throw new Error('Global batch size is required')
+  const context = overrideContext(cwd, sessionPath)
+  const identity = scopeIdentity(context, scope)
+  const db = openDb()
+  try {
+    if (scope === 'global') {
+      db.prepare(`
+        INSERT INTO leyline_settings (key, value, updated_at) VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+      `).run(SUBAGENT_BATCH_SIZE_SETTING_KEY, String(batchSize), Date.now())
+    } else if (batchSize === null) {
+      db.prepare('DELETE FROM subagent_batch_overrides WHERE session_id = ?').run(identity.sessionId)
+    } else {
+      db.prepare(`
+        INSERT INTO subagent_batch_overrides (session_id, project_id, session_file, batch_size, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET batch_size = excluded.batch_size, updated_at = excluded.updated_at
+      `).run(identity.sessionId, context.projectId, identity.sessionFile, batchSize, Date.now())
+    }
+    return listSubagentConfigs({ cwd, sessionPath })
+  } finally {
+    db.close()
+  }
+}
+
+export function deleteSessionSubagentBatchOverride({ cwd, sessionPath }) {
+  if (!sessionPath) return
+  const context = overrideContext(cwd, sessionPath)
+  const db = openDb()
+  try {
+    db.prepare('DELETE FROM subagent_batch_overrides WHERE session_id = ?').run(context.sessionId)
   } finally {
     db.close()
   }
@@ -83,9 +126,10 @@ export function deleteSubagentModelOverride({ agentKey, cwd, scope, sessionPath 
 
 export function resolveSubagentConfig({ agentKey, cwd, sessionPath, staticModel, staticThinking }) {
   const context = overrideContext(cwd, sessionPath)
-  const agent = discoverAgents(context.cwd).find((item) => item.key === agentKey)
+  const agent = agentKey ? discoverAgents(context.cwd).find((item) => item.key === agentKey) : undefined
   const db = openDb()
   try {
+    if (!agentKey) return { batchSize: batchConfig(db, context).effective }
     const overrides = visibleOverrides(db, context)
     const match = ['session', 'project', 'global']
       .map((scope) => overrides.find((item) => {
@@ -112,6 +156,11 @@ export function copySessionSubagentOverrides({ cwd, fromSessionPath, toSessionPa
   if (!source.sessionId || !target.sessionId) return
   const db = openDb()
   try {
+    db.prepare(`
+      INSERT INTO subagent_batch_overrides (session_id, project_id, session_file, batch_size, updated_at)
+      SELECT ?, ?, ?, batch_size, ? FROM subagent_batch_overrides WHERE session_id = ?
+      ON CONFLICT(session_id) DO UPDATE SET batch_size = excluded.batch_size, updated_at = excluded.updated_at
+    `).run(target.sessionId, target.projectId, target.sessionFile, Date.now(), source.sessionId)
     const rows = db.prepare(`
       SELECT agent_key, model FROM subagent_overrides
       WHERE scope = 'session' AND scope_id = ?
@@ -231,9 +280,30 @@ function visibleOverrides(db, context) {
   }))
 }
 
+function batchConfig(db, context) {
+  const stored = Number(db.prepare('SELECT value FROM leyline_settings WHERE key = ?')
+    .get(SUBAGENT_BATCH_SIZE_SETTING_KEY)?.value)
+  const global = Number.isSafeInteger(stored) && stored >= 1 ? stored : DEFAULT_SUBAGENT_BATCH_SIZE
+  const session = db.prepare('SELECT batch_size FROM subagent_batch_overrides WHERE session_id = ?')
+    .get(context.sessionId)?.batch_size ?? null
+  return { global, session, effective: session ?? global, source: session === null ? 'global' : 'session' }
+}
+
 function openDb() {
   const db = openMemoryDb()
   db.exec(`
+    CREATE TABLE IF NOT EXISTS leyline_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS subagent_batch_overrides (
+      session_id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      session_file TEXT NOT NULL,
+      batch_size INTEGER NOT NULL CHECK (batch_size >= 1 AND batch_size <= 9007199254740991),
+      updated_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS subagent_overrides (
       scope TEXT NOT NULL CHECK (scope IN ('global', 'project', 'session')),
       scope_id TEXT NOT NULL,

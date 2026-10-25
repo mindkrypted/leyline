@@ -2,9 +2,9 @@
 
 Subagents run delegated tasks in child sessions with separate context. Open [child transcripts from the sidebar](./sessions#open-a-subagent-session), or inspect live activity and task results from an Activity card.
 
-![Agent defaults with global subagent model choices](../assets/screenshots/subagents.png)
+![Agent defaults with global subagent batch size and model choices](../assets/screenshots/subagents.png)
 
-*Each subagent row shows the model and its source at the scope you are editing.*
+*Batch size sets concurrent work per batch. Each agent row shows the model and its source.*
 
 ## Open subagent settings
 
@@ -47,7 +47,7 @@ An applicable `inherit` value uses the parent session model.
 
 ## Understand thinking precedence
 
-Subagent settings manage model overrides only. Thinking comes from the subagent request or agent definition.
+Subagent settings manage model overrides and batch size. Thinking comes from the subagent request or agent definition.
 
 A thinking level requested for one child run takes priority. Otherwise, the agent definition applies. The child runtime default applies when neither value exists.
 
@@ -58,10 +58,37 @@ The `inherit` thinking value uses the parent session thinking level.
 The agent can use three subagent modes:
 
 - **single** runs one agent for one task.
-- **parallel** runs task groups concurrently, with up to four tasks in each batch.
+- **parallel** runs tasks concurrently in batches of the configured size.
 - **chain** runs steps in order and replaces `{previous}` with the prior output.
 
 A model or thinking value on one task takes priority over the mode-level value.
+
+Multiple top-level **single** calls in one assistant message form one implicit group. Calls run in message order, in waves. Each wave waits for all calls in the preceding wave to finish. Each call keeps its tool-call ID, progress, and result.
+
+Singles still form a group when the message also contains **parallel** or **chain** calls. Each explicit parallel call has a separate batch schedule. Chains stay sequential. Nested tool calls do not enter the implicit group.
+
+## Configure batch size
+
+**Batch size** sets the maximum concurrent subagents per batch. The default is 4. It does not limit total concurrent work across a session or backend.
+
+To change the global default:
+
+1. Open **Settings → Agent defaults**.
+2. Find **Subagents**.
+3. Enter a positive whole number in **Batch size**.
+4. Leave the field to save the value.
+
+The value must be a positive safe integer. The global default applies to projects on the selected backend, not every saved backend.
+
+For a session override, open **Session details** in the workbench header. Under **Subagents**, change **Batch size**. Select **Use global default** to remove the override. Forks copy the session override. There is no project batch-size override.
+
+![Session details with subagent batch size 2 and global default 4](../assets/screenshots/subagent-batch-size.png)
+
+*This session uses 2 subagents per batch. The global default stays at 4.*
+
+Each implicit group or explicit parallel call reads its effective size once. Changes apply to future groups and calls without a runtime reload. Running groups keep their size.
+
+See [Mobile batch settings](./mobile#set-a-session-batch-size) for the mobile controls.
 
 ## Session titles
 
@@ -88,7 +115,9 @@ The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
 3. Select **Full task prompt** to read the original instructions.
 4. Select **Open child session** for the complete child transcript, when available.
 
-Each ledger row shows a short preview, a file or command when available, an outcome, and a text size. Thoughts, messages, and tool calls have separate rows.
+Separate chips show the agent, task status, and connection or saved-activity state beside **Full task prompt**. The inset card shows the latest response or thought. Select **Read full** to open its complete text.
+
+The **Activity** heading shows entry and tool-call counts. Each flat row has an icon, action, target or excerpt, outcome, and character count. Thoughts, messages, and tool calls have separate rows.
 
 The entry reader uses the same sheet. Messages have **Formatted** and **Source** views. Tool calls have **Output** and **Arguments** views. Arguments are unavailable when the original call was not recorded. **Copy full text** copies the entry text or the selected arguments. **Back to activity** restores your place in the ledger.
 
