@@ -88,10 +88,15 @@ wrap commands in `cmd /c`. In `mcp.json`, reference environment values
 with the `${VAR}` spelling (for example `${GITHUB_TOKEN}`). The Windows
 `%VAR%` spelling is not expanded; rewrite it as `${VAR}`.
 
+## Tracing
+
+Tracing is supported on native Windows. Leyline's pinned Elune dependency
+uses Windows ACLs for private trace storage. The trace database is
+`%USERPROFILE%\.local\share\leyline\elune\elune.db` by default, or
+`elune\elune.db` under `LEYLINE_MEMORY_DIR` when that override is set.
+
 ## Known limitations on Windows
 
-- **Tracing is not available on Windows yet.** The trace views report
-  this instead of recording; sessions are unaffected.
 - The terminal editor must be a real `.exe` (for example Neovim's
   `nvim.exe`). Editors installed only as `.cmd` shims cannot run inside
   the terminal drawer in this version; use the desktop-editor flow
