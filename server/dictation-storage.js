@@ -73,6 +73,8 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
   async function verify(model, signal) {
     const verificationSignal = AbortSignal.any([abort.signal, AbortSignal.timeout(30000), ...(signal ? [signal] : [])])
     let file
+    let identity
+    let trusted = false
     try {
       verificationSignal.throwIfAborted()
       const info = await lstat(path(model))
@@ -81,22 +83,49 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
       verificationSignal.throwIfAborted()
       const opened = await file.stat()
       if (!opened.isFile() || opened.size !== model.bytes) return false
-      const identity = fingerprint(opened)
-      fingerprints.set(model.id, identity)
+      identity = fingerprint(opened)
       const hash = createHash('sha256')
       let bytes = 0
-      for await (const chunk of file.createReadStream({ autoClose: false, signal: verificationSignal })) {
+      for await (const chunk of file.createReadStream({ autoClose: false, highWaterMark: 1048576, signal: verificationSignal })) {
         bytes += chunk.length
         if (bytes > model.bytes) return false
         hash.update(chunk)
       }
-      return bytes === model.bytes && hash.digest('hex') === model.sha256 && fingerprint(await file.stat()) === identity
+      const verified = bytes === model.bytes && hash.digest('hex') === model.sha256 && fingerprint(await file.stat()) === identity
+      verificationSignal.throwIfAborted()
+      trusted = verified
+      return verified
     } catch (error) {
       if (error.code === 'ENOENT' || error.code === 'ELOOP') return false
       throw new Error('Could not verify the local dictation model')
     } finally {
       await file?.close()
+      if (trusted) {
+        if (verificationSignal.aborted) {
+          fingerprints.delete(model.id)
+          throw new Error('Could not verify the local dictation model')
+        }
+        fingerprints.set(model.id, identity)
+      } else {
+        fingerprints.delete(model.id)
+      }
     }
+  }
+
+  async function verifyCached(model, signal) {
+    const verificationSignal = AbortSignal.any([abort.signal, ...(signal ? [signal] : [])])
+    verificationSignal.throwIfAborted()
+    let info
+    try {
+      info = await lstat(path(model))
+    } catch (failure) {
+      if (failure.code === 'ENOENT' || failure.code === 'ELOOP') return false
+      throw new Error('Could not verify the local dictation model')
+    }
+    if (!info.isFile() || info.size !== model.bytes) return false
+    if (fingerprints.get(model.id) !== fingerprint(info)) return verify(model, signal)
+    verificationSignal.throwIfAborted()
+    return true
   }
 
   function readSettings(database = db) {
@@ -286,6 +315,7 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
       lock.check()
       await rm(path(model), { force: true }).catch(() => { throw new Error('Could not remove the local dictation model') })
       installed.delete(model.id)
+      fingerprints.delete(model.id)
     } finally {
       await lock.release()
     }
@@ -302,7 +332,7 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
   }
 
   return {
-    initialize, refresh, path, verify, modelLock, models, saveSettings, download, cancelDownload, remove, close,
+    initialize, refresh, path, verify, verifyCached, modelLock, models, saveSettings, download, cancelDownload, remove, close,
     get settings() {
       if (db) settings = readSettings()
       return settings

@@ -209,7 +209,7 @@ export function createDictationCore({ spawnWorker, validOwner, sameOwner = (a, b
         }))
         assertLease(current)
         current.modelLock.check()
-        const verified = await waitForLease(current, storage.verify(model, current.abort.signal))
+        const verified = await waitForLease(current, storage.verifyCached(model, current.abort.signal))
         assertLease(current)
         if (!verified) {
           storage.installed.delete(model.id)
