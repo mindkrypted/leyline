@@ -117,7 +117,15 @@ export function useSessionWorkspace({
       children.set(session.parentSessionPath, list)
     }
     for (const list of children.values()) {
-      list.sort((a, b) => sessionCreatedTimestamp(a) - sessionCreatedTimestamp(b))
+      // Creation timestamps can be identical (parallel subagents spawned in
+      // the same second, or summaries without a created field), which would
+      // leave sibling order to array position and let rows flip on background
+      // refreshes. Tie-break by id so the order is total and stable.
+      list.sort((a, b) => {
+        return sessionCreatedTimestamp(a) - sessionCreatedTimestamp(b)
+          || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      })
+
     }
     return children
   })
@@ -744,12 +752,20 @@ export function useSessionWorkspace({
       return
     }
     const next = [...sessions.value]
+    const current = next[index]
     next[index] = {
-      ...next[index],
+      ...current,
       ...session,
-      isSubagentSession: next[index].isSubagentSession === true
+      // Creation keys are immutable for the life of a session record, but
+      // runtime snapshots recompute them from the file header at a different
+      // precision (second-truncated) than the persisted list values
+      // (millisecond). Merging them would re-sort subagent siblings seconds
+      // after every selection, when the runtime finishes activating.
+      timestamp: current.timestamp ?? session.timestamp,
+      created: current.created ?? session.created,
+      isSubagentSession: current.isSubagentSession === true
         || session.isSubagentSession === true,
-      subagentChildren: session.subagentChildren ?? next[index].subagentChildren,
+      subagentChildren: session.subagentChildren ?? current.subagentChildren,
     }
     sessions.value = next
   }
@@ -1590,7 +1606,10 @@ export function useSessionWorkspace({
         messageCount: session.messageCount,
         research: session.research || item.research || null,
         modified: session.modified,
-        timestamp: session.modified || item.timestamp,
+        // NOTE: do not rewrite timestamp here. sessionDate() display prefers
+        // modified already, while subagent-children sorting keys on timestamp
+        // as the creation time — overwriting it with modified re-sorts the
+        // clicked session on every selection (rows visibly swap on click).
       }
     })
   }

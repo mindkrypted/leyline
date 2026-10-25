@@ -312,7 +312,7 @@ watch(
     }
 
     if (!visibleCwds.has(navigationProjectCwd.value)) {
-      navigationProjectCwd.value = preferredProjectCwd()
+      navigationProjectCwd.value = sidebarRootCwdForSelected()
         || projects[0]?.cwd
         || ''
     }
@@ -324,13 +324,17 @@ watch(
   () => [
     props.selectedSession?.id || '',
     props.selectedSession?.cwd || '',
+    props.selectedSession?.parentSessionPath || '',
     props.newSessionCwd,
   ],
-  ([sessionId, sessionCwd, newSessionCwd]) => {
-    if (sessionId && sessionCwd) {
-      lastSessionByProject.set(sessionCwd, sessionId)
-      navigationProjectCwd.value = sessionCwd
-      return
+  ([sessionId, sessionCwd, parentPath, newSessionCwd]) => {
+    if (sessionId && (sessionCwd || parentPath)) {
+      if (sessionCwd) lastSessionByProject.set(sessionCwd, sessionId)
+      const rootCwd = sidebarRootCwdForSelected() || sessionCwd
+      if (rootCwd) {
+        navigationProjectCwd.value = rootCwd
+        return
+      }
     }
     if (newSessionCwd) navigationProjectCwd.value = newSessionCwd
   },
@@ -359,9 +363,17 @@ const orderedProjects = computed(() => {
 })
 
 const currentProject = computed(() => {
-  return orderedProjects.value.find((project) => {
+  const parentCwd = parentProjectCwdForSelected()
+  if (parentCwd) {
+    const parentProject = orderedProjects.value.find((project) => project.cwd === parentCwd)
+    if (parentProject) return parentProject
+  }
+  const found = orderedProjects.value.find((project) => {
     return project.cwd === navigationProjectCwd.value
-  }) || orderedProjects.value[0] || null
+  })
+  if (found) return found
+  if (props.selectedSession?.id) return null
+  return orderedProjects.value[0] || null
 })
 
 const currentProjectSessions = computed(() => {
@@ -833,9 +845,26 @@ onUnmounted(() => {
   sessionResizeObserver?.disconnect()
 })
 
-function preferredProjectCwd() {
-  return props.selectedSession?.cwd || props.newSessionCwd || ''
+function parentProjectCwdForSelected() {
+  const selected = props.selectedSession
+  const parentPath = selected?.parentSessionPath
+  if (!selected?.isSubagentSession || !parentPath) return ''
+  for (const project of props.visibleProjects) {
+    if ((project.sessions || []).some((session) => session.path === parentPath)) {
+      return project.cwd
+    }
+  }
+  return ''
 }
+
+function sidebarRootCwdForSelected() {
+  return parentProjectCwdForSelected()
+    || props.selectedSession?.cwd
+    || props.newSessionCwd
+    || ''
+}
+
+
 
 function updateSessionViewport() {
   if (!sessionScroll.value) return
