@@ -28,7 +28,7 @@ await packager({
   extendInfo: {
     NSMicrophoneUsageDescription: 'Leyline uses the microphone for local dictation when you start recording.',
   },
-  ignore: ['^/(screenshots|src|scripts)(/|$)', '^/vite.config.js$'],
+  ignore: ['^/(\\.lighthouse|screenshots|src|scripts)(/|$)', '^/vite.config.js$'],
   osxSign: process.platform === 'darwin' ? {
     identity: '-',
     identityValidation: false,
