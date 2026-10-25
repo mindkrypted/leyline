@@ -2453,10 +2453,14 @@ Success response:
     turns: number
   },
   model?: string,
+  modelProvider?: string,
+  modelName?: string,
   thinkingLevel?: string,
   stopReason?: string
 }
 ```
+
+`model` and `modelProvider` come from the final assistant message. `modelName` carries the child session model's display name, recorded only when that session model matches the final response model and provider.
 
 The route waits for completion. It returns `500` with `{ error }` for child setup or execution failure. If the HTTP connection closes first, the server aborts the child run.
 

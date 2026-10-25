@@ -115,9 +115,11 @@ The inspector opens as a side sheet on desktop and a bottom sheet on mobile:
 3. Select **Full task prompt** to read the original instructions.
 4. Select **Open child session** for the complete child transcript, when available.
 
-Separate chips show the agent, task status, and connection or saved-activity state beside **Full task prompt**. The inset card shows the latest response or thought. Select **Read full** to open its complete text.
+The small header label shows the agent, for example **Subagent · general**. The meta row shows Model, Thinking, and task status as chips, with research source counts when present. **Full task prompt** appears beside the Copy and Close controls. The inset card shows the latest response or thought. Select **Read full** to open its complete text.
 
-The **Activity** heading shows entry and tool-call counts. Each flat row has an icon, action, target or excerpt, outcome, and character count. Thoughts, messages, and tool calls have separate rows.
+Model and Thinking chips prefer the child's current model and thinking level while the run is active. When the run finishes, they show the recorded result, then fall back to the values requested in the tool call. The Model chip can include a source label such as **session override**, shown only when its origin is known. A queued call that requests the parent session model shows the placeholder `inherit` until the child starts. Older sessions can omit these chips because their records lack the fields.
+
+The **Activity** heading shows entry and tool-call counts. The connection state, for example **Live updates** or **Saved activity**, appears beside these counts. Each flat row has an icon, action, target or excerpt, outcome, and character count. Thoughts, messages, and tool calls have separate rows.
 
 The entry reader uses the same sheet. Messages have **Formatted** and **Source** views. Tool calls have **Output** and **Arguments** views. Arguments are unavailable when the original call was not recorded. **Copy full text** copies the entry text or the selected arguments. **Back to activity** restores your place in the ledger.
 
@@ -125,7 +127,7 @@ The preview keeps the latest 80 assistant messages and tool results. A message w
 
 Use Command-click, Ctrl-click, or middle-click on **Open child session** to open the child in a new tab or window. Selecting a task only changes the inspector's selected task.
 
-**Copy tool output** in the inspector header copies the parent tool response. Escape returns from an entry to the ledger. Press it again, select the close button, or select the backdrop to close the inspector. Closing it does not stop the child run.
+**Copy tool output** in the inspector header copies the parent tool response. Press Escape once to return from an open entry to the ledger. Returning from the prompt reader puts focus back on the header **Full task prompt** button. Press Escape again, select the close button, or select the backdrop to close the inspector. Closing it does not stop the child run.
 
 The task list stays in its original order. Live updates and saved results preserve the selected task and reading position.
 

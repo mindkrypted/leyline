@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from 'vue
 import CopyIcon from './CopyIcon.vue'
 import SubagentTailEntry from './SubagentTailEntry.vue'
 import { subagentStatus, subagentStatuses, subagentSummary } from '../../lib/subagent-status.js'
-import { subagentCallTitle, subagentEmptyText, subagentFallback, subagentOutput, subagentTasks, subagentTaskTitle } from '../../lib/subagent-view.js'
+import { subagentCallTitle, subagentEmptyText, subagentFallback, subagentModelChips, subagentOutput, subagentTasks, subagentTaskTitle } from '../../lib/subagent-view.js'
 import { subagentLedgerRows, subagentLedgerText, subagentLedgerTitle } from '../../lib/subagent-ledger.js'
 import { imageSrc, renderedBlock } from '../lib/transcript'
 import { useSubagentPreview } from '../composables/useSubagentPreview'
@@ -40,11 +40,17 @@ const requestedView = computed(() => ({
   ready: preview.ready.value,
   runtimeError: preview.runtimeError.value,
   started: preview.started.value,
+  model: preview.model.value,
+  thinkingLevel: preview.thinkingLevel.value,
 }))
 const presentation = shallowRef(requestedView.value)
 const waiting = computed(() => requestedView.value.index !== presentation.value.index)
 const selected = computed(() => presentation.value.task)
 const status = computed(() => presentation.value.status)
+const modelChips = computed(() => subagentModelChips(selected.value, {
+  model: presentation.value.model,
+  thinkingLevel: presentation.value.thinkingLevel,
+}))
 const title = computed(() => tasks.value.length > 1 ? subagentCallTitle(props.entry)
   : selected.value ? subagentTaskTitle(selected.value) : 'Task details')
 const resultKeys = new Map()
@@ -359,7 +365,11 @@ function backToLedger() {
   direction.value = 'back'
   const key = reader.value?.key
   reader.value = null
-  nextTick(() => body.value?.querySelector(`[data-subagent-tail-entry="${CSS.escape(key || '')}"]`)?.focus({ preventScroll: true }))
+  nextTick(() => {
+    const target = key === 'prompt' ? pane.value?.querySelector('.subagent-inspector-prompt')
+      : body.value?.querySelector(`[data-subagent-tail-entry="${CSS.escape(key || '')}"]`)
+    ;(target || body.value)?.focus({ preventScroll: true })
+  })
 }
 function dismissReader() {
   if (!reader.value) return false
@@ -445,10 +455,13 @@ defineExpose({ element: pane, dismissReader })
   <section id="subagent-inspector" ref="pane" class="subagent-inspector" role="dialog" aria-modal="true" aria-labelledby="subagent-inspector-title" tabindex="-1" @keydown.esc.stop.prevent="dismissReader() || emit('close')">
     <div class="subagent-inspector-context" tabindex="0" aria-label="Task details">
       <header class="subagent-inspector-header">
-        <div><p>{{ entry.researchThreads ? 'Research threads' : 'Subagent' }}</p><h2 id="subagent-inspector-title">{{ title }}</h2></div>
+        <div class="subagent-inspector-heading"><p>{{ entry.researchThreads ? 'Research threads' : 'Subagent' }}<span v-if="selected?.agent" class="subagent-inspector-agent"> · {{ selected.agent }}</span></p><h2 id="subagent-inspector-title">{{ title }}</h2></div>
+        <div class="subagent-inspector-actions">
+          <button class="subagent-inspector-icon-button" type="button" :title="copiedEntryId === entry.id ? 'Copied' : 'Copy tool output'" aria-label="Copy tool output" @click="emit('copy-entry', entry)"><CopyIcon :copied="copiedEntryId === entry.id" /></button>
+          <button class="subagent-inspector-icon-button" type="button" aria-label="Close subagent inspector" @click="emit('close')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
+        </div>
+        <button v-if="selected?.task" class="subagent-inspector-prompt" type="button" @click="openPrompt">Full task prompt <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>
         <div v-if="tasks.length !== 1 && outcome.counts.length" class="subagent-summary" aria-label="Task outcomes" aria-live="polite"><span v-for="item in outcome.counts" :key="item.status" :class="`status-${item.status}`">{{ item.text }}</span></div>
-        <button class="subagent-inspector-icon-button" type="button" :title="copiedEntryId === entry.id ? 'Copied' : 'Copy tool output'" aria-label="Copy tool output" @click="emit('copy-entry', entry)"><CopyIcon :copied="copiedEntryId === entry.id" /></button>
-        <button class="subagent-inspector-icon-button" type="button" aria-label="Close subagent inspector" @click="emit('close')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button>
       </header>
       <nav v-if="tasks.length > 1" ref="taskList" class="subagent-inspector-tasks" :class="{ 'has-selection-marker': hasTaskMarker }" aria-label="Subagent tasks">
         <span ref="taskMarker" class="subagent-inspector-task-marker" :hidden="!hasTaskMarker" aria-hidden="true"></span>
@@ -457,8 +470,7 @@ defineExpose({ element: pane, dismissReader })
         </button>
       </nav>
       <div class="subagent-inspector-meta">
-        <span v-if="selected" class="subagent-inspector-agent"><span>Agent</span> <code>{{ selected.agent }}</code></span><span v-if="selected?.research">{{ selected.research.sources?.length || 0 }} sources</span><span class="subagent-task-status" :class="`status-${status}`" aria-label="Task status" aria-live="polite">{{ subagentStatuses[status].label }}</span><span v-if="presentation.connection">{{ previewLabel }}</span>
-        <button v-if="selected?.task" class="subagent-inspector-prompt" type="button" @click="openPrompt">Full task prompt <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg></button>
+        <span v-if="modelChips.model" class="subagent-inspector-model" :title="modelChips.model.title || undefined"><span>Model</span><code>{{ modelChips.model.code }}</code><span v-if="modelChips.model.source" class="subagent-inspector-model-source">· {{ modelChips.model.source }}</span></span><span v-if="modelChips.thinking" class="subagent-inspector-thinking"><span>Thinking</span><code>{{ modelChips.thinking.level }}</code></span><span v-if="selected?.research">{{ selected.research.sources?.length || 0 }} sources</span><span class="subagent-task-status" :class="`status-${status}`" aria-label="Task status" aria-live="polite">{{ subagentStatuses[status].label }}</span>
       </div>
     </div>
     <div class="subagent-inspector-reader-stack" :aria-busy="waiting">
@@ -484,7 +496,7 @@ defineExpose({ element: pane, dismissReader })
               <section v-if="latest" class="subagent-ledger-latest"><div class="subagent-ledger-latest-heading"><span><span class="subagent-ledger-latest-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path :d="latest.kind === 'thought' ? 'M3 11a5.5 5.5 0 1 1 3 2L2 14l1-3ZM5.5 7.5h.1m2.4 0h.1m2.4 0h.1' : 'M2 2.5h12v8H7l-3.5 3v-3H2z'" /></svg></span>{{ latest.kind === 'thought' ? 'Latest thought' : 'Latest response' }}</span><button type="button" @click="openEntry(latest)">Read full · {{ count(latest.text.length) }} chars</button></div><h3>{{ latest.title }}</h3><p v-if="latest.excerpt">{{ latest.excerpt }}</p></section>
               <div v-if="presentation.error || presentation.connection === 'reconnecting'" class="subagent-inspector-notice" role="status"><span>{{ presentation.error ? 'Child activity could not be loaded.' : 'Reconnecting. Showing the last received activity.' }}</span><button v-if="presentation.error" type="button" @click="preview.refresh">Retry</button></div>
             </div>
-            <div class="subagent-ledger-labels"><span class="subagent-ledger-activity-label">Activity</span><span>{{ rows.length }} entries · {{ callCount }} calls</span><span class="subagent-ledger-read-hint">Select a row to read</span></div>
+            <div class="subagent-ledger-labels"><span class="subagent-ledger-activity-label">Activity</span><span>{{ rows.length }} entries · {{ callCount }} calls</span><span v-if="presentation.connection" class="subagent-ledger-connection" :class="{ 'is-live': presentation.connection === 'live' }" role="status">{{ previewLabel }}</span><span v-else class="subagent-ledger-read-hint">Select a row to read</span></div>
             <div ref="body" class="subagent-ledger-scroll" tabindex="0" aria-label="Child session activity" @scroll="handleScroll" @wheel.passive="$event.deltaY < 0 && pauseFollowing()" @touchmove.passive="pauseFollowing" @pointerdown="contentPointerDown" @keydown="['ArrowUp', 'PageUp', 'Home'].includes($event.key) && pauseFollowing()">
               <div ref="tailContent" class="subagent-ledger-rows" :class="{ 'has-row-motion': rowMotionEnabled }">
                 <TransitionGroup name="subagent-row" :move-class="rowMoveEnabled ? 'subagent-row-move' : 'subagent-row-static'" :css="rowMotionEnabled" @before-enter="prepareRow" @after-enter="finishRow" @enter-cancelled="finishRow" @before-leave="retireRow" @after-leave="finishRow" @leave-cancelled="restoreRow">

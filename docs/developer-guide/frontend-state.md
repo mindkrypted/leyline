@@ -280,6 +280,8 @@ Expansion state resets when the selected session changes. Preview content remain
 
 `SubagentInspector.vue` separates the requested task (`selectedIndex` and `requestedView`) from the displayed task (`presentation`). The child observer changes immediately, but the outgoing reader stays visible until the target preview is ready. A post-render watcher combines pending display snapshots into at most one commit per animation frame. Runtime event handling remains separate and does not wait for this display commit.
 
+The header agent label and the Model and Thinking chips derive from the displayed task. Chips prefer the child's live effective model and thinking level, then the recorded result, then the requested tool-call values. The display snapshot carries model and thinking with the task, so the chips change together with the agent label.
+
 Task changes restore each task's following state and ledger position. A new ledger starts at its latest entry. Full-entry readers start at a saved position or at the top. Reader and footer transitions share fixed grid layers. Outgoing content is inert and hidden from assistive technology.
 
 `singleSubagentEntry()` bypasses Activity expansion when the group's only top-level tool call is `subagent`. Both its header and compact row open the inspector directly, including calls with parallel tasks. Multi-call groups still expand before individual subagent rows open the inspector. `useToolExpansion.js` does not own subagent inspector selection.

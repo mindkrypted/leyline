@@ -52,7 +52,9 @@ Activity cards retain full message width and assistant-message colors. The colla
 
 The subagent inspector floats on the right, with a 700-pixel width cap and 16-pixel desktop margins. At 760 pixels or less, it becomes a full-width bottom sheet at roughly 90 percent of the available viewport height. Its bounded task list and reader scroll independently. Opening the inspector does not expand the transcript layout.
 
-The Contained Graphite treatment uses `#242427` for chrome and `#1c1c1f` for the reading area. Separate small chips show the agent, status, and connection state beside a neutral **Full task prompt** button. One neutral bordered inset card contains the latest response or thought, an icon, and **Read full**. A compact **Activity** heading shows entry and call counts.
+The Contained Graphite treatment uses `#242427` for chrome and `#1c1c1f` for the reading area. The small header label above the title carries the agent name. The meta row shows Model, Thinking, task status, and research source counts as chips. **Full task prompt** sits beside the Copy and Close controls in the desktop header and becomes a full-width 44-pixel row below the title at 760 pixels or less. Model text truncates only when the chip runs out of room, with no fixed character cap.
+
+The connection state appears beside the **Activity** counts, and the footer keeps the following and reading states. One neutral bordered inset card contains the latest response or thought, an icon, and **Read full**. A compact **Activity** heading shows entry and call counts.
 
 Task selection uses a flat neutral background. Ledger rows use small icon tiles, action labels, targets or excerpts, outcome pills, and secondary character counts. Keep rows flat with fine separators, without raised cards or inner shadows. Only the outer sheet has a shadow.
 

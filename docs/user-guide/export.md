@@ -55,6 +55,8 @@ Subagent calls stay compact inside Activity. A card containing only one subagent
 
 Select a task to see its saved message rows. Select a row or **Read full** to open the entry reader. Use **Formatted** or **Source**, then **Copy full text** to copy the entry. **Full task prompt** opens the instructions. **Back to activity** restores your place in the ledger.
 
+The header matches the app inspector. The small header label shows the agent, and the meta row shows Model and Thinking chips from the task's saved data. The Activity counts show **Saved task output** instead of a connection state.
+
 Missing outcomes remain **Unknown**. When task results are unavailable, **Call output** retains the original response or error. The inspector and its copy controls work offline.
 
 The export includes only task messages saved with the parent call. It does not fetch the child's full history or subscribe to live activity. Full child transcripts remain available in Leyline.

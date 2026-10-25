@@ -127,43 +127,29 @@ The Vite server also serves the documentation at
 `http://localhost:5173/docs/`. To run only the documentation server, use
 `npm run docs:dev`.
 
-## Backend connections
+## Multi-Backend Support
 
-The bottom of the sidebar shows which backend this window is using. The
-backend is where Leyline does its work for that window.
+The device you use to view Leyline does not have to run the pi session
+you are working on. A backend connection lets this window start agents,
+read transcripts, and send prompts on another computer. That computer
+provides the project files, terminal, tools, and pi configuration.
+Agents can keep working on a desktop or server while you check them from
+a laptop or phone, without copying the project or pi configuration.
 
-Open **Settings → Connections** to add, test, edit, remove, or pick a saved
-connection. The **Native backend** is the one that came with this copy of
-Leyline.
+The Native backend comes with this copy of Leyline. Add connections to
+other Leyline backends in **Settings → Connections**. You can choose a
+different backend for each window, so sessions on two computers can stay
+open side by side. Each window shows the projects, session history, and
+traces from its active backend. The sidebar footer names that backend.
 
-To open Leyline on another device, turn on **Allow network access** in
-**Settings → Connections**. Then copy a sharing link and open it on that
-device. If you want the same port every time, set **Proxy port** and select
-**Apply**. Leave it blank and Leyline will pick one for you.
-
-Changes take effect right away. Work on this computer stays connected. Other
-devices disconnect if you change the port or turn sharing off. There is no
-password, so anyone who can open the link can get in. Only use this on
-networks you trust. See
-[Network access](docs/user-guide/settings.md#share-the-native-backend).
-
-Your saved connections and your default choice are shared across the app.
-Each window can still use a different connection at the same time. A new
-window normally starts with your default. A new Electron window opened from
-an existing one uses the same connection as that window.
-
-Everything in a window goes to the backend that window is using: agents, the
-terminal, Git review updates, traces, and exports. Traces are kept apart by
-backend and never mixed. Your trace capture choices also stay on the backend
-you are using. Managing the saved connection list always happens on the
-Native backend. See [Settings](docs/user-guide/settings.md) to set
-connections up and [Environment variables](docs/reference/environment.md) for
-the packaged app settings.
-
-The window and the backend both have to use API v2. Live updates need
-WebSockets, which means a connection that stays open. If that is blocked,
-live updates will not work. There is no backup method. See
-[Realtime events](docs/developer-guide/realtime-events.md).
+Network access lets other devices open the Native backend. Leyline does
+not require a password for network access, so enable it only on trusted
+networks. See the [Settings guide](docs/user-guide/settings.md) to add
+connections or
+[share the Native backend](docs/user-guide/settings.md#share-the-native-backend).
+The app and backend must use API v2, and live updates need WebSocket
+connections.
+See [Realtime events](docs/developer-guide/realtime-events.md).
 
 ## Optional Electron app
 

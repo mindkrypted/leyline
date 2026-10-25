@@ -1533,23 +1533,35 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-header {
-  display: flex;
+  display: grid;
   flex: none;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border-bottom: 1px solid rgb(255 255 255 / 7%);
   padding: 15px 20px 13px;
 }
 
-.subagent-inspector-header > div:not(.subagent-summary) {
-  flex: 1;
+.subagent-inspector-header:has(> .subagent-inspector-prompt:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.subagent-inspector-heading {
   min-width: 0;
 }
 
+.subagent-inspector-actions {
+  display: flex;
+  gap: 7px;
+}
+
 .subagent-inspector-header p {
+  overflow: hidden;
   margin: 0 0 4px;
   color: #93959f;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subagent-inspector-header h2 {
@@ -1567,11 +1579,9 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-header .subagent-summary {
-  flex: 0 1 auto;
-  justify-content: flex-end;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
   gap: 2px 8px;
-  max-width: 40%;
-  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1776,9 +1786,8 @@ dialog.subagent-inspector:not([open]) {
   overflow-wrap: anywhere;
 }
 
-.subagent-inspector-agent > span {
-  flex: none;
-  white-space: nowrap;
+.subagent-inspector-agent {
+  color: #b0b1b9;
 }
 
 .subagent-inspector-meta code {
@@ -1786,6 +1795,18 @@ dialog.subagent-inspector:not([open]) {
   color: #e9e9ed;
   font-size: inherit;
   font-weight: 400;
+}
+
+.subagent-inspector-model > span,
+.subagent-inspector-thinking > span {
+  flex: none;
+  white-space: nowrap;
+}
+
+.subagent-inspector-model code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subagent-inspector-meta .subagent-task-status {
@@ -1839,7 +1860,7 @@ dialog.subagent-inspector:not([open]) {
 }
 
 .subagent-inspector-prompt {
-  margin-left: auto;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -1971,6 +1992,25 @@ dialog.subagent-inspector:not([open]) {
 .subagent-ledger-read-hint {
   margin-left: auto;
   text-align: right;
+}
+
+.subagent-ledger-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.subagent-ledger-connection.is-live {
+  color: #b0a2f4;
+}
+
+.subagent-ledger-connection.is-live::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
 }
 
 .subagent-ledger-scroll {
@@ -2658,9 +2698,10 @@ dialog.subagent-inspector:not([open]) {
     content: '';
   }
 
-  .subagent-inspector-header {
-    flex-wrap: wrap;
-    gap: 4px;
+  .subagent-inspector-header,
+  .subagent-inspector-header:has(> .subagent-inspector-prompt:not([hidden])) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
     padding: 11px 16px 10px;
   }
 
@@ -2669,11 +2710,14 @@ dialog.subagent-inspector:not([open]) {
   }
 
   .subagent-inspector-header .subagent-summary {
-    order: 1;
-    flex-basis: 100%;
-    justify-content: flex-start;
     gap: 2px 6px;
-    max-width: none;
+  }
+
+  .subagent-inspector-prompt {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 12px;
   }
 
   .subagent-inspector-tasks {

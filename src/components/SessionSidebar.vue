@@ -6,6 +6,7 @@ import { useModalFocus } from '../composables/useModalFocus'
 
 const isWindows = /Win/i.test(navigator.platform || navigator.userAgent || '')
 const quickSwitchShortcutLabel = isWindows ? 'Ctrl+K' : '⌘K'
+const activityShortcutLabel = isWindows ? 'Ctrl+Shift+A' : '⌘⇧A'
 
 const props = defineProps({
   activityActionError: {
@@ -181,6 +182,7 @@ const navigationProjectCwd = ref('')
 const projectOrder = ref([])
 const sessionOrder = ref([])
 const expandedParentOverrides = ref(new Map())
+const autoExpandedParents = ref(new Set())
 const sessionFolds = ref(new Map())
 const sessionOrdersByProject = new Map()
 const sessionScroll = ref(null)
@@ -1163,10 +1165,28 @@ function parentIsExpanded(session) {
   if (sessionQuery.value.trim()) return visibleChildrenFor(session).length > 0
   const override = expandedParentOverrides.value.get(session.path)
   if (override !== undefined) return override
-  return childrenForSession(session).some((child) => {
-    return child.id === props.selectedSessionId || childIsLive(child)
-  })
+  return autoExpandedParents.value.has(session.path)
+    || childrenForSession(session).some((child) => {
+      return child.id === props.selectedSessionId || childIsLive(child)
+    })
 }
+
+watch(
+  () => {
+    const paths = []
+    for (const [path, children] of props.subagentChildrenByParentPath) {
+      if (children.some((child) => child.id === props.selectedSessionId || childIsLive(child))) {
+        paths.push(path)
+      }
+    }
+    return paths
+  },
+  (paths) => {
+    if (paths.every((path) => autoExpandedParents.value.has(path))) return
+    autoExpandedParents.value = new Set([...autoExpandedParents.value, ...paths])
+  },
+  { immediate: true },
+)
 
 function childrenToggleLabel(session) {
   const count = childrenForSession(session).length
@@ -1773,6 +1793,7 @@ const vFocusSelect = {
         <button
           class="sidebar-project-shortcut"
           type="button"
+          aria-keyshortcuts="Meta+Shift+A Control+Shift+A"
           @click="openNavigator('activity', $event)"
         >
           <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -1782,7 +1803,7 @@ const vFocusSelect = {
             <strong>{{ activitySummary }}</strong>
             <small>Activity</small>
           </span>
-          <span aria-hidden="true">›</span>
+          <kbd class="sidebar-project-shortcut-key" aria-hidden="true">{{ activityShortcutLabel }}</kbd>
         </button>
         <button
           class="sidebar-project-shortcut"

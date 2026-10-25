@@ -103,7 +103,7 @@ DOCS_SCREENSHOT_FILTER=subagents.png,vision-agent.png,session-details.png,subage
 | `subagent-batch-size.png` | Desktop Session details with session batch size 2 and **Use global default (4)**. |
 | `subagent-batch-size-mobile.png` | The same session override in the mobile drawer. |
 
-Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2. Keep the parent model at `local/minimax-m2.7` and the image-capable vision fixture unchanged.
+Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2. Keep the parent model at `local/glm-5.3-flash` and the image-capable vision fixture unchanged.
 
 Use intercepted fixtures for configuration reads, saves, and resets. No request may change real backend settings or start a model run. Keep paths and session content synthetic. Check the saved value, source label, and reset control before capture. Batch size has no project override, so do not show a project control.
 
@@ -126,7 +126,7 @@ DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,suba
 | `docs/assets/screenshots/deep-research-mobile.png` | The same report with a mobile citation preview. |
 | `assets/readme/deep-research.png` | The research view in the README frame. |
 
-The fixtures give every child an explicit `title`, separate from its full `task` prompt. Research children use their planned thread titles.
+The fixtures give every child an explicit `title`, separate from its full `task` prompt. Research children use their planned thread titles. Inspector captures show `local/glm-5.3-flash`, `high` thinking, and the `inherited` source. Saved task results carry the same model metadata as live snapshots.
 
 The inspector helpers open a single-call Activity card from its header, check task titles, stopped outcomes, and the full prompt, then reopen it from its row. Both entry points must keep the card collapsed and preserve its height and position. Desktop captures show the ledger; mobile and export captures open a full result. The helpers wait for one active reader with no outgoing reader or footer layers. The export capture blocks the external preview renderer to verify that the inspector works offline.
 
@@ -136,7 +136,9 @@ For inspector layout changes, refresh only the five inspector images:
 DOCS_SCREENSHOT_FILTER=subagent-live-tail.png,subagent-live-tail-mobile.png,subagent-outcomes.png,subagent-inspector-mobile.png,subagent-inspector-export.png npm run docs:screenshots
 ```
 
-Check the Contained treatment: separate agent/status/connection chips, a neutral **Full task prompt** button, and one inset latest-response card with **Read full**. Ledger captures show the compact **Activity** counts and flat rows with icons, outcomes, and character counts. Reader captures show the intended entry title and **Back to activity** above the scroll sections. On mobile, check that task details and the latest card remain reachable without displacing the ledger or footer.
+Check the Header dock treatment: the agent in the small header label, Model and Thinking chips beside the status and research-count facts, and **Full task prompt** beside the Copy and Close controls. On mobile, **Full task prompt** becomes a full-width 44-pixel header row below the title, and Model text truncates only when space runs out. The connection state sits beside the **Activity** counts, and the footer keeps the following and reading states.
+
+One inset latest-response card keeps **Read full**. Ledger captures show the compact **Activity** counts and flat rows with icons, outcomes, and character counts. Reader captures show the intended entry title and **Back to activity** above the scroll sections. On mobile, check that task details and the latest card remain reachable without displacing the ledger or footer.
 
 PNG captures show the settled layout with reduced motion enabled. Use separate fixture-based visual checks with motion enabled for cold previews, overlapping reader transitions, and rapid task changes. Also check manual scrollback, reduced motion, and closure during a handoff. Do not infer smooth motion from a static capture.
 
@@ -172,7 +174,7 @@ DOCS_SCREENSHOT_FILTER=subagent-sidebar.png,mobile-sidebar.png,workbench.png,sub
 | `docs/assets/screenshots/subagent-outcomes.png` | Five settled children beside the desktop task inspector. |
 | `deep-research.png` in both output directories | Three research workers under their parent, beside the completed report and sources. |
 
-The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper waits for folding to finish, then checks the inset nodes, aligned parent titles, 18-pixel chevron gutter, and 4-pixel title gap. General captures retain `local/minimax-m2.7`; workbench captures keep the approved Ultrafast model.
+The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper waits for folding to finish, then checks the inset nodes, aligned parent titles, 18-pixel chevron gutter, and 4-pixel title gap. General captures retain `local/glm-5.3-flash`; workbench captures keep the approved Ultrafast model.
 
 Use local visual checks for fold motion, rapid reversals, and reduced-motion behavior. PNG captures show only the settled layout.
 
@@ -218,10 +220,10 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Locale: `en-US`
 - Time zone: UTC
 - Reduced motion: enabled
-- General model label: `local/minimax-m2.7`
+- General model label: `local/glm-5.3-flash`
 - Ultrafast exception: eligible `openai-codex` Responses or API-key `openai` Responses with `gpt-6-astra` or `gpt-6.1-sol`
 - Vision selector: `local/qwen3.6-27b`, with actual image-input support
-- Catalog/editor example: Qwen3.8 27B metadata inside Settings only; the parent composer remains `local/minimax-m2.7`
+- Catalog/editor example: Qwen3.8 27B metadata inside Settings only; the parent composer remains `local/glm-5.3-flash`
 - Thought display default: **Collapsed**
 - Project captures: `harbor`, `field-notes`, and three sanitized matching folders
 - Git review captures: `release-safety` with four sanitized changed files
@@ -258,7 +260,7 @@ DOCS_SCREENSHOT_FILTER=composer-issue.png,composer-issue-mobile.png,composer-sen
 | `composer-issue-mobile.png` | The same error above the mobile composer controls. |
 | `composer-send-unavailable.png` | A dismissed image warning with the attachment retained, Send disabled, and **Send unavailable** details accessible. |
 
-Desktop captures use a 1440 by 900 CSS-pixel viewport and crop to the composer and open details. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2 and the `local/minimax-m2.7` fixture.
+Desktop captures use a 1440 by 900 CSS-pixel viewport and crop to the composer and open details. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2 and the `local/glm-5.3-flash` fixture.
 
 The helper sends a synthetic extension error through the mock runtime WebSocket. The image-warning fixture has no vision model and uses the real attachment chooser. Checks confirm that dismissal retains the draft, attachment, and disabled Send state. No provider request or configuration change reaches a backend.
 
@@ -279,7 +281,7 @@ DOCS_SCREENSHOT_FILTER=dictation.png,dictation-settings.png,dictation-mobile.png
 
 Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844. The README uses 1503 by 818. All captures use device scale factor 2.
 
-Use a mock dictation host and test audio or meter data. Keep the chat model at `local/minimax-m2.7`, separate from the Parakeet speech model. Do not request microphone access, download model files, or send a live model request during capture.
+Use a mock dictation host and test audio or meter data. Keep the chat model at `local/glm-5.3-flash`, separate from the Parakeet speech model. Do not request microphone access, download model files, or send a live model request during capture.
 
 ## Trace captures
 
@@ -302,7 +304,7 @@ Desktop documentation images use 1440 by 900 CSS pixels. Mobile uses 390 by 844.
 
 Trace fixtures supply summaries, observations, pagination, and capture status. Capture controls and bookmarks change only intercepted fixture state. Trace routes, runtime streams, and other API requests must never fall through to real backend data or model requests.
 
-Keep the general model label `local/minimax-m2.7`. Preserve the approved eligible Ultrafast model and image-capable vision fixture exceptions. Do not use local trace records, private paths, or operational performance reports as documentation fixtures.
+Keep the general model label `local/glm-5.3-flash`. Preserve the approved eligible Ultrafast model and image-capable vision fixture exceptions. Do not use local trace records, private paths, or operational performance reports as documentation fixtures.
 
 Review trace labels, usage, timing, omission markers, selected observations, mobile panel switches, and the capture footer. Check that Explorer identifies the selected backend and does not imply aggregation across connections. See [Tracing](../user-guide/tracing) and [Elune integration](../integrations/elune).
 
@@ -314,7 +316,7 @@ Open every changed image. Check these items:
 2. No text or control is clipped.
 3. The image has no private path, project, prompt, account, or credential data.
 4. Hover, focus, loading, menu, and animation states appear only when they explain the documented action.
-5. General model selectors show `local/minimax-m2.7`. Ultrafast captures use an eligible OpenAI model and authentication path.
+5. General model selectors show `local/glm-5.3-flash`. Ultrafast captures use an eligible OpenAI model and authentication path.
 6. The vision selector shows `local/qwen3.6-27b` and excludes text-only models.
 7. System captures show the intended prompt and tool deltas without clipping.
 8. Subagent inspectors show the selected task, its outcome, and live activity or a saved result without inline task bodies in Activity.

@@ -66,6 +66,8 @@ Model overrides are stored in the `subagent_overrides` table in `~/.local/share/
 
 Thinking selection uses the tool or item setting first, then the agent definition. The value `inherit` selects the parent thinking level. Leyline does not store thinking overrides in SQLite.
 
+Results record requested and effective model data separately. `requestedModel` and `requestedThinking` mirror the tool call or task item. `model`, `modelProvider`, `modelName`, and `thinkingLevel` describe the child run. The `modelSource` stamp identifies a known selection origin, such as a stored override or an `inherit` resolution. A call-level model value leaves it unset.
+
 ## Child runtime
 
 The extension uses two internal integration routes:
