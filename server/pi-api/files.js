@@ -91,6 +91,7 @@ export async function terminalEditorOptions(cwd, { editorPath, editorLine, allow
     executable: configuration.executable,
     args: editorArguments(configuration, { ...descriptor, line }),
     path: descriptor.path,
+    requiresShell: false,
   }
 }
 
@@ -224,6 +225,14 @@ function parseEditorCommand(command) {
     const char = command[index]
     if (char === '\\' && quote !== "'") {
       const next = command[index + 1]
+      if (process.platform === 'win32' && quote !== '"') {
+        // On Windows a backslash outside double quotes is a literal path
+        // separator, not an escape; only \" and \\ inside double quotes
+        // keep escape meaning (handled below).
+        word += char
+        started = true
+        continue
+      }
       if (next === undefined) throw new Error('Editor command has an incomplete escape')
       if (quote === '"' && next !== '"' && next !== '\\') word += char
       else {
@@ -260,7 +269,12 @@ async function findExecutable(command) {
     : command.includes('/') || command.includes('\\')
       ? []
       : (process.env.PATH || '').split(delimiter).filter((entry) => isAbsolute(entry)).map((entry) => join(entry, command))
-  const extensions = process.platform === 'win32' && !extname(command) ? ['', '.exe', '.com'] : ['']
+  // On win32 an extensionless candidate is not a spawnable executable (it is
+  // often a Unix shell script shipped next to a .cmd shim, e.g. VS Code's
+  // bin\code), so only real executable extensions are tried for bare names.
+  // A command that already carries an extension is tried exactly as named.
+  const extensions = process.platform === 'win32' ? (extname(command) ? [''] : ['.exe', '.com']) : ['']
+  const shims = []
   for (const path of paths) {
     for (const extension of extensions) {
       const candidate = path + extension
@@ -270,8 +284,29 @@ async function findExecutable(command) {
         if ((await stat(candidate)).isFile()) return candidate
       } catch {}
     }
+    if (process.platform === 'win32') {
+      for (const extension of windowsShimExtensions(command)) {
+        const candidate = path + extension
+        try {
+          await access(candidate, constants.X_OK)
+          if ((await stat(candidate)).isFile() && !shims.includes(candidate)) shims.push(candidate)
+        } catch {}
+      }
+    }
+  }
+  if (shims.length) {
+    throw new Error(`Editor executable is only available as a Windows shim (${shims.join(', ')}): terminal editors on Windows require a real .exe in this version, and .cmd/.bat/.ps1 shims cannot be used. Use the editor's absolute .exe path instead.`)
   }
   throw new Error(`Editor executable not found or not executable: ${command}. Use an absolute path or a command on PATH.`)
+}
+
+function windowsShimExtensions(command) {
+  const extension = extname(command).toLowerCase()
+  if (extension) return ['.cmd', '.bat', '.ps1'].includes(extension) ? [''] : []
+  const known = ['.cmd', '.bat', '.ps1']
+  const pathext = (process.env.PATHEXT || '').split(';').map((entry) => entry.trim().toLowerCase())
+  if (!pathext.some((entry) => known.includes(entry))) return known
+  return known.sort((left, right) => pathext.indexOf(left) - pathext.indexOf(right))
 }
 
 function editorArguments(configuration, descriptor) {
