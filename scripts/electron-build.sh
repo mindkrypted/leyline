@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+printf '\n[leyline] Building app and documentation\n'
 npm run build
 
 node --input-type=module <<'JS'
@@ -17,6 +18,7 @@ if (!existsSync(join(nativeDirectory, nativeLibrary))
   throw new Error('Native dictation artifacts are missing')
 }
 
+console.log('[leyline] Packaging and signing')
 await packager({
   dir: '.',
   name: 'Leyline',

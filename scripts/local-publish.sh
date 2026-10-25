@@ -7,6 +7,7 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
 fi
 
 npm run electron:build
+printf '\n[leyline] Installing app and CLI\n'
 rsync -a ./release/Leyline-darwin-arm64/Leyline.app /Applications/
 mkdir -p "$HOME/.local/bin"
 ln -sf "$(pwd)/bin/leyline" "$HOME/.local/bin/leyline"
