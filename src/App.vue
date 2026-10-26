@@ -4044,7 +4044,12 @@ function handleEscape(event) {
   if (dictation.active) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
-    dictation.cancel()
+    return
+  }
+  if (!anyEscapeTargetOpen() && (dictation.phase === 'error' || dictation.error)) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    dictation.dismissError()
     return
   }
   if (!anyEscapeTargetOpen()

@@ -9,7 +9,7 @@ Leyline provides composer, browser, rename, terminal, and Electron shortcuts. Di
 | **Enter** | Send a prompt when idle with an empty queue. During a run, add a task to **Up next**. |
 | **Option+Enter** | During a run, **Steer current run**. |
 | **Shift+Enter** | Add a line break. |
-| **Escape** | Close an open menu, queue tray, drawer, dialog, preview, or edit mode. During dictation, cancel the recording before Escape can stop the active agent run. With no open surface, stop the active run. |
+| **Escape** | Close an open menu, queue tray, drawer, dialog, preview, or edit mode. During a live dictation recording, Escape does not interrupt the recording. When the dictation status shows an error, Escape dismisses it. With no open surface, stop the active run. |
 
 When pending tasks remain, **Enter** adds to the queue. A held queue stays held until you select **Resume**. Resume the queue before you use **Option+Enter** to steer.
 
