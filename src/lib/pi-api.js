@@ -68,6 +68,17 @@ export function saveRuntimeSettings({ idleTimeoutMinutes }) {
   })
 }
 
+export function fetchSessionTitleSettings() {
+  return apiRequest('/api/pi/settings/session-titles', 'Failed to load session title settings')
+}
+
+export function saveSessionTitleSettings({ enabled, model, thinking = '' }) {
+  return apiRequest('/api/pi/settings/session-titles', 'Failed to save session title settings', {
+    method: 'PUT',
+    body: { enabled, model, thinking },
+  })
+}
+
 export function performFileAction(sessionId, target, action = 'preview') {
   return apiRequest(
     `/api/pi/sessions/${encodeURIComponent(sessionId)}/file`,

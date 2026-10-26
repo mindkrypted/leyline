@@ -1,11 +1,13 @@
 <script setup>
 import { computed } from 'vue'
+import SessionTitleSettings from './SessionTitleSettings.vue'
 import { formatMode } from '../lib/format'
 import { DEFAULT_SUBAGENT_BATCH_SIZE } from '../../lib/leyline-settings.js'
 
 const props = defineProps({
   scope: { type: String, required: true, validator: (value) => ['global', 'project', 'session'].includes(value) },
   availableModels: { type: Array, default: () => [] },
+  backendKey: { type: String, default: '' },
   subagentData: { type: Object, default: () => ({ context: {}, agents: [] }) },
   visionData: { type: Object, default: () => ({ context: {}, overrides: {} }) },
   subagentLoading: Boolean,
@@ -143,6 +145,8 @@ function updateSubagentModel(agent, event) {
 
 <template>
   <div class="agent-settings">
+    <SessionTitleSettings v-if="scope === 'global'" :key="backendKey" :available-models="availableModels" />
+
     <section :aria-busy="visionLoading || visionSaving" aria-label="Vision agent">
       <h3 class="settings-section-heading">Vision agent <small>For models without image input</small></h3>
       <p v-if="visionError" class="settings-error" role="alert">{{ visionError }}</p>

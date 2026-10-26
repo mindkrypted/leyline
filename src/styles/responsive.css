@@ -150,6 +150,7 @@
   .composer.composer-committing .composer-input-shell,
   .composer.composer-committing .send-button:not(.stop-button),
   .review-loading-mark,
+  .session-title-spinner,
   .review-pane-header button.refreshing svg {
     animation: none;
   }

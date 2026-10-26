@@ -114,6 +114,10 @@ const props = defineProps({
     type: Function,
     required: true,
   },
+  sessionTitleGenerating: {
+    type: Function,
+    default: () => false,
+  },
   sessionsError: {
     type: String,
     default: '',
@@ -1529,9 +1533,21 @@ const vFocusSelect = {
                     <span class="session-title-with-kind">
                       <span
                         class="session-title"
-                        :title="sessionTitle(item.session)"
+                        :class="{ 'session-title-pending': sessionTitleGenerating(item.session.id) }"
+                        :title="sessionTitleGenerating(item.session.id)
+                          ? 'Generating title…'
+                          : sessionTitle(item.session)"
+                        aria-live="polite"
+                        aria-atomic="true"
                         @dblclick.stop="beginRename(item.session)"
-                      >{{ sessionTitle(item.session) }}</span>
+                      >{{ sessionTitleGenerating(item.session.id)
+                        ? 'Generating title…'
+                        : sessionTitle(item.session) }}</span>
+                      <span
+                        v-if="sessionTitleGenerating(item.session.id)"
+                        class="session-title-spinner"
+                        aria-hidden="true"
+                      ></span>
                       <svg
                         v-if="item.session.research"
                         class="session-research-icon"

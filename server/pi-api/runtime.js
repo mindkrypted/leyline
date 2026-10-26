@@ -20,6 +20,7 @@ import { createEventHub } from './events.js'
 import { createTracing, TRACING_EXTENSION_PATH } from './tracing.js'
 import { createPromptQueue } from './prompt-queue.js'
 import { createIdleRuntimeCleanup } from './idle-runtimes.js'
+import { createSessionTitleGenerator } from './session-titles.js'
 import { shutdownSettingsOperations, waitForSettings, withProviderSettingsLock } from './settings-operations.js'
 import { settingsError } from './pi-config.js'
 import { refreshCustomProviders, wrapModelRuntime } from './custom-providers.js'
@@ -748,6 +749,7 @@ async function initializeSessionKind(handle, kind) {
     throw new Error('Research mode can only start before the first message')
   }
 
+  handle.sessionTitle?.cancel()
   appendResearchSessionMarker(manager)
   await bindRuntimeHandle(handle)
 }
@@ -974,6 +976,7 @@ async function runSessionPrompt(
           if (result === 'started') {
             visionRegistration?.start()
             handoff = createPromptHandoff(handle, handoffId)
+            handle.sessionTitle?.prepare(text)
           }
           onAccepted?.(result)
           resolve()
@@ -1367,6 +1370,7 @@ async function editSessionPrompt(
     }
   }
 
+  handle.sessionTitle?.cancel()
   handle.changingBranch = true
   try {
     await interruptSession(handle)
@@ -1425,6 +1429,7 @@ async function resetSessionToEntry(handle, entryId) {
     throw new Error('Entry is not on the active thread')
   }
 
+  handle.sessionTitle?.cancel()
   handle.changingBranch = true
   try {
     await interruptSession(handle)
@@ -1838,6 +1843,7 @@ async function suspendIdleRuntime(handle) {
 
 function discardRuntimeHandle(handle) {
   if (handle.disposalPromise) return handle.disposalPromise
+  handle.sessionTitle?.cancel()
   handle.promptQueue?.dispose()
   cleanupExtensionConfirmations(handle)
   for (const controller of handle.pendingPromptControllers || []) {
@@ -1916,6 +1922,7 @@ function trashStamp() {
 const reloadSession = trackRuntimeCreation(async (handle) => {
   requireSessionMutation(handle)
   const session = handle.runtime.session
+  handle.sessionTitle?.cancel()
   handle.reloading = true
   let replacement
   let applied = false
@@ -2092,6 +2099,15 @@ const createNewSession = trackRuntimeCreation(async (cwd, kind = 'session') => {
     runtimeHandles.set(handle.sessionId, handle)
     forceOneAtATime(runtime.session)
     await bindRuntimeHandle(handle)
+    if (kind === 'session') {
+      handle.sessionTitle = createSessionTitleGenerator(runtime.session, () => !runtimeShuttingDown
+        && runtimeHandles.get(sessionId) === handle && handle.runtime === runtime
+        && !handle.disposalPromise && !handle.reloading && !handle.changingBranch, (generating) => {
+        if (runtimeHandles.get(sessionId) !== handle || handle.runtime !== runtime) return
+        handle.titleGenerating = generating
+        events.broadcastActiveSession(handle)
+      })
+    }
     setActiveHandle(handle)
     return activeSessionDto(handle)
   } catch (error) {

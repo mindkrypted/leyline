@@ -1,6 +1,7 @@
 import { json, readJson } from './http.js'
 import { createMcpSettings } from './mcp-settings.js'
 import { getRuntimeSettings, setRuntimeSettings } from './idle-runtimes.js'
+import { getSessionTitleSettings, setSessionTitleSettings } from './session-titles.js'
 import { createProviderSettings } from './provider-settings.js'
 import { isSettingsObject, settingsError } from './pi-config.js'
 import {
@@ -35,6 +36,9 @@ export function createPiSettingsHandler(api) {
       if (url.pathname === '/settings/runtime') {
         if (req.method === 'GET') return json(res, getRuntimeSettings())
         if (req.method === 'PUT') return json(res, setRuntimeSettings(values))
+      } else if (url.pathname === '/settings/session-titles') {
+        if (req.method === 'GET') return json(res, getSessionTitleSettings())
+        if (req.method === 'PUT') return json(res, setSessionTitleSettings(values))
       } else if (url.pathname === '/settings/providers') {
         if (req.method === 'GET') return json(res, await providers.list(target, { refresh: url.searchParams.get('refresh') === '1' }))
         if (req.method === 'PUT') return json(res, await providers.saveProvider(bodyTarget, values))

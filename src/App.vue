@@ -582,6 +582,7 @@ const {
   sessionsLoading,
   sessionSwitching,
   sessionTitle,
+  sessionTitleGenerating,
   subagentChildrenByParentPath,
   sidebarActivitySessions,
   startSelectedModel,
@@ -840,6 +841,7 @@ const agentSettingsKey = computed(() => {
 })
 const agentSettingsProps = computed(() => ({
   scope: agentSettingsScope.value,
+  backendKey: `${activeBackendConnectionId.value}:${activeBackendConnection.value.url}`,
   availableModels: agentSettingsLoadedTarget.value?.cwd === scopedConfigTarget()?.cwd
     && availableModels.value.length ? availableModels.value : agentSettingsFallbackModels.value,
   subagentData: subagentConfigData.value,
@@ -4256,7 +4258,18 @@ function closePickerMenus() {
             title="Rename session"
             @click="beginRenameSession(selectedSession, 'workbench')"
           >
-            <strong>{{ sessionTitle(selectedSession) }}</strong>
+            <span
+              v-if="sessionTitleGenerating(selectedSession.id)"
+              class="session-title-spinner"
+              aria-hidden="true"
+            ></span>
+            <strong
+              :class="{ 'session-title-pending': sessionTitleGenerating(selectedSession.id) }"
+              aria-live="polite"
+              aria-atomic="true"
+            >{{ sessionTitleGenerating(selectedSession.id)
+              ? 'Generating title…'
+              : sessionTitle(selectedSession) }}</strong>
             <span class="workbench-title-glyph" aria-hidden="true">
               <svg viewBox="0 0 16 16">
                 <path d="M10.8 2.8l2.4 2.4"></path>
@@ -4450,6 +4463,7 @@ function closePickerMenus() {
       :selected-session-id="selectedSessionId"
       :session-status="sessionRuntimeStatus"
       :session-title="sessionTitle"
+      :session-title-generating="sessionTitleGenerating"
       :sessions-error="sessionsError"
       :sessions-hydrated="sessionsHydrated"
       :sessions-hydrating="sessionsHydrating"

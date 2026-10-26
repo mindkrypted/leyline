@@ -87,6 +87,11 @@ h1 {
   white-space: nowrap;
 }
 
+.workbench-title-button strong.session-title-pending {
+  color: #baafd0;
+  font-weight: 500;
+}
+
 .workbench-title-glyph {
   display: grid;
   flex: none;

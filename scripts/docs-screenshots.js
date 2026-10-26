@@ -2947,6 +2947,7 @@ async function capture({
           : [],
       })
     }
+    if (key === 'GET /api/pi/settings/session-titles') return json({ enabled: false, model: '', thinking: '' })
     if (key === 'GET /api/pi/settings/providers') return json(scenario === 'model-catalog' ? catalogProviderSettings : providerSettings)
     if (key === 'GET /api/pi/settings/catalog/models') {
       const words = (url.searchParams.get('q') || '').trim().toLowerCase().split(/\s+/).filter(Boolean)

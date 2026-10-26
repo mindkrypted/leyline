@@ -67,6 +67,7 @@ export function useSessionWorkspace({
       const previous = activeRuntimeSnapshot.value
       if (value?.id && value.id === previous?.id
         && value.snapshotRevision < previous.snapshotRevision) return
+      if (value?.id) updateRuntimeSessionSnapshot(value)
       activeRuntimeSnapshot.value = value
     },
   })
@@ -685,7 +686,7 @@ export function useSessionWorkspace({
   function updateRuntimeSessionSnapshot(runtimeSession) {
     if (!runtimeSession?.id) return
     const previous = runtimeSessionsById.value[runtimeSession.id]
-    if (runtimeSession.snapshotRevision < previous?.snapshotRevision) return
+    if (runtimeSession.snapshotRevision <= previous?.snapshotRevision) return
     upsertRuntimeSessionSummary(runtimeSession.session)
     const state = runtimeSession.state || {}
     const activity = state.activity && typeof state.activity === 'object'
@@ -702,6 +703,7 @@ export function useSessionWorkspace({
       isStreaming: state.isStreaming === true,
       isBashRunning: state.isBashRunning === true,
       isCompacting: state.isCompacting === true,
+      titleGenerating: state.titleGenerating === true,
       compactionCutEntryId: state.compactionCutEntryId || '',
       snapshotRevision: runtimeSession.snapshotRevision,
       queuedCount: queuedCount(state.queuedMessages)
@@ -739,6 +741,10 @@ export function useSessionWorkspace({
 
   function upsertRuntimeSessionSummary(session) {
     if (!session?.id) return
+    const detail = sessionDetail.value
+    if (detail?.session?.id === session.id && detail.session.name !== session.name) {
+      sessionDetail.value = { ...detail, session: { ...detail.session, name: session.name } }
+    }
     const index = sessions.value.findIndex((item) => item.id === session.id)
     if (index === -1) {
       sessions.value = [session, ...sessions.value]
@@ -748,6 +754,7 @@ export function useSessionWorkspace({
     next[index] = {
       ...next[index],
       ...session,
+      name: session.name,
       isSubagentSession: next[index].isSubagentSession === true
         || session.isSubagentSession === true,
       subagentChildren: session.subagentChildren ?? next[index].subagentChildren,
@@ -794,6 +801,10 @@ export function useSessionWorkspace({
     )
 
     patchRuntimeSessionState(id, patch, { unread, touchActivity: true })
+  }
+
+  function sessionTitleGenerating(id) {
+    return runtimeSessionsById.value[id]?.titleGenerating === true
   }
 
   function sessionRuntimeStatus(id) {
@@ -1943,6 +1954,7 @@ export function useSessionWorkspace({
     sessionsLoading,
     sessionSwitching,
     sessionTitle,
+    sessionTitleGenerating,
     subagentChildrenByParentPath,
     sidebarActivitySessions,
     sidebarRuntimeSummary,

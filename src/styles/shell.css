@@ -1722,6 +1722,34 @@ kbd {
   font-weight: 620;
 }
 
+.session .session-title.session-title-pending {
+  color: #c4b8d7;
+  font-weight: 450;
+}
+
+.session-title-spinner {
+  display: inline-block;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #b5a4d633;
+  border-top-color: #b9a9d9;
+  border-right-color: #b9a9d9;
+  border-radius: 50%;
+  animation: session-title-spin 1s linear infinite;
+}
+
+.session-title-with-kind .session-title-spinner {
+  width: 10px;
+  height: 10px;
+}
+
+@keyframes session-title-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .session.is-renaming {
   display: flex;
   align-items: center;
