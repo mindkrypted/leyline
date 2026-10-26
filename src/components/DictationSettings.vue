@@ -260,7 +260,6 @@ function captureShortcut(event) {
             <span>{{ bytesLabel(model.bytes) }} on {{ host }}</span>
             <span v-if="model.license && !model.licenseUrl">{{ model.license }}</span>
             <a v-if="licenseUrl" :href="licenseUrl" target="_blank" rel="noopener noreferrer">{{ model.licenseUrl ? model.license || 'Model license' : 'Model source' }} ↗</a>
-            <span>{{ model.streaming ? 'Transcribes while you speak. Text is inserted when you stop.' : 'Text is inserted after you stop.' }}</span>
           </div>
           <div v-if="model.downloading || pending.has(`download:${model.id}`)" class="dictation-download">
             <div class="dictation-download-caption">
