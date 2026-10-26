@@ -7,10 +7,13 @@ export function useTerminal({ maxHeight } = {}) {
   const terminalStatus = ref('closed')
   const terminalCwd = ref('')
   const preferredHeight = ref(310)
+  const terminalResizing = ref(false)
   const terminalDrawerHeight = computed(() => Math.min(
     preferredHeight.value,
     Math.max(0, Math.floor(toValue(maxHeight) ?? Infinity)),
   ))
+  let terminalLayoutReleaseTimer = 0
+  let terminalPointerResizing = false
   let terminalInstance
   let terminalFitAddon
   let terminalSocket
@@ -20,7 +23,13 @@ export function useTerminal({ maxHeight } = {}) {
   let terminalResizeStartHeight = 0
   let terminalResizeFrame = 0
 
-  watch(terminalDrawerHeight, scheduleTerminalResize, { flush: 'post' })
+  watch(terminalDrawerHeight, () => {
+    if (terminalOpen.value && !terminalPointerResizing) {
+      terminalResizing.value = true
+      scheduleTerminalLayoutRelease()
+    }
+    scheduleTerminalResize()
+  }, { flush: 'post' })
 
   async function toggleTerminal(sessionId = '') {
     if (terminalOpen.value) {
@@ -40,6 +49,11 @@ export function useTerminal({ maxHeight } = {}) {
     return true
   }
 
+  function scheduleTerminalLayoutRelease() {
+    clearTimeout(terminalLayoutReleaseTimer)
+    terminalLayoutReleaseTimer = setTimeout(() => { terminalResizing.value = false }, 120)
+  }
+
   function disposeTerminalConnection() {
     terminalInputDisposable?.dispose()
     terminalInputDisposable = undefined
@@ -54,6 +68,8 @@ export function useTerminal({ maxHeight } = {}) {
   function closeTerminalPanel() {
     terminalRunId += 1
     terminalOpen.value = false
+    clearTimeout(terminalLayoutReleaseTimer)
+    terminalResizing.value = false
     terminalStatus.value = 'closed'
     terminalCwd.value = ''
     disposeTerminalResize()
@@ -219,12 +235,17 @@ export function useTerminal({ maxHeight } = {}) {
     window.removeEventListener('pointermove', resizeTerminalDrawer)
     window.removeEventListener('pointerup', stopTerminalResize)
     window.removeEventListener('pointercancel', stopTerminalResize)
+    terminalPointerResizing = false
     document.body.style.userSelect = ''
+    scheduleTerminalLayoutRelease()
   }
 
   function startTerminalResize(event) {
     terminalResizeStartY = event.clientY
     terminalResizeStartHeight = terminalDrawerHeight.value
+    clearTimeout(terminalLayoutReleaseTimer)
+    terminalPointerResizing = true
+    terminalResizing.value = true
     window.addEventListener('pointermove', resizeTerminalDrawer)
     window.addEventListener('pointerup', stopTerminalResize)
     window.addEventListener('pointercancel', stopTerminalResize)
@@ -248,6 +269,7 @@ export function useTerminal({ maxHeight } = {}) {
     terminalEl,
     terminalOpen,
     terminalStatus,
+    terminalResizing,
     terminalDrawerHeight,
     resizeTerminal,
     sendKey,

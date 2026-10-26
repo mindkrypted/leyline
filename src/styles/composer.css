@@ -5,7 +5,7 @@
   left: 0;
   height: 190px;
   transition:
-    bottom var(--motion-base) var(--ease-standard),
+    bottom var(--terminal-shift-duration) var(--terminal-shift-easing),
     opacity var(--motion-base) var(--ease-standard),
     transform var(--motion-base) var(--ease-emphasized);
   pointer-events: none;
@@ -42,6 +42,7 @@
   border-radius: 24px;
   background: var(--panel-soft);
   transition:
+    bottom var(--terminal-shift-duration) var(--terminal-shift-easing),
     opacity var(--motion-slow) var(--ease-standard),
     background-color var(--motion-base) var(--ease-standard);
 }
@@ -143,7 +144,7 @@
   color: var(--muted-strong);
   box-shadow: 0 6px 18px rgb(0 0 0 / 28%);
   transition:
-    bottom var(--motion-base) var(--ease-standard),
+    bottom var(--terminal-shift-duration) var(--terminal-shift-easing),
     transform var(--motion-base) var(--ease-decelerate),
     border-color var(--motion-base) var(--ease-decelerate),
     background-color var(--motion-base) var(--ease-decelerate),
@@ -182,7 +183,7 @@
   bottom: 22px;
   left: 50%;
   transition:
-    bottom var(--motion-base) var(--ease-standard),
+    bottom var(--terminal-shift-duration) var(--terminal-shift-easing),
     border-color var(--motion-base) var(--ease-standard),
     background-color var(--motion-base) var(--ease-standard),
     box-shadow var(--motion-base) var(--ease-standard),

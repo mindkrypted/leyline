@@ -352,6 +352,7 @@ const {
   nudgeTerminalHeight,
   setTerminalDrawerHeight,
   terminalDrawerHeight,
+  terminalResizing,
   disposeTerminalResize,
 } = useTerminal({ maxHeight: terminalHeightBudget })
 const terminalCompact = computed(() => terminalDrawerHeight.value < 70)
@@ -4136,6 +4137,7 @@ function closePickerMenus() {
       'in-project-new-session-transition': inProjectTransitionActive,
       'session-handoff': sessionHandoff,
       'terminal-open': terminalOpen,
+      'terminal-resizing': terminalResizing,
       'event-log-open': eventLogOpen,
       'memory-open': memoryOpen,
       'review-open': reviewDesktopAvailable && reviewAvailable && reviewOpen && !!selectedSession,
@@ -4903,35 +4905,33 @@ function closePickerMenus() {
         </svg>
       </button>
 
-      <Transition name="terminal-drawer">
-        <section
-          v-if="terminalOpen"
-          class="terminal-panel"
-          :class="{ 'is-compact': terminalCompact }"
-        >
-          <div
-            class="terminal-resize-handle"
-            role="separator"
-            aria-label="Resize terminal"
-            aria-orientation="horizontal"
-            tabindex="0"
-            @keydown.down.prevent="nudgeTerminalHeight(-24)"
-            @keydown.up.prevent="nudgeTerminalHeight(24)"
-            @pointerdown.prevent="startTerminalResize"
-          ></div>
-          <div class="terminal-header">
-            <strong>Terminal</strong>
-            <code>{{ terminalCwd || selectedSession?.cwd }}</code>
-            <span>{{ terminalStatus }}</span>
-            <button class="terminal-keys-toggle" type="button" :aria-expanded="terminalKeysOpen" @click="terminalKeysOpen = !terminalKeysOpen">Keys</button>
-            <button type="button" aria-label="Close terminal" @click="closeTerminalPanel">×</button>
-          </div>
-          <div v-if="terminalKeysOpen" class="terminal-keys" role="group" aria-label="Terminal keys">
-            <button v-for="[key, label] in terminalKeys" :key="key" type="button" :disabled="terminalStatus !== 'connected'" @click="sendKey(key)">{{ label }}</button>
-          </div>
-          <div ref="terminalEl" class="terminal-frame"></div>
-        </section>
-      </Transition>
+      <section
+        class="terminal-panel"
+        :class="{ 'is-compact': terminalCompact }"
+        :inert="!terminalOpen"
+      >
+        <div
+          class="terminal-resize-handle"
+          role="separator"
+          aria-label="Resize terminal"
+          aria-orientation="horizontal"
+          tabindex="0"
+          @keydown.down.prevent="nudgeTerminalHeight(-24)"
+          @keydown.up.prevent="nudgeTerminalHeight(24)"
+          @pointerdown.prevent="startTerminalResize"
+        ></div>
+        <div class="terminal-header">
+          <strong>Terminal</strong>
+          <code>{{ terminalCwd || selectedSession?.cwd }}</code>
+          <span>{{ terminalStatus }}</span>
+          <button class="terminal-keys-toggle" type="button" :aria-expanded="terminalKeysOpen" @click="terminalKeysOpen = !terminalKeysOpen">Keys</button>
+          <button type="button" aria-label="Close terminal" @click="closeTerminalPanel">×</button>
+        </div>
+        <div v-if="terminalKeysOpen" class="terminal-keys" role="group" aria-label="Terminal keys">
+          <button v-for="[key, label] in terminalKeys" :key="key" type="button" :disabled="terminalStatus !== 'connected'" @click="sendKey(key)">{{ label }}</button>
+        </div>
+        <div ref="terminalEl" class="terminal-frame"></div>
+      </section>
 
       <div
         v-if="selectedSession

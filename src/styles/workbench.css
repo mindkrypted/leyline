@@ -5,7 +5,7 @@
   height: 100%;
   overflow: auto;
   padding: 20px 44px var(--composer-reserved-height, 240px);
-  transition: padding-bottom var(--motion-base) var(--ease-standard);
+  transition: padding-bottom var(--terminal-shift-duration) var(--terminal-shift-easing);
   scrollbar-color: #4b4658 transparent;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
