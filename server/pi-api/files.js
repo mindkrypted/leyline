@@ -64,7 +64,10 @@ export async function performFileAction(session, input) {
     } else {
       if (!descriptor.revealLabel) throw new Error('Reveal is unavailable on this backend without a supported desktop environment')
       const [executable, args] = revealCommand(descriptor.path)
-      await launch(executable, args, session.cwd)
+      // explorer.exe delegates to the running shell and exits with code 1
+      // even on a successful reveal; only its spawn failures are errors.
+      const acceptedExitCodes = process.platform === 'win32' ? [0, 1] : [0]
+      await launch(executable, args, session.cwd, acceptedExitCodes)
     }
     return { ...descriptor, ok: true }
   } catch (error) {
@@ -331,7 +334,7 @@ function revealCommand(path) {
   return ['xdg-open', [dirname(path)]]
 }
 
-function launch(executable, args, cwd) {
+function launch(executable, args, cwd, acceptedExitCodes = [0]) {
   return new Promise((resolveLaunch, reject) => {
     let child
     let timer
@@ -347,7 +350,7 @@ function launch(executable, args, cwd) {
       child.once('error', finish)
       child.once('spawn', () => { timer = setTimeout(() => finish(), 750) })
       child.once('exit', (code, signal) => {
-        finish(code === 0 ? undefined : new Error(`Application exited ${signal ? `with signal ${signal}` : `with code ${code}`}`))
+        finish(!signal && acceptedExitCodes.includes(code) ? undefined : new Error(`Application exited ${signal ? `with signal ${signal}` : `with code ${code}`}`))
       })
     } catch (error) {
       finish(error)
