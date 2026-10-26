@@ -19,7 +19,10 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/components/ResearchCitationPreview.vue`: Renders the anchored citation preview and mobile bottom sheet.
 - `src/components/GlobalSettingsModal.vue`: Owns global category navigation, capability gates, focus containment, and owner labels.
 - `src/components/NetworkAccessSettings.vue`: Controls native-backend sharing and its proxy port, with copyable URLs and access warnings.
-- `src/components/AgentSettings.vue`: Renders fixed-scope subagent and vision overrides in global, project, and session surfaces.
+- `src/components/AgentSettings.vue`: Renders fixed-scope subagent and vision overrides, plus global-only session-title settings.
+- `src/components/SessionTitleSettings.vue`: Manages the selected backend's automatic-title switch, model, and independent thinking level.
+- `src/components/SettingsSelect.vue`: Supplies the filterable selectors used by session-title settings.
+- `src/components/RuntimeSettings.vue`: Manages the selected backend's idle-timeout draft, validation, save, and leave guard.
 - `src/components/ProjectDetailDrawer.vue`: Renders Project settings and its Sessions tab. Session details lives in `App.vue`.
 - `src/components/ProviderSettings.vue`: Manages provider/model inventories, edits, authentication, catalog refresh, and saved/draft connection tests with feedback beside draft actions.
 - `src/components/McpSettings.vue`: Manages global MCP configuration and temporary native checks/authentication.
@@ -54,7 +57,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 
 ## Shared library
 
-- `lib/leyline-settings.js`: Defines app setting keys for the native backend and browser.
+- `lib/leyline-settings.js`: Defines shared setting keys and defaults, including automatic titles and idle runtime cleanup.
 - `lib/research-state.js`: Folds branch-local research events and normalizes threads and sources.
 - `lib/research-citations.js`: Validates numbered report links against the research source ledger.
 - `lib/transcript-projection.js`: Projects pi branch entries, including System events, into shared transcript DTOs.
@@ -93,7 +96,7 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/network-access.js`: Forwards TCP connections from an independent network listener to the existing origin without restarting it.
 - `server/pi-api/index.js`: Creates the shared runtime and exports server adapters.
 - `server/pi-api/router.js`: Routes runtime HTTP requests.
-- `server/pi-api/pi-settings-routes.js`: Routes provider/model/MCP configuration and private operations.
+- `server/pi-api/pi-settings-routes.js`: Routes runtime cleanup, session-title, provider/model/MCP settings, and private operations.
 - `server/pi-api/pi-config.js`: Reads pi global files and applies locked, revision-checked atomic edits.
 - `server/pi-api/provider-settings.js`: Builds redacted provider inventory, performs configuration/authentication actions, and validates and dispatches connection tests.
 - `server/pi-api/provider-settings-runtime.js`: Leases cwd-bound settings runtimes, bounds inventory checks, and owns extension cleanup.
@@ -104,7 +107,10 @@ These files are outside `src/` because Node.js backend code and browser code imp
 - `server/pi-api/mcp-settings-worker.js`: Runs disposable sessions with native MCP management.
 - `server/pi-api/mcp-settings-transports.js`: Owns native MCP transports, secret resolution, and process cleanup.
 - `server/pi-api/cors.js`: Applies the shared HTTP and WebSocket origin policy.
-- `server/pi-api/runtime.js`: Owns runtime handles and pi operations.
+- `server/pi-api/runtime.js`: Owns runtime handles, idle suspension/restoration, and pi operations.
+- `server/pi-api/prompt-queue.js`: Owns the shared editable prompt/shell queue, revisions, hold/resume, and dispatch.
+- `server/pi-api/idle-runtimes.js`: Stores idle-timeout settings and schedules cleanup checks.
+- `server/pi-api/session-titles.js`: Stores automatic-title settings and runs bounded requests separate from conversation turns.
 - `server/pi-api/sessions.js`: Discovers session JSONL files and session metadata.
 - `server/pi-api/dtos.js`: Builds runtime and session DTOs.
 - `server/pi-api/events.js`: Projects runtime events and sends WebSocket frames through bounded queues, including small trace commit and configuration notices.
@@ -165,5 +171,5 @@ Normal runtimes load all six bundled extensions plus inline Elune capture. Isola
 
 - `vite.config.js`: Configures Vue, VitePress middleware, and the pi API plugin.
 - `index.html`: Provides the frontend HTML entry.
-- `package.json`: Defines runtime dependencies and commands. Direct `@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent` versions stay aligned, currently at `0.99.1`.
+- `package.json`: Defines runtime dependencies and commands. It pins `@earendil-works/pi-coding-agent` to `1.2.0` and the direct `@earendil-works/pi-ai` dependency to `0.99.1`.
 - `.nvmrc`: Pins Node.js `v22.19.0` for local work.

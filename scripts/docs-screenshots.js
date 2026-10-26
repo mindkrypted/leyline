@@ -1176,6 +1176,9 @@ const allowedNames = new Set([
   'dictation.png',
   'dictation-settings.png',
   'dictation-mobile.png',
+  'session-title-settings.png',
+  'session-title-settings-mobile.png',
+  'session-title-generating.png',
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1299,6 +1302,37 @@ try {
     scenario: 'dictation',
     interact: startDictationCapture,
     macWindow: true,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'session-title-settings.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    scenario: 'title-settings',
+    interact: openSessionTitleSettings,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'session-title-settings-mobile.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message',
+    viewport: { width: 390, height: 844 },
+    scenario: 'title-settings',
+    interact: openSessionTitleSettings,
+  })
+  await capture({
+    browser,
+    file: path.join(docsOutputDir, 'session-title-generating.png'),
+    route: '/sessions/demo-session',
+    ready: '.user-message',
+    scenario: 'title-generating',
+    interact: async (page) => {
+      await page.locator('.workbench-title-button .session-title-pending').filter({ hasText: 'Generating title…' }).waitFor()
+      await page.locator('.sidebar .session-title-pending').filter({ hasText: 'Generating title…' }).waitFor()
+      if (await page.locator('.user-message').count() !== 1 || await page.locator('.assistant-message').count()) {
+        throw new Error('Pending title capture must show only the first accepted message')
+      }
+    },
   })
   await capture({
     browser,
@@ -2042,6 +2076,16 @@ try {
   })
   await capture({
     browser,
+    file: path.join(readmeOutputDir, 'header.png'),
+    route: '/sessions/demo-session',
+    ready: '.assistant-message .thinking-trigger',
+    scenario: 'ultrafast',
+    sidebarChildren: true,
+    interact: (page) => openSidebarChildren(page, 2),
+    readmeHeader: true,
+  })
+  await capture({
+    browser,
     file: path.join(readmeOutputDir, 'home.png'),
     route: '/',
     ready: '.research-mode-chip',
@@ -2181,6 +2225,26 @@ async function startDictationCapture(page) {
   if (label.trim() !== 'Listening' || timer !== '0:01') {
     throw new Error(`Deterministic dictation status changed: ${JSON.stringify({ label, timer })}`)
   }
+}
+
+async function openSessionTitleSettings(page) {
+  await page.evaluate(() => window.dispatchEvent(new Event('leyline:open-settings')))
+  const dialog = page.getByRole('dialog', { name: 'Leyline settings' })
+  await dialog.waitFor()
+  const category = dialog.getByRole('combobox', { name: 'Settings category', exact: true })
+  if (await category.isVisible()) await category.selectOption('agents')
+  else await dialog.getByRole('button', { name: 'Agent defaults', exact: true }).click()
+  const section = dialog.locator('section[aria-labelledby="session-titles-heading"][aria-busy="false"]')
+  await section.waitFor()
+  await section.getByRole('button', { name: 'Title model: Choose a model', exact: true }).click()
+  await dialog.getByRole('listbox', { name: 'Title model', exact: true }).getByRole('option', { name: /^GLM 5.3 Flash/ }).click()
+  await section.getByRole('button', { name: 'Title model: GLM 5.3 Flash', exact: true }).waitFor()
+  await section.getByRole('combobox', { name: 'Thinking mode: Lowest available (off)', exact: true }).waitFor()
+  const toggle = section.getByRole('switch', { name: 'Automatic titles', exact: true })
+  if (await toggle.getAttribute('aria-checked') !== 'false') throw new Error('Automatic titles must start disabled')
+  await toggle.click()
+  await section.locator('[role="switch"][aria-checked="true"]:not([aria-disabled="true"])').waitFor()
+  await section.scrollIntoViewIfNeeded()
 }
 
 async function openDictationSettings(page) {
@@ -2528,6 +2592,7 @@ function runtimeFor(scenario) {
   const research = scenario === 'research'
   const sidebar = scenario === 'subagent-sidebar'
   const live = scenario === 'subagent-live'
+  const titleGenerating = scenario === 'title-generating'
   const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar', 'subagent-live'].includes(scenario)
   const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
@@ -2542,8 +2607,9 @@ function runtimeFor(scenario) {
       availableModels,
       thinkingLevel: 'high',
       availableThinkingLevels: selectedModel.availableThinkingLevels,
-      isStreaming: (queued && !held) || activity || sidebar || live,
+      isStreaming: (queued && !held) || activity || sidebar || live || titleGenerating,
       isCompacting: false,
+      titleGenerating,
       pendingToolCalls: live ? ['subagent-live-tool'] : sidebar ? ['subagent-sidebar-tool']
         : activity ? ['activity-selected-tool'] : [],
       pendingTools: live ? [{
@@ -2580,9 +2646,9 @@ function runtimeFor(scenario) {
         : subagents ? ['read', 'grep', 'bash', 'edit', 'subagent']
           : ['read', 'grep', 'bash', 'edit'],
       contextUsage: {
-        tokens: 12480,
+        tokens: titleGenerating ? 42 : 12480,
         contextWindow: selectedModel.contextWindow,
-        percent: 12480 / selectedModel.contextWindow * 100,
+        percent: (titleGenerating ? 42 : 12480) / selectedModel.contextWindow * 100,
       },
       slashCommands: [
         { name: 'compact', description: 'Compact context', source: 'command' },
@@ -2690,8 +2756,11 @@ function runtimeForSession(id, state) {
 
 function detailFor(scenario) {
   const research = scenario === 'research'
-  const summary = research ? researchSession : sessions[0]
+  const summary = research ? researchSession : scenario === 'title-generating'
+    ? { ...sessions[0], name: '', firstMessage: baseEntries[0].text, messageCount: 1 }
+    : sessions[0]
   const entries = {
+    'title-generating': [baseEntries[0]],
     system: systemTranscriptEntries,
     ultrafast: systemTranscriptEntries,
     export: systemTranscriptEntries,
@@ -2711,7 +2780,7 @@ function detailFor(scenario) {
       sessionFile: summary.path,
       research: research ? researchState : null,
       messageCount: entries.length,
-      contextTokens: 12480,
+      contextTokens: scenario === 'title-generating' ? 42 : 12480,
       modified: scenario === 'export'
         ? '2026-08-06T15:49:00.000Z'
         : summary.modified,
@@ -2833,6 +2902,7 @@ async function capture({
   padding = 0,
   preserveHover = false,
   macWindow = false,
+  readmeHeader = false,
   embeddedFile,
 }) {
   const selected = !screenshotFilter.length || screenshotFilter.includes(path.basename(file))
@@ -2840,13 +2910,14 @@ async function capture({
   if (!selected && !embeddedSelected) return
   const runtime = runtimeFor(scenario)
   const detail = detailFor(scenario)
+  if (scenario === 'title-generating') runtime.session = detail.session
   const sidebar = sidebarChildren ? sidebarFixtureFor(scenario, detail.session) : null
   if (sidebar) {
     detail.session = sidebar.parent
     runtime.session = sidebar.parent
   }
   const captureSessions = (scenario === 'research' ? [researchSession, ...sessions] : sessions)
-    .map((summary) => sidebar && summary.id === runtime.id ? sidebar.parent : summary)
+    .map((summary) => (sidebar || scenario === 'title-generating') && summary.id === runtime.id ? detail.session : summary)
     .concat(sidebar?.children || [])
   const runtimeFixtures = runtimeFixturesFor(scenario, runtime)
   for (const child of sidebar?.liveChildren || []) {
@@ -2875,7 +2946,7 @@ async function capture({
     runtimeSessions: runtimeFixtures.runtimeSessions,
     runtimeEvents: runtimeFixtures.runtimeEvents,
     terminal,
-    emitRuntimeEvents: !['home', 'subagent-live'].includes(scenario),
+    emitRuntimeEvents: !['home', 'subagent-live', 'title-generating'].includes(scenario),
     dictation: ['dictation', 'dictation-settings'].includes(scenario) ? docsDictation : null,
     dictationClient: ['dictation', 'dictation-settings'].includes(scenario) ? docsDictationClient : null,
     dictationMeters: scenario === 'dictation' ? docsDictationMeters : null,
@@ -2887,6 +2958,8 @@ async function capture({
   const capturedTraces = structuredClone(traceFixtures)
   const batching = { ...subagentPayload.batching }
   const batchWrites = []
+  let titleSettings = { enabled: scenario === 'title-generating', model: scenario === 'title-generating' ? 'local/glm-5.3-flash' : '', thinking: '' }
+  const titleWrites = []
   await page.route('**/*', (request) => {
     const origin = new URL(request.request().url()).origin
     if (origin === new URL(baseUrl).origin || origin === 'https://esm.sh') return request.continue()
@@ -2947,7 +3020,15 @@ async function capture({
           : [],
       })
     }
-    if (key === 'GET /api/pi/settings/session-titles') return json({ enabled: false, model: '', thinking: '' })
+    if (key === 'GET /api/pi/settings/session-titles') return json(titleSettings)
+    if (key === 'PUT /api/pi/settings/session-titles' && scenario === 'title-settings') {
+      const body = req.postDataJSON()
+      if (typeof body?.enabled === 'boolean' && body.model === 'local/glm-5.3-flash' && body.thinking === '') {
+        titleSettings = body
+        titleWrites.push(body)
+        return json(titleSettings)
+      }
+    }
     if (key === 'GET /api/pi/settings/providers') return json(scenario === 'model-catalog' ? catalogProviderSettings : providerSettings)
     if (key === 'GET /api/pi/settings/catalog/models') {
       const words = (url.searchParams.get('q') || '').trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -3066,6 +3147,11 @@ async function capture({
     if (interact) await interact(page)
     const expectedBatchWrites = scenario === 'subagent-batching' ? [2, null, 2] : scenario === 'subagent-batching-global' ? [3, 4] : []
     if (JSON.stringify(batchWrites) !== JSON.stringify(expectedBatchWrites)) throw new Error('Batch size fixture did not save, reset, and restore the expected values')
+    const expectedTitleWrites = scenario === 'title-settings' ? [
+      { enabled: false, model: 'local/glm-5.3-flash', thinking: '' },
+      { enabled: true, model: 'local/glm-5.3-flash', thinking: '' },
+    ] : []
+    if (JSON.stringify(titleWrites) !== JSON.stringify(expectedTitleWrites)) throw new Error('Title settings fixture did not select the model and enable titles')
     if (await page.locator('.subagent-inspector').count()) await waitForSubagentReader(page)
     await sanitizeNativeBackendAddress(page)
     await page.evaluate(async () => {
@@ -3121,6 +3207,9 @@ async function capture({
         image,
         contentSize: clip || viewport,
       })
+    } else if (readmeHeader) {
+      const image = await page.screenshot({ animations: 'disabled' })
+      await saveReadmeHeader({ browser, file, image })
     } else {
       await assertPrivateDataAbsent(page)
       await page.screenshot({ path: file, clip, animations: 'disabled' })
@@ -3238,6 +3327,39 @@ async function saveMacWindowScreenshot({ browser, file, image, contentSize }) {
     }, `data:image/png;base64,${image.toString('base64')}`)
     await assertPrivateDataAbsent(page)
     await page.screenshot({ path: file, animations: 'disabled', omitBackground: true })
+  } finally {
+    await context.close()
+  }
+}
+
+async function saveReadmeHeader({ browser, file, image }) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 480 }, deviceScaleFactor: 1 })
+  const page = await context.newPage()
+  try {
+    const mark = await fs.readFile(path.resolve('docs/public/leyline-mark.svg'), 'utf8')
+    await page.setContent(`
+      <style>
+        html, body { margin: 0; overflow: hidden; background: #0d0d0d; color: #e6e6e6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        .brand { position: absolute; top: 32px; left: 52px; height: 76px; display: flex; align-items: center; gap: 8px; }
+        .brand svg { width: 72px; height: 72px; }
+        h1 { margin: 0; font-size: 64px; font-weight: 650; letter-spacing: -2px; line-height: 1; }
+        .site { position: absolute; top: 62px; right: 64px; color: #8d8d8d; font-size: 24px; }
+        p { position: absolute; top: 127px; left: 64px; margin: 0; color: #b3b3b3; font: 34px/44px Arial, sans-serif; letter-spacing: -1px; }
+        .workspace { position: absolute; top: 212px; left: 64px; width: 1312px; overflow: hidden; border: 1px solid #363636; border-radius: 16px; box-shadow: 0 12px 32px #0004; }
+        .workspace img { display: block; width: 100%; }
+      </style>
+      <div class="brand">${mark}<h1>Leyline</h1></div>
+      <span class="site">leyline.sh</span>
+      <p>Run concurrent pi sessions in your browser, desktop, or mobile.</p>
+      <div class="workspace"><img alt="Leyline workspace"></div>
+    `)
+    await page.locator('img').evaluate(async (element, source) => {
+      element.src = source
+      await element.decode()
+    }, `data:image/png;base64,${image.toString('base64')}`)
+    await page.evaluate(() => document.fonts.ready)
+    await assertPrivateDataAbsent(page)
+    await page.screenshot({ path: file, animations: 'disabled' })
   } finally {
     await context.close()
   }

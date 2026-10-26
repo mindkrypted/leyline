@@ -90,6 +90,18 @@ session in a new tab or window. The current window does not change.
 
 To create a research session, return to the start screen and select **research** before you send the prompt.
 
+## Automatic session titles
+
+Automatic titles apply only to new ordinary conversations. Existing sessions, forks, research sessions, and subagent sessions do not receive them. See [Set automatic session titles](./settings#set-automatic-session-titles) to choose a model and enable the feature.
+
+If your first message contains nonblank text, Leyline starts one separate background request after it accepts that message. The conversation continues in parallel. Leyline sends up to 1,024 characters from the message to the chosen provider, which can incur charges. The conversation model and thinking level stay unchanged. An image-only first message does not generate a title.
+
+![Sidebar and workbench header with the pending Generating title state](../assets/screenshots/session-title-generating.png)
+
+The sidebar and workbench header show **Generating title…** while the request is pending. If generation fails or returns no usable title, Leyline keeps the normal session label.
+
+Manual names take priority, even during generation. If you manually clear a name, Leyline does not replace it with an automatic title.
+
 ## Rename a session from the sidebar
 
 1. Point to the session row.

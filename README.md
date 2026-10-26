@@ -213,7 +213,8 @@ command does not create a session.
 - `Command+Shift+E`: show or hide Session details
 - `Command+Shift+M`: show or hide Memory
 - `Command+Shift+T`: show or hide the terminal
-- `Escape`: close open surfaces first. If no surface is open, stop the active run
+- `Escape`: close open surfaces first. Preserve active dictation and dismiss
+  dictation errors before stopping the active run
 
 When focus is in the terminal, Escape stays in the shell unless another surface
 is open.

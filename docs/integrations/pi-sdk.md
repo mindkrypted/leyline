@@ -4,15 +4,21 @@ Leyline discovers sessions by scanning pi JSONL files with bounded concurrent re
 
 `PI_CODING_AGENT_SESSION_DIR` selects a different session root. Leyline uses `SessionManager.open(path)` and `getBranch()` for transcript detail.
 
-`AgentSessionRuntime` owns execution. Leyline keeps one runtime handle for each open session and tracks one selected active handle. Scoped API actions can run in background sessions without changing the selected session.
+`AgentSessionRuntime` owns execution. Leyline keeps one runtime handle for each loaded session and tracks one selected active handle. Scoped API actions can run in background sessions without changing the selected session.
+
+Unobserved idle handles are eligible for disposal after 5 minutes by default. The selected backend's runtime setting accepts 0 through 1440 minutes. 0 disables cleanup. Active work, queued inputs, pending approvals, lifecycle operations, and matching session WebSocket observers protect handles. Disposal shuts down extensions and MCP resources without deleting history. Reopening or a scoped action restores retained branch/model/thinking state and eligible Ultrafast state with fresh connections. See [Idle runtime cleanup](../developer-guide/backend-api#idle-runtime-cleanup) for restoration limits.
 
 `ModelRuntime` is the current SDK boundary for model access and authentication. Leyline uses `services.modelRuntime` and `session.modelRuntime` for lookup, available snapshots, and subscription state. `custom-providers.js` wraps public authentication and streaming methods without patching SDK internals.
 
-The integration currently uses pi SDK 0.99.1. The direct `@earendil-works/pi-ai` dependency supplies streaming helpers and must stay version-aligned with `@earendil-works/pi-coding-agent`. Public upstream references include [SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md), [Configuration](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/configuration.md), [Provider Authentication](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md), and [MCP Servers](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/mcp.md). These upstream pages can describe versions newer than Leyline's pinned dependency.
+The integration pins `@earendil-works/pi-coding-agent` to `1.2.0`. The separate direct `@earendil-works/pi-ai` dependency supplies streaming helpers and is pinned to `0.99.1`. Public upstream references include [SDK](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/sdk.md), [Configuration](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/configuration.md), [Provider Authentication](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/providers.md), and [MCP Servers](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/mcp.md). These upstream pages can describe versions newer than Leyline's pinned dependency.
 
-`AgentSession.prompt()` handles commands, skills, templates, native input delivery, authentication, compaction, and persistence. `session.executeBash()` runs shell commands. Native steering and follow-up delivery remain `one-at-a-time`.
+`AgentSession.prompt()` handles commands, skills, templates, native input delivery, authentication, compaction, and persistence. Native steering and follow-up delivery remain `one-at-a-time`.
 
-Leyline holds editable **Up next** tasks on each runtime handle before pi submission. It dispatches one task through the normal prompt path when `session.isIdle`. A pi `preflightResult` disposition marks acceptance; **Steer** uses native delivery and cannot be edited afterward.
+Leyline holds editable prompts and shell commands in one **Up next** queue on each runtime handle. It dispatches one task when `session.isIdle` and lifecycle guards permit it. Prompt tasks use `session.prompt()`, with `preflightResult` marking acceptance. **Steer** uses native delivery and cannot be edited afterward. Ordinary prompt requests during model or Ultrafast changes remain accepted in the editable queue until dispatch is safe.
+
+Both bash routes confirm queue acceptance with `{ ok: true, queued: true, active }`, not command completion. Multiple commands can queue. Shell items expose `shell: true`, have no images, require `!` or `!!` when edited, and cannot steer. Shell dispatch first emits native `user_bash` hooks. Returned operations go to `session.executeBash()`. A supplied result goes to `session.recordBashResult()`. Hook failures block execution. No assistant reply starts automatically.
+
+Shell preparation and execution use `isBashRunning`, full-snapshot `bashExecution`, and `bash_execution_start`, `bash_execution_update`, and `bash_execution_end` events. Live execution IDs differ from the exact native `bashExecution` message `entryId` supplied after the message enters the session manager. Pi can defer writing it to disk. Reconciliation uses that entry ID. Pre-execution failures retain the task and hold the queue. Cancellation, nonzero exits, and later errors hold remaining tasks.
 
 Stop holds remaining unsent tasks without clearing pi's native queues. An empty queue returns to normal Send. Runtime reload retains pending tasks held; backend restart discards them. See [Pending prompts](../developer-guide/backend-api#pending-prompts) for queue ownership and acceptance rules.
 
@@ -28,6 +34,14 @@ Bundled extensions replace matching conflicts, and Ultrafast runs last. See [Run
 
 Normal runtimes add native MCP and tool search through SDK factories. Leyline enables `tool_search` unless settings explicitly disable it. Codemode is not loaded and remains excluded.
 
+## Automatic session titles
+
+`GET` and `PUT /api/pi/settings/session-titles` use the selected backend's Leyline SQLite settings, not pi configuration files. Defaults are disabled, an empty model, and an empty thinking value for the lowest supported level. There are no project/session overrides or conversation-model fallback. Runtime cleanup settings likewise use selected-backend SQLite through `/api/pi/settings/runtime`.
+
+A generator belongs only to a newly created ordinary conversation. After pi accepts its first user message, it runs a separate `ModelRuntime.streamSimple()` request beside the conversation. It uses an independent title model/thinking choice, its own short instruction, and at most 1,024 submitted text characters. It includes no session prompt, history, context files, tools, or images. It does not call `session.prompt()` or change the conversation model/thinking.
+
+A valid result uses native `session.setSessionName()` rather than an assistant message. Full and compact runtime snapshots carry `titleGenerating` separately from conversation streaming, plus the current `session` summary. Manual names and explicit clears win. Existing/resumed sessions, forks, research sessions, and children do not receive generators. Failures preserve the normal label. See [Automatic session titles](../developer-guide/backend-api#automatic-session-titles) for limits and cancellation, and the [settings contract](../reference/api#session-title-settings) for validation and storage keys.
+
 ## Trace capture integration
 
 `@elune/embedded/pi` supplies `createPiTracingExtension()`. Leyline installs its factory through `resourceLoaderOptions.extensionFactories` and binds a subscription to the current `AgentSession`. Replacement sessions require fresh binding and capture cleanup.
@@ -38,7 +52,7 @@ Home preview runtimes disable capture. Provider Settings runtimes and private pr
 
 ## Settings integration
 
-The selected backend advertises `piSettings` for Models & providers and MCP servers. Pi's global files remain authoritative. `getAgentDir()` selects their directory. Leyline's global/project/session subagent and vision overrides remain separate SQLite records.
+The selected backend advertises `piSettings` for Runtime, Models & providers, and MCP servers. Pi's global files remain authoritative for provider/model/MCP configuration. `getAgentDir()` selects their directory. Leyline's runtime and title settings and global/project/session subagent and vision overrides remain separate SQLite records.
 
 Provider Settings uses leased, cwd-bound runtimes with an in-memory session and a resource loader. It loads provider extensions through SDK resources rather than copying their registrations from a conversation. Each extension set has a session owner and shutdown path, including failed and cold reloads.
 

@@ -21,7 +21,9 @@ description: Run Leyline's Electron app with Vite, use desktop shortcuts, and re
 The script sets `LEYLINE_DEV_SERVER_URL=http://localhost:5173`. Electron loads
 that URL instead of starting the packaged static server.
 
-Restart Electron after changes to `electron/main.js` or the packaged server.
+Restart Electron after changes to Electron modules or the packaged server.
+Native dictation also loads shared `server/dictation*.js` and `lib/dictation.js`
+modules in Electron. Restart Electron after changes to those files, even in development.
 Restart Vite after backend or dependency updates, including `@elune/embedded`.
 Vite applies normal frontend changes while it continues to run.
 
@@ -41,7 +43,7 @@ app to apply dependency or backend updates.
 | `Command+Shift+E` | Show or hide Session details for the selected session. |
 | `Command+Shift+M` | Show or hide Memory. |
 | `Command+Shift+T` | Show or hide the terminal. |
-| `Escape` | Close open surfaces first. With none open, stop the active run. |
+| `Escape` | Close open surfaces first. Preserve active dictation and dismiss dictation errors before stopping the active run. |
 
 `Command+N` also accepts `Control+N` in the Electron input handler.
 `Command+Shift+N` does not create a pi session. `Command+Shift+E` does nothing on

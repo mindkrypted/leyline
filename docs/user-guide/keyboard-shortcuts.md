@@ -6,12 +6,14 @@ Leyline provides composer, browser, rename, terminal, and Electron shortcuts. Di
 
 | Shortcut | Action |
 | --- | --- |
-| **Enter** | Send a prompt when idle with an empty queue. During a run, add a task to **Up next**. |
-| **Option+Enter** | During a run, **Steer current run**. |
+| **Enter** | Finish active dictation, then send when idle with an empty queue or add a task to **Up next**. |
+| **Option+Enter** | Finish active dictation, then use **Steer current run** during a run. |
 | **Shift+Enter** | Add a line break. |
 | **Escape** | Close an open menu, queue tray, drawer, dialog, preview, or edit mode. During a live dictation recording, Escape does not interrupt the recording. When the dictation status shows an error, Escape dismisses it. With no open surface, stop the active run. |
 
 When pending tasks remain, **Enter** adds to the queue. A held queue stays held until you select **Resume**. Resume the queue before you use **Option+Enter** to steer.
+
+During dictation, these submission keys also work from composer controls or the page body without text-area focus. They do not override unrelated fields, dialogs, terminal input, or microphone tests. See [Record and insert speech](./dictation#record-and-insert-speech).
 
 ## Use slash command shortcuts
 
@@ -108,7 +110,7 @@ When focus is in the terminal, **Escape** stays in the shell unless another surf
 | **Command+Shift+E** | Open or close **Session details** for the selected session. |
 | **Command+Shift+M** | Open or close **Memory**. |
 | **Command+E** | Hide or show the desktop sidebar. On mobile, open or close it. |
-| **Escape** | Close an open transient surface. With no open surface, stop the active run. |
+| **Escape** | Close open surfaces first. Preserve active dictation and dismiss dictation errors before stopping the active run. |
 
 **Command+N** requires a current session CWD. Leyline ignores it during session
 creation. **Command+Shift+N** does not create a session.

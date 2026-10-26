@@ -117,7 +117,8 @@ Settings and trace surfaces use distinct owners and storage:
 | --- | --- |
 | Display and Connections | Native app backend, in Leyline SQLite. Connections includes live network access for that native backend. The active connection remains per window. |
 | Files | Selected backend, with editor values in `leyline_settings`. |
-| Agent defaults | Selected backend, with global subagent models, batch size, and vision overrides in SQLite. |
+| Agent defaults | Selected backend, with global subagent models, batch size, vision overrides, and automatic-title settings in SQLite. |
+| Runtime | Selected backend, with the backend-wide idle timeout in SQLite. |
 | Models & providers | Selected backend's pi global `models.json` and native provider authentication. |
 | MCP servers | Selected backend's pi global `mcp.json` and native MCP authentication. |
 | Project settings | Selected backend, with project overrides and project/session metadata. |
@@ -126,7 +127,7 @@ Settings and trace surfaces use distinct owners and storage:
 
 Trace capture controls live in the trace footer, not a global Settings category.
 
-Models & providers and MCP servers require the backend capability `piSettings`. Provider targets select a cwd for extension discovery. They do not change global file ownership. The modal does not contain Global/Project/Session scope tabs.
+Runtime, Models & providers, and MCP servers require the backend capability `piSettings`. Provider targets select a cwd for extension discovery. They do not change global file ownership. The modal does not contain Global/Project/Session scope tabs.
 
 Provider settings use separate leased SDK runtimes. MCP management uses disposable native workers. Neither path silently refreshes conversation catalogs or reloads active sessions. See [Pi Settings](./backend-api#pi-settings) for lifecycle and authentication routing rules, and [Frontend state](./frontend-state#settings-surfaces) for UI ownership.
 
@@ -143,7 +144,11 @@ A server runtime handle contains:
 
 `runtimeHandles` keeps handles by session ID. `runtimeHandlePromises` prevents duplicate activation work for the same session.
 
-Handles remain available after the user selects another session. This permits background sessions to continue and send events.
+Handles remain available after the user selects another session while active work or other protections apply. Unobserved idle handles are eligible for disposal after the backend-wide timeout, which defaults to 5 minutes. `0` disables cleanup. The maximum is 1440 minutes.
+
+A 15-second sweep protects active work, pending tasks and approvals, lifecycle operations, and sessions observed through a matching `sessionId` runtime WebSocket. Compact background snapshots and the legacy active selection alone do not protect a handle.
+
+Disposal shuts down extensions and MCP resources and emits `runtime_removed`, without deleting history. Lightweight process-local state retains the branch, model, thinking level, eligible Ultrafast choice, and unsaved manager when necessary. Reopening or a scoped action rebuilds services and connections. See [Idle runtime cleanup](./backend-api#idle-runtime-cleanup) for the full protection and restoration rules.
 
 `activeHandle`, `activeRuntime`, and `activeSessionId` identify the process-wide active session. Legacy routes use this selection.
 
@@ -160,6 +165,8 @@ Pi sessions are tree-structured JSONL files. The default directory is `~/.pi/age
 Session discovery reads JSONL files with a bounded worker pool. It caches summaries by file modification time and size and combines concurrent list requests.
 
 Persisted summaries use the latest user or assistant message time for ordering. Session names come from the latest `session_info` entry.
+
+Automatic titles use a separate, bounded model request beside the first accepted conversation request. They do not change the conversation model or append an assistant reply. A valid title uses native `setSessionName()`. Full and compact runtime snapshots carry the current `session` summary and separate `titleGenerating` flag. See [Automatic session titles](./backend-api#automatic-session-titles).
 
 Normal session changes use pi session and runtime methods. Transcript detail opens the file with `SessionManager.open(path)` and reads `getBranch()`.
 
@@ -211,9 +218,9 @@ The database currently contains these application tables:
 - `subagent_batch_overrides`
 - `vision_overrides`
 
-`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, `server.network_access_port`, backend file-editor settings, `subagents.batch_size`, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
+`backend_connections` stores named backend URLs. `leyline_settings` stores the default connection ID, display preferences, `server.network_access`, `server.network_access_port`, backend file-editor settings, `subagents.batch_size`, `session_titles.enabled`, `session_titles.model`, `session_titles.thinking`, `runtime.idle_timeout_minutes`, and `tracing.enabled`. `pinned_sessions` stores sidebar pin IDs by backend connection.
 
-The app reads connection records, display preferences, network-access state, and pinned sessions from the native backend. Files, memory, feedback, and agent overrides use the selected backend's database. Native and selected backends can be the same process.
+The app reads connection records, display preferences, network-access state, and pinned sessions from the native backend. Files, memory, feedback, agent overrides, automatic-title settings, and runtime cleanup settings use the selected backend's database. Native and selected backends can be the same process.
 
 `subagent_overrides` and `vision_overrides` supply Agent defaults, Project settings, and Session details. Their global scope means all projects on that backend. It does not mean all saved backend connections. Vision model and thinking fields inherit independently.
 

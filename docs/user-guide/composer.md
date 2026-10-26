@@ -11,7 +11,7 @@ When the agent is idle and the queue is empty:
 
 Press **Shift+Enter** to add a line break.
 
-The composer remains available during an active run. Model, thinking, and `ultrafast` controls stay disabled until the run ends.
+The composer and its model, thinking, and `ultrafast` controls remain available during an active run or compaction. An in-flight model request keeps its settings. Changes apply to later requests.
 
 ## Queue the next task
 
@@ -31,7 +31,7 @@ Each task has one actions menu:
 
 - **Edit** changes the task text and holds the queue.
 - **Move up** and **Move down** change the task order.
-- **Steer now** sends the task to the agent's next accepted input point.
+- **Steer now** sends a prompt to the agent's next accepted input point. Shell commands cannot steer.
 - **Remove** deletes the unsent task.
 
 Actions are unavailable while a task shows **Sending**.
@@ -62,7 +62,7 @@ Select **Resume** to let Leyline send the remaining tasks. Until then, new tasks
 
 The hold applies only to unsent tasks, not inputs under **Sent to agent**.
 
-**Escape** closes an open menu, tray, drawer, dialog, preview, or edit mode first. With no open surface, **Escape** stops the active run.
+**Escape** closes an open menu, tray, drawer, dialog, preview, or edit mode first. It does not interrupt active dictation. It dismisses a dictation error before it can stop the agent. Otherwise, with no open surface, **Escape** stops the active run.
 
 ## Read and dismiss an issue
 
@@ -92,7 +92,11 @@ Start the draft with one of these prefixes:
 
 The composer shows **shell · context** or **shell · hidden**. The saved tool row shows **in context** or **not in context**.
 
-Shell commands cannot include images. Only one shell command can run in a session at a time.
+Shell commands share **Up next** with prompts. They run in queue order when the session is ready, one command at a time. You can submit another command while a command or agent run is active.
+
+You can edit, move, or remove queued commands. Keep the `!` or `!!` prefix and a nonblank command when editing. Shell commands cannot include images or use **Steer now**.
+
+A failed or cancelled command holds the remaining tasks. Check the output, then select **Resume** when ready. Shell commands do not request an assistant reply.
 
 ## Compact the context
 
@@ -132,4 +136,4 @@ See [Images and previews](./images-and-previews) for model scope and context beh
 
 Select the composer microphone button to start. Select **Finish** to add recognized speech to the draft, or **Cancel** to discard the recording. Leyline inserts text at the selection captured when recording starts. If the draft changes, Leyline offers the transcript for recovery instead of overwriting the draft.
 
-See [Dictation](./dictation) for setup, local models, microphone permissions, and shortcuts.
+**Send**, **Enter**, and **Option+Enter** finish active dictation before their normal send, queue, or steering action. The keys also work from composer controls or the page body without text-area focus. See [Dictation](./dictation) for focus restrictions, setup, local models, and microphone permissions.

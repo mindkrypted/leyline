@@ -129,7 +129,7 @@ in the composer to read the full error. Dismissing the notice does not retry the
 request or resolve the cause. If **Send unavailable** remains visible, select
 **Details** to read the blocking requirement. See [Composer issues](../user-guide/composer#read-and-dismiss-an-issue).
 
-The composer cannot submit while the runtime activates, reloads, or compacts.
+The composer cannot submit while the runtime activates. During a run or compaction, new tasks enter **Up next**. During reload, new tasks enter the held queue. Select **Resume** after reload.
 
 During an active run, use these keys:
 
@@ -141,9 +141,10 @@ If the queue is held, select **Resume** before you steer.
 
 ## Queued tasks do not start
 
-Check the attached queue tab for **Held** or **Needs attention**. Stop and queue
-edits hold remaining unsent tasks. Save or cancel an open edit, then select
-**Resume**. Closing the tray does not cancel the edit or resume the queue.
+Check the attached queue tab for **Held** or **Needs attention**. Stop, queue edits,
+and failed or cancelled shell commands hold remaining unsent tasks. Save or cancel
+an open edit, then select **Resume**. Closing the tray does not cancel the edit or
+resume the queue.
 
 If the tray shows an error, correct the reported problem before you resume.
 Leyline sends pending tasks one at a time when the agent becomes idle.
@@ -363,6 +364,8 @@ with the login-shell value.
 Open **Settings → Dictation** and check the selected method. Browser dictation is the default in a normal web browser. It depends on browser support and may use an online service. Leyline does not switch to browser dictation when a selected local model fails.
 
 For local dictation, select a model and use **Download** before recording. Parakeet supports English. Whisper Turbo is multilingual, with English or language detection in Settings. In Electron, local speech runs on this device. In a browser, it runs on the computer that serves the Leyline app, even when the selected agent backend is elsewhere. See [Dictation](../user-guide/dictation).
+
+Parakeet first downloads from `leyline.download`, then tries Hugging Face if that source fails. Progress can restart when the source changes. Whisper downloads from Hugging Face. If a download fails, check the speech host's connection to these services and retry. Leyline rejects files with an incorrect size or SHA-256 checksum.
 
 Check these items:
 

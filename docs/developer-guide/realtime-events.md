@@ -24,22 +24,38 @@ The server sends these event types:
 | --- | --- |
 | `active_session` | A runtime session DTO for one handle |
 | `runtime_roster` | `{ sessionIds }` for the backend's open runtimes |
-| `runtime_removed` | `{ id }` when a runtime is removed |
-| `runtime_event` | `{ activeSessionId, event, handoffId? }` from the pi session subscription |
+| `runtime_removed` | `{ id }` when a runtime is removed, including idle disposal without session deletion |
+| `runtime_event` | `{ activeSessionId, event, handoffId? }` from pi or the queued shell executor |
 | `extension_ui` | `{ activeSessionId, state }` after an extension UI change |
 | `extension_error` | `{ activeSessionId, error }` after an extension binding error |
 | `trace_updated` | `{ traceId, sessionId, revision, activeSessionId }` after a trace storage commit |
 | `trace_config` | `{ enabled, error? }` after capture configuration changes or capture failures |
 
-`extension-ui.js` binds each runtime handle to its pi session subscription. It broadcasts every pi event as `runtime_event`.
+`extension-ui.js` binds each runtime handle to its pi session subscription. It broadcasts every pi event as `runtime_event`. `runtime.js` also publishes queued shell start/end events through that envelope.
 
 Queue changes also trigger a new `active_session` snapshot. Extension UI changes trigger both `extension_ui` and `active_session`.
 
 Editable queue mutations broadcast snapshots through the runtime handle. Native `queue_update` snapshots run in a microtask because pi emits the event before inserting the input into its low-level queue. DTOs ignore stale native display arrays when pi has no queued inputs.
 
-Snapshots include `snapshotRevision` for ordering. Full `promptQueue` state contains the mutation revision and pending items. Compact snapshots contain its count, held state, and error.
+Snapshots include `snapshotRevision` for ordering and `session` for the live name and summary. Full `promptQueue` state contains the mutation revision and pending items, including each item's `shell` flag. Compact snapshots contain its count, held state, and error. Both snapshot forms retain `titleGenerating` and `isBashRunning`. Only full snapshots include `bashExecution`.
 
 Research updates change the extension status after they append state. The resulting snapshot includes the latest branch research state.
+
+## Queued shell events
+
+Both bash routes return queue acceptance before completion. Prompts and multiple shell commands share **Up next**. Shell dispatch runs native `user_bash` hooks, then `executeBash()` or `recordBashResult()` for a hook-supplied result. It does not start an assistant reply.
+
+Shell progress uses `runtime_event.event`:
+
+- `bash_execution_start` carries the execution record, including `id`, `command`, `excludeFromContext`, `anchorId`, `startedAt`, `status`, `output`, `entryId`, and `revision`.
+- `bash_execution_update` carries `id`, `delta`, the current `output` tail, and `revision`. A supplied hook result can complete without these updates.
+- `bash_execution_end` carries the final execution record, result fields, and optional `error`.
+
+`isBashRunning` includes hook preparation and native execution. The latest `bashExecution` snapshot restores shell progress after reconnect, without event replay. Streaming output retains the last 65,536 characters. Completion supplies the native result and its truncation metadata.
+
+The execution UUID identifies the live row. `entryId` identifies the exact new native `bashExecution` message in the session manager, not a matching command string. It stays empty until the manager contains that message. Pi can defer writing the entry to disk. A deferred result can emit an early end event, followed by another with the entry ID. Clients use execution revisions to reject older updates.
+
+Background streams omit shell updates and execution payloads. They retain `isBashRunning` plus start/end summaries with `id`, `status`, `entryId`, and optional `error`. See the [shell API contract](../reference/api#shell-command) for acceptance and queue failure rules.
 
 ## Frontend adapter
 
@@ -79,7 +95,9 @@ The event hub coalesces queued notices by trace ID and capture configuration. Re
 
 If the snapshot belongs to the selected session, `App.vue` also updates `activeRuntimeSession`. Revision guards reject older snapshots from either HTTP or WebSocket messages.
 
-`runtime_event` payloads update background running, compacting, unread, and error state. Queue state and branch research progress come from `active_session` snapshots. Runtime events also enter `useLiveTurnProjection.js`.
+`runtime_event` payloads update background model/shell running, compacting, unread, and error state. Queue state and branch research progress come from `active_session` snapshots. Runtime events also enter `useLiveTurnProjection.js`.
+
+Automatic title requests use `titleGenerating`, separate from `isStreaming`. Native `session_info_changed` and full/compact `session` summaries keep generated or manual names current, including names received through HTTP snapshots. Title generation creates no assistant transcript row.
 
 ## Live transcript projection
 
@@ -88,12 +106,13 @@ If the snapshot belongs to the selected session, `App.vue` also updates `activeR
 - agent and turn start or end
 - message start, update, and end, including system-role start and end
 - tool call, execution start, and execution end
+- shell execution start, update, and end
 - compaction start and end
 - errors and aborts
 
 `message_update` drives live assistant blocks through one animation-frame batch. It does not fetch persisted detail.
 
-Settlement, reconnect, and manual compaction schedule immediate session-detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming message and tool events do not fetch main-transcript detail individually.
+Settlement, shell completion, reconnect, and manual compaction schedule immediate session-detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming message, shell output, and tool events do not fetch main-transcript detail individually.
 
 The child preview coalesces its own refreshes after message and tool completion. It queues new reads behind an in-flight request. Reconnect recovery reconciles saved messages before resetting the child projection and replaying post-open events. Its live projection opts into tool arguments for **Output**/**Arguments** readers without changing the main transcript's default projection.
 
@@ -126,6 +145,8 @@ Main-transcript updates apply only to the selected session. Background events up
 All windows connected to one backend receive its broadcasts. Runtime subscriptions and
 runtime handles are process-wide within that backend. Windows on another
 backend receive a different stream.
+
+An open runtime WebSocket protects only its exact selected `sessionId` from idle cleanup. An unscoped stream or compact snapshots for other sessions do not protect those handles. Cleanup emits `runtime_removed` without deleting history. Reopening or a scoped action restores the runtime and connections. See [Idle runtime cleanup](./backend-api#idle-runtime-cleanup).
 
 ## Git review events
 

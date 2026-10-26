@@ -32,12 +32,12 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | --- | --- |
 | `server/backend-connections.js` | Named connections, the default connection, app settings, live network-access routes, and pinned session IDs on the native backend |
 | `server/network-access.js` | Configurable TCP relay, serialized partial updates, live status, self-change response handling, and relay cleanup |
-| `lib/leyline-settings.js` | Shared setting keys and defaults, including subagent batch size |
+| `lib/leyline-settings.js` | Shared setting keys and defaults, including subagent batch size, automatic titles, and idle cleanup |
 | `lib/research-state.js` | Branch-local research state folding and source normalization |
 | `lib/research-citations.js` | Report citation checks against canonical ledger sources |
 | `server/pi-api/index.js` | Shared runtime instance, Vite integration, and WebSocket setup |
 | `server/pi-api/router.js` | HTTP method and path dispatch |
-| `server/pi-api/pi-settings-routes.js` | Provider, model, MCP, and private operation routes |
+| `server/pi-api/pi-settings-routes.js` | Runtime cleanup, session-title, provider, model, MCP, and private operation routes |
 | `server/pi-api/pi-config.js` | Pi configuration parsing, revisions, file locks, and atomic edits |
 | `server/pi-api/provider-settings.js` | Redacted provider inventory, catalog lookup, model/provider edits, native authentication, and connection-test dispatch |
 | `server/pi-api/provider-settings-runtime.js` | Cwd-bound settings runtime leases, bounded inventory checks, and resource cleanup |
@@ -49,7 +49,9 @@ Network sharing adds a TCP relay before the origin, without another HTTP router.
 | `server/pi-api/mcp-settings-transports.js` | Owned native transports, secret resolution, and bounded cleanup |
 | `server/pi-api/cors.js` | Shared HTTP and WebSocket origin policy |
 | `server/pi-api/runtime.js` | `AgentSessionRuntime` lifecycle, runtime handles, session operations, bundled resources, subagent execution, and vision execution |
-| `server/pi-api/prompt-queue.js` | Editable unsent tasks, queue revisions, hold/resume, and submission when pi is idle |
+| `server/pi-api/prompt-queue.js` | Shared prompt/shell queue, revisions, hold/resume, and submission when pi is idle |
+| `server/pi-api/idle-runtimes.js` | Backend idle-timeout settings, access tracking, and periodic cleanup checks |
+| `server/pi-api/session-titles.js` | Backend title settings and bounded, cancellable title generation |
 | `server/pi-api/sessions.js` | Session discovery, configured session directories, list metadata, and subagent markers |
 | `server/pi-api/dtos.js` | Runtime, session state, session detail, model, command, and transcript DTOs |
 | `server/pi-api/events.js` | Runtime event projection, coalescing, bounded queues, and WebSocket serialization |
@@ -82,7 +84,7 @@ The router has these main route groups:
 - selected-backend trace summaries, paged detail, bookmarks, and capture configuration
 - subagent configuration and subagent execution
 - vision configuration, resolution, and child execution
-- global pi provider/model/MCP configuration and private authentication operations
+- backend-wide runtime cleanup and automatic-title settings, global pi provider/model/MCP configuration, and private authentication operations
 - HTTP rejection of event requests without a WebSocket upgrade
 
 See the [API reference](../reference/api) for route contracts. Compare that page with `server/pi-api/router.js` when route behavior changes.
@@ -113,7 +115,7 @@ The WebSocket at `/api/pi/review/events?cwd=...` sends `review_ready` only after
 
 `runtime.js` creates cwd-bound pi services with `createAgentSessionServices()`. It then creates the session through `createAgentSessionFromServices()`.
 
-`createAgentSessionRuntime()` wraps the session and services in `AgentSessionRuntime`. Runtime handles keep these objects alive for background work.
+`createAgentSessionRuntime()` wraps the session and services in `AgentSessionRuntime`. Runtime handles retain these objects for background work until explicit or eligible idle disposal.
 
 Normal runtimes load the bundled output-budget, ultrafast, memory, subagent, research, and vision-agent extensions. They also append the Leyline system prompt.
 
@@ -133,6 +135,27 @@ Runtime creation installs a vision context transform on the session agent. The t
 
 Leyline retains `one-at-a-time` delivery for native pi steering and follow-up inputs.
 
+## Idle runtime cleanup
+
+`idle-runtimes.js` owns `GET` and `PUT /api/pi/settings/runtime` values and a 15-second cleanup sweep. `runtime.idle_timeout_minutes` uses the selected backend's `leyline_settings` table. The default is 5 minutes. Integers from 0 through 1440 are valid. `0` disables cleanup. See [Runtime settings](../reference/api#runtime-settings) for validation and responses.
+
+Runtime access and events update the last-used time. Each sweep also resets that time for protected handles. Protections include:
+
+- an open runtime WebSocket whose selected `sessionId` exactly matches the handle
+- in-flight scoped API requests, initialization, extension binding, reload, branch changes, model or Ultrafast changes, and disposal
+- prompt locks, pending prompt setup or handoff, Stop, compaction, and shell execution
+- subagent execution controllers or signals
+- editable tasks, including held tasks, native queued inputs, and pending bash messages
+- a non-idle or retrying session, pending tool calls, or pending extension confirmations
+
+An unscoped WebSocket, compact background snapshots, or the legacy active selection alone does not protect a handle. The sweep starts with runtime construction and stops during backend shutdown. Settings changes apply without a restart.
+
+`runtime.js` suspends eligible handles through the normal interruption and disposal path. Disposal shuts down extensions and native MCP resources, releases capture bindings, and emits `runtime_removed`. It clears the legacy active selection if that handle was active. It does not delete JSONL history.
+
+`idleSessions` retains lightweight session metadata, the branch leaf and last entry ID, model, thinking level, Ultrafast choice, and activity state. For a session without an existing file, it also retains the manager. List and detail reads use this state without recreating connections.
+
+Reopening or a scoped action rebuilds cwd-bound services and MCP connections. The saved leaf restores only when the persisted last entry still matches. Otherwise, the updated file takes precedence over temporary restoration state. Model restoration depends on availability and configured authentication. Ultrafast restores only for the same provider/model when its current authentication remains eligible and its command is available. Backend restart discards these temporary records, but retains persisted history and settings.
+
 ## Native MCP and tool search
 
 Normal runtimes add `createMcpExtension()` and `createToolSearchExtension()` as replaceable built-in extensions through `extensionFactories`. Pi owns server configuration, connections, discovery, and tool execution.
@@ -143,9 +166,9 @@ Leyline does not load Codemode and always excludes `codemode` from the active to
 
 ## Pi Settings
 
-`capabilities.piSettings` enables Models & providers and MCP servers. These routes run on the selected backend. Display preferences and connection records remain on the native app backend.
+`capabilities.piSettings` enables Runtime, Models & providers, and MCP servers. These routes run on the selected backend. Display preferences and connection records remain on the native app backend.
 
-Pi owns the global configuration files resolved through `getAgentDir()`. Leyline edits `models.json` and `mcp.json`, while native SDK authentication owns credentials. Subagent and vision overrides remain in Leyline SQLite. A provider target selects a cwd for extension discovery, not a project configuration file.
+Pi owns the global configuration files resolved through `getAgentDir()`. Leyline edits `models.json` and `mcp.json`, while native SDK authentication owns credentials. Subagent and vision overrides, automatic-title settings, and runtime cleanup settings remain in Leyline SQLite. A provider target selects a cwd for extension discovery, not a project configuration file.
 
 `pi-config.js` preserves unknown fields, supported comments, formatting, and symlink targets. Writes require the whole-file revision, acquire a lock, and replace the file atomically after another revision check. Invalid files block saves. Provider/model inventories omit saved secrets. MCP inventories omit arguments and header/environment values and redact sensitive URL parts.
 
@@ -167,7 +190,7 @@ API keys are optional for custom compatible providers. Saved models remain selec
 
 The public `ModelRuntime` wrapper resolves native authentication and streams through the selected provider. SDK-required placeholders stay internal: Leyline never persists them or sends them over HTTP. Request cleanup removes placeholders even with duplicate or case-variant headers or an explicit empty caller key. Keyless Google requests use an empty `x-goog-api-key` header.
 
-The direct `@earendil-works/pi-ai` dependency supplies streaming helpers. Keep its version aligned with `@earendil-works/pi-coding-agent`, currently `0.99.1`.
+The direct `@earendil-works/pi-ai` dependency supplies streaming helpers and is pinned to `0.99.1`. `@earendil-works/pi-coding-agent` is pinned separately to `1.2.0`.
 
 ### Provider runtime ownership
 
@@ -253,17 +276,17 @@ Tier changes call pi's public `cleanupSessionResources(sessionId)` to obtain a f
 
 Cost changes require a matching response ID, provider, and model. The extension recalculates base costs and multiplies each cost field by six for confirmed Ultrafast requests. Codex confirmation also accepts an Ultrafast request when the response tier is absent or `default`. Token counts do not change.
 
-Model and Ultrafast changes require an idle session and share the prompt-submission lock. Model changes hold that lock until asynchronous authentication finishes. Prompt preflight and queue dispatch stay blocked during either change. Both paths release their flags and reschedule the queue in `finally`.
+Model and Ultrafast changes use the prompt-submission lock outside active compaction. They do not require an idle model run. Model changes hold the lock through asynchronous authentication. Ordinary new prompts remain accepted in the editable queue during either change. Automatic dispatch waits for the change to finish. Both paths release their flags and reschedule the queue in `finally`.
 
 ## Pending prompts
 
-Each runtime handle owns an editable **Up next** queue from `prompt-queue.js`. Items retain stable IDs, text, images, and submission metadata until pi accepts them.
+Each runtime handle owns a shared, editable **Up next** queue from `prompt-queue.js` for prompts and shell commands. Items retain stable IDs, text, images, shell metadata, and prompt handoff IDs until submission acceptance.
 
 Ordinary input during a run enters this queue. A `followUp` request also enters the queue when idle. Registered extension commands still execute through pi directly.
 
-The queue submits one task when `session.isIdle` and no prompt setup, Stop, reload, or initialization blocks dispatch. Settlement, compaction, and completed or cancelled edit navigation schedule another dispatch check.
+The queue submits one task when `session.isIdle`. Shell execution, prompt setup, Stop, reload, initialization, compaction, branch changes, and model or Ultrafast changes block automatic dispatch. Settlement and lifecycle completion schedule another dispatch check.
 
-Submission uses the existing prompt lock, vision preparation, and `session.prompt()` path. Queued items retain the original prompt handoff ID for transformed-input reconciliation.
+Prompt tasks use the prompt lock, vision preparation, and `session.prompt()`. They retain the original handoff ID for transformed-input reconciliation. Shell tasks use native bash execution instead.
 
 At final settlement, the recorded runtime outcome determines whether failed work holds the queue. Do not infer success from the last projected assistant message: recovery can omit failed responses from model context.
 
@@ -275,12 +298,36 @@ Stop holds unsent tasks. Editing also holds the queue and cancels any unaccepted
 
 Queue mutations use `promptQueue.revision` and reject stale requests with `409`. Runtime snapshots have a separate `snapshotRevision` for HTTP/WebSocket ordering. Snapshot DTOs expose pending text and image counts, not image bytes.
 
+### Shell tasks
+
+Both `POST /api/pi/sessions/:id/bash` and legacy `POST /api/pi/bash` return `{ ok: true, queued: true, active }`. This confirms queue acceptance, not completion. Multiple commands can wait beside prompts while another command or model run is active.
+
+Shell items expose `shell: true` and `imageCount: 0` in queue DTOs. Edits must keep `!` or `!!` and a nonblank command. Commands can move or be removed but cannot steer. `!!` excludes the recorded output from future model context.
+
+`executeQueuedBash()` first calls native `extensionRunner.emitUserBash()` with `user_bash`, command, cwd, and context exclusion. A hook failure blocks execution. Returned operations go to `session.executeBash()`. A supplied result goes to `session.recordBashResult()`. Neither path calls `session.prompt()` or starts an assistant reply.
+
+Acceptance removes the item after hooks succeed and just before execution starts. Pre-execution failure retains it, holds the queue, and sets its error. Cancellation, nonzero exit, or later execution failure holds remaining tasks. Stop aborts native bash execution.
+
+Full snapshots expose `isBashRunning` and the latest `bashExecution`. Start/end events carry that execution record. Native update events carry deltas plus the current output tail and revision. Its `id` identifies the live execution. Its `entryId` identifies the exact new native `bashExecution` message in the session manager. Pi can defer writing that entry to disk. Reconciliation uses that entry ID, not matching command text. See [Queued shell events](./realtime-events#queued-shell-events).
+
+## Automatic session titles
+
+`session-titles.js` stores backend-wide settings through `GET` and `PUT /api/pi/settings/session-titles`. Titles default to off, with no model selected and the lowest supported thinking level. The three `session_titles.*` keys use `leyline_settings` on the selected backend. There are no project/session overrides or conversation-model fallback. See [Session-title settings](../reference/api#session-title-settings) for exact fields and validation.
+
+Only a newly created ordinary conversation receives a generator. Its first `started` prompt preflight prepares the generator once. Generation starts after that user message ends, beside the conversation request. Blank text, existing user or session-info records, and research markers suppress generation. Existing/resumed sessions, forks, research sessions, and children do not receive a generator.
+
+The request calls `ModelRuntime.streamSimple()` with its own short instruction and at most 1,024 characters of the submitted text. It includes no session prompt, history, context files, tools, or images. It does not call `session.prompt()`, append an assistant message, or change the conversation model or thinking level.
+
+A 30-second deadline starts at preparation. The request sets `maxRetries: 0`, and streamed text and thinking have limits. The prompt requests 3 to 7 words and at most 80 characters. The response guard requires a normal stop and nonempty title text of at most 100 characters without control characters. It removes a leading `Title:` or Markdown heading prefix and surrounding quote or backtick characters.
+
+A valid result uses native `session.setSessionName()`. Manual rename or explicit clear cancels pending work and takes precedence. Reload, edit, reset, disposal, disabling titles, or changing the title model/thinking also cancels pending work. Failures leave the normal label. Runtime snapshots expose `titleGenerating` separately from `isStreaming` and include the live name in `session`.
+
 ## Session writes
 
 Use pi runtime and session methods for normal writes:
 
-- `session.prompt()` for prompts and queued messages
-- `session.executeBash()` for shell commands after extension hooks
+- `session.prompt()` for prompts and queued prompt messages
+- `session.executeBash()` for queued shell commands after native `user_bash` hooks, or `session.recordBashResult()` for a hook-supplied result
 - `session.compact()` for compaction
 - `session.navigateTree()` for edits
 - `SessionManager.createBranchedSession()` and a new runtime for forks, without replacing the source runtime
@@ -297,7 +344,7 @@ Reset to here is the explicit exception. It replaces the manager entries with th
 `backend-connections.js`, `memories.js`, `rollout-feedback.js`, `subagents.js`,
 and `vision.js` share `~/.local/share/leyline/memory.sqlite`.
 
-Backend connection definitions, the default connection, and display preferences belong to the native app backend. A window stores its active connection ID in `sessionStorage`. File editor settings, memory, feedback, and agent overrides belong to the selected backend.
+Backend connection definitions, the default connection, and display preferences belong to the native app backend. A window stores its active connection ID in `sessionStorage`. File editor settings, memory, feedback, agent overrides, automatic-title settings, and runtime cleanup settings belong to the selected backend.
 
 Trace capture configuration also belongs to the selected backend. Its `tracing.enabled` key uses `leyline_settings`, while trace records use a separate `elune/elune.db`. See [Elune integration](../integrations/elune#storage-and-configuration).
 

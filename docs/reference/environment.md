@@ -31,9 +31,11 @@ Use an absolute path for `LEYLINE_MEMORY_DIR`. Without this variable, Leyline us
 
 The database can contain the `backend_connections`, `leyline_settings`, `pinned_sessions`, `memories`, `rollout_feedback`, `subagent_overrides`, `subagent_batch_overrides`, and `vision_overrides` tables.
 
-The `leyline_settings` table contains the default backend ID, display preferences, `server.network_access`, `server.network_access_port`, file-editor settings, `subagents.batch_size`, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
+The `leyline_settings` table contains the default backend ID, display preferences, `server.network_access`, `server.network_access_port`, file-editor settings, `subagents.batch_size`, `session_titles.enabled`, `session_titles.model`, `session_titles.thinking`, `runtime.idle_timeout_minutes`, and `tracing.enabled`. The `pinned_sessions` table contains sidebar pin IDs scoped by backend connection.
 
-Display, network access, saved connections, and pinned sessions belong to the native app backend. Files, memory, feedback, and agent overrides belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
+Display, network access, saved connections, and pinned sessions belong to the native app backend. Files, memory, feedback, agent overrides, automatic-title settings, and runtime cleanup settings belong to the selected backend. Each backend uses its own environment and storage directory. Agent defaults, Project settings, and Session details select global, project, and session override scopes within that backend.
+
+Automatic titles default to off, with an empty model and thinking value. An empty thinking value selects the title model's lowest supported level. Runtime cleanup defaults to 5 minutes. Integers from 0 through 1440 are valid, and 0 disables cleanup. These settings are backend-wide, with no project or session overrides. They use Leyline SQLite, not pi configuration files, and require no environment variables. See [Session-title settings](./api#session-title-settings) and [Runtime settings](./api#runtime-settings).
 
 Subagent batch size defaults to 4 on each backend. `subagent_batch_overrides` stores session overrides. There is no project batch-size override. See [Batch configuration](../user-guide/subagents#configure-batch-size).
 
@@ -60,7 +62,7 @@ Explicit origin host and port configuration remains authoritative. If that confi
 
 Changing `LEYLINE_MEMORY_DIR` selects a different connection registry, default connection, set of UI settings, network-access settings, and set of pinned sessions.
 
-It also selects different memory, rollout, subagent, vision, dictation settings, and capture metadata, plus the attachment and dictation model directories and embedded trace database.
+It also selects different memory, rollout, subagent, vision, automatic-title, runtime cleanup, and dictation settings, plus capture metadata, attachment and dictation model directories, and the embedded trace database.
 
 ## Embedded trace storage
 

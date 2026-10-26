@@ -12,11 +12,13 @@
 | `usePinnedSessions.js` | Pinned session IDs for the active connection, load revisions, pending toggles, errors, and batched cleanup |
 | `useTranscriptPreferences.js` | App-wide transcript display settings, loading state, and save errors |
 | `GlobalSettingsModal.vue` | Category navigation, capability filtering, modal focus, and scope labels |
-| `AgentSettings.vue` | Fixed-scope subagent models, global/session batch size, vision controls, inheritance display, and available model choices |
+| `AgentSettings.vue` | Fixed-scope subagent models, global/session batch size, vision controls, global-only session titles, inheritance display, and available model choices |
+| `SessionTitleSettings.vue` / `SettingsSelect.vue` | Automatic-title settings, model filtering, and model/thinking selectors on the selected backend |
+| `RuntimeSettings.vue` | Selected-backend idle-timeout draft, validation, save state, and leave guard |
 | `ProviderSettings.vue` / `McpSettings.vue` | Inventories, selection, drafts, revisions, mutation errors, connection tests or MCP checks, and leave guards |
 | `PiSettingsWorkspace.vue` | Searchable list, narrow-layout selector, and bounded detail pane |
 | `useSettingsOperation.js` | Private operation polling, answers, cancellation, and backend-bound cleanup |
-| `useLiveTurnProjection.js` | Optimistic user entries, live assistant blocks, System rows, tools, compaction activity, and live-to-persisted reconciliation |
+| `useLiveTurnProjection.js` | Optimistic user entries, live assistant blocks, System rows, tools, shell execution, compaction activity, and live-to-persisted reconciliation |
 | `PromptQueue.vue` | Queue expansion, active edit, action menus, queue mutations, and tray width measurement |
 | `useRuntimeEvents.js` | Runtime WebSocket subscription, connection state, the local event log, and dedicated trace notice subscribers |
 | `src/lib/event-socket.js` | Shared runtime/review WebSocket client, selected-backend URLs, reconnect backoff, timeouts, heartbeat replies, and stale-socket guards |
@@ -102,7 +104,9 @@ The selected session route is `/sessions/:id`. Browser history changes call the 
 
 ## Active runtime state
 
-`activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, and research state.
+`activeRuntimeSession` contains the selected session's runtime DTO. It includes model, thinking, tools, context, queues, extension UI, research state, `isBashRunning`, and the latest `bashExecution`.
+
+Open-runtime HTTP and WebSocket snapshots also carry `session` and `state.titleGenerating`. Summary merges update names in both the session list and selected detail. Full and compact snapshots retain the title flag. The header and sidebar show **Generating title…** while retaining real labels for search and rename drafts. This flag describes a separate title request, not conversation streaming.
 
 The runtime WebSocket can send snapshots for all server handles. `App.vue` updates the selected runtime only when the IDs match. Both selected and background state reject older `snapshotRevision` values. This prevents a late HTTP response from restoring stale queue state.
 
@@ -124,7 +128,9 @@ Selected sessions read the extension status from revision-accepted runtime snaps
 
 During a run, Enter adds an editable **Up next** task. Option+Enter or the send-options menu selects native steering. When idle with no pending queue, Enter sends normally.
 
-`activeRuntimeSession.state.promptQueue` supplies pending items, held state, errors, and the mutation revision. Compact background snapshots supply counts instead of items. The renderer takes queue state from snapshots, not raw `queue_update` arrays.
+`activeRuntimeSession.state.promptQueue` supplies pending prompts and shell commands, held state, errors, and the mutation revision. Compact background snapshots supply counts instead of items. The renderer takes queue state from snapshots, not raw `queue_update` arrays.
+
+Shell items expose `shell: true`. Their text keeps a `!` or `!!` prefix, and they cannot include images or use **Steer now**. Multiple commands can queue beside prompts. A shell HTTP response confirms acceptance, not completion. Runtime state and shell events supply progress and completion. Execution does not request an assistant reply.
 
 `PromptQueue.vue` calls the session-scoped queue route with an item ID and the current queue revision. It emits the returned runtime snapshot through `SessionComposer.vue` to `App.vue`.
 
@@ -142,7 +148,9 @@ Stop applies its returned snapshot through the revision guard. Expected cancella
 
 `sessionDetail.entries` is the persisted projected branch from the backend. `useLiveTurnProjection.js` keeps live state separate.
 
-An immediate prompt creates an optimistic user entry. An **Up next** task stays outside the transcript until pi emits its user-message events. Runtime events add live user, assistant, System, and tool items.
+An immediate prompt creates an optimistic user entry. An **Up next** prompt stays outside the transcript until pi emits its user-message events. Shell tasks instead create live bash rows from `bash_execution_start`, `bash_execution_update`, and `bash_execution_end`.
+
+`bashExecution` snapshots restore the latest shell row after reconnect. The execution ID keeps live rows stable. The exact native `entryId` matches the persisted `bashExecution` message. Command text is not a reconciliation key. Runtime events add live user, assistant, System, and tool items.
 
 A queued request retains its original handoff ID through dispatch. If user events arrive before the queued HTTP response, retiring the optimistic entry keeps the confirmed live row. This also supports input transformations.
 
@@ -156,7 +164,7 @@ At the next turn start, the composable clears the previous turn's matched live r
 
 Each runtime WebSocket connection receives snapshots and the runtime roster. On reconnect, `useRuntimeEvents.js` also invokes the existing refresh callbacks. See [Realtime events](./realtime-events).
 
-Settlement, reconnect, and manual compaction schedule immediate detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming tool and message events use live projection instead of per-event detail fetches.
+Settlement, shell completion, reconnect, and manual compaction schedule immediate detail refreshes. Idle session-info and custom-message changes use a 250 ms debounce. Streaming tool, shell output, and message events use live projection instead of per-event detail fetches.
 
 ## Project browser and Project settings
 
@@ -182,7 +190,7 @@ Dirty Memory state can block session changes and drawer changes. Memory Changes 
 
 `App.vue` owns three distinct surfaces. The gear and native Settings command open `GlobalSettingsModal.vue`. Project actions open Project settings. The session header opens Session details, which contains read-only runtime metadata and session overrides.
 
-The global modal has Display, Connections, Files, Agent defaults, Models & providers, and MCP servers categories. Display and Connections use the native app backend. The other categories use the selected backend. Files requires `fileLinks`. Models & providers and MCP servers require `piSettings`.
+The global modal includes Display, Connections, Files, Agent defaults, Runtime, Models & providers, and MCP servers categories. Display and Connections use the native app backend. Files, Agent defaults, Runtime, Models & providers, and MCP servers use the selected backend. Files requires `fileLinks`. Runtime, Models & providers, and MCP servers require `piSettings`.
 
 `GlobalSettingsModal.vue` groups categories by owner, fixes the scope label, and uses a selector on narrow layouts. It makes the app root inert, contains keyboard focus, handles Escape, and restores focus on close. Initial focus goes to the dialog container without a visible category highlight.
 
@@ -209,6 +217,14 @@ Batch size appears under **Subagents** only in Agent defaults and Session detail
 `App.vue` saves against the loaded target and rejects stale responses through the existing generation and target guards. Successful saves replace the subagent configuration, including `batching`. Batch changes do not reload the runtime. The extension reads the size for each future group or parallel call.
 
 These overrides use the existing subagent and vision APIs and Leyline SQLite. They are separate from pi `models.json` overrides. See [Settings surfaces and ownership](./architecture#settings-surfaces-and-ownership).
+
+`SessionTitleSettings.vue` mounts only in global Agent defaults. It uses `src/lib/pi-api.js` for the selected backend's title settings and `SettingsSelect.vue` for model and thinking choices. Titles default to off, with no model selected. Enabling requires an explicit title model. Thinking defaults to that model's lowest supported level. Saving does not change the conversation model or thinking. There are no project/session title overrides. See [Session-title settings](../reference/api#session-title-settings).
+
+### Runtime cleanup
+
+`RuntimeSettings.vue` owns the selected backend's idle-timeout draft and saved baseline. It accepts integers from 0 through 1440, defaults to 5, and uses 0 to disable cleanup. Save uses `src/lib/pi-api.js`. Navigation and window-close guards protect unsaved or pending changes.
+
+The component does not dispose sessions itself. The backend protects active work, queued tasks, pending approvals, and sessions observed by matching runtime WebSockets. `runtime_removed` removes live status, not saved history. Reopening activates fresh connections. See [Idle runtime cleanup](./backend-api#idle-runtime-cleanup).
 
 ### Provider and MCP workspaces
 

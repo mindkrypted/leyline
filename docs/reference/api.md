@@ -187,13 +187,17 @@ Active = {
   path: string,
   cwd: string,
   diagnostics: object[],
+  session?: SessionSummary,
   state: {
     model?: Model,
     availableModels: Model[],
     thinkingLevel: string,
     availableThinkingLevels: string[],
     isStreaming: boolean,
+    isBashRunning?: boolean,
     isCompacting: boolean,
+    titleGenerating?: boolean,
+    bashExecution?: BashExecution | null,
     pendingToolCalls: string[],
     pendingConfirmationCount: number,
     steeringMode: string,
@@ -222,8 +226,26 @@ PromptQueue = {
     id: string,
     text: string,
     imageCount: number,
+    shell: boolean,
     status: "pending" | "sending"
   }>
+}
+
+BashExecution = {
+  id: string,
+  command: string,
+  excludeFromContext: boolean,
+  anchorId: string,
+  startedAt: number,
+  status: "running" | "completed" | "error" | "aborted",
+  output: string,
+  entryId: string,
+  revision: number,
+  exitCode?: number,
+  cancelled?: boolean,
+  truncated?: boolean,
+  fullOutputPath?: string,
+  error?: string
 }
 
 Model = {
@@ -267,9 +289,15 @@ Retry and prompt edits preserve Ultrafast when the runtime and model stay unchan
 
 If an extension changes the model during a run, reset waits for a safe turn or provider boundary.
 
-Open-runtime snapshots carry `snapshotRevision`. Clients reject older snapshots for the same session, whether they arrive through HTTP or WebSocket messages. Start-screen previews can omit this field and `promptQueue`.
+Open-runtime snapshots carry `snapshotRevision` and `session`, including the current session name. Clients reject older snapshots for the same session, from HTTP or WebSockets. Start-screen previews can omit these fields, `promptQueue`, `isBashRunning`, `bashExecution`, and `titleGenerating`.
 
-`promptQueue` contains editable, unsent tasks. Full images stay on the backend; each item exposes only `imageCount`. Use `promptQueue.revision` for queue mutations, not `snapshotRevision`.
+`titleGenerating` reports the separate automatic-title request, not conversation streaming. Full and compact snapshots retain this flag and the session summary. See [Session-title settings](#session-title-settings).
+
+`isBashRunning` includes shell preparation and execution. Full snapshots include the latest `bashExecution`, or `null` before execution. Rebinding clears completed execution state. Compact snapshots omit `bashExecution` but retain `isBashRunning`.
+
+`BashExecution.startedAt` uses milliseconds since the Unix epoch. `anchorId` is the session leaf before execution. `entryId` is empty until the native `bashExecution` message enters the session manager, then identifies that exact entry. Pi can defer writing it to disk. Use this ID for reconciliation, not command-text matching. During streaming, `output` retains the last 65,536 characters. Completion supplies the executor result, including truncation metadata.
+
+`promptQueue` contains editable, unsent prompts and shell commands. Full images stay on the backend. Each item exposes only `imageCount`. `shell: true` identifies a command with no images. Use `promptQueue.revision` for queue mutations, not `snapshotRevision`.
 
 `queuedMessages` contains read-only display text for inputs already accepted by pi. It is separate from the editable queue.
 
@@ -308,7 +336,7 @@ It shows the desktop review control only when `capabilities.review` is `true`. I
 
 Local file actions and the Files settings section require `capabilities.fileLinks: true`.
 
-Models & providers and MCP servers require `capabilities.piSettings: true`. These categories use the selected backend, even inside the global Settings modal.
+Runtime, Models & providers, and MCP servers require `capabilities.piSettings: true`. These categories use the selected backend, even inside the global Settings modal.
 
 Trace views require `capabilities.tracing: true`. Capture configuration and records belong to the selected backend, not the native connection registry.
 
@@ -524,9 +552,87 @@ A prune request can contain at most 500 session IDs. The frontend sends larger c
 
 These routes use `/api/pi/settings` on the selected backend. Every response sets `Cache-Control: no-store`. Successful requests return `200` without an `ok` envelope.
 
-Configuration is global to that backend's pi agent directory, resolved through `getAgentDir()`. Provider and model edits change `models.json`. MCP edits change `mcp.json`. Native authentication owns `auth.json` and `mcp-auth.json`. These files are separate from Leyline's SQLite overrides.
+Provider, model, and MCP configuration is global to that backend's pi agent directory, resolved through `getAgentDir()`. Provider and model edits change `models.json`. MCP edits change `mcp.json`. Native authentication owns `auth.json` and `mcp-auth.json`. Runtime and session-title settings instead use Leyline SQLite on the selected backend.
 
 The API does not edit project MCP files, general pi preferences, model-picker visibility, or Codemode settings. Edits preserve unrelated fields. Explicit deletion and MCP transport changes can remove stored fields that the editor does not display.
+
+### Runtime settings
+
+#### `GET /api/pi/settings/runtime`
+
+Response:
+
+```text
+{ idleTimeoutMinutes: number }
+```
+
+The default is `5`. An absent or invalid stored value uses this default. `0` disables idle cleanup.
+
+#### `PUT /api/pi/settings/runtime`
+
+Request:
+
+```text
+{ idleTimeoutMinutes: number }
+```
+
+Response: the same object as GET, with the saved value.
+
+`idleTimeoutMinutes` is required and must be an integer from 0 through 1440. Numeric strings, booleans, null, missing values, and unsupported fields return `400` with `Idle timeout must be a whole number from 0 to 1440 minutes.`
+
+The value persists as a decimal string under `runtime.idle_timeout_minutes` in `leyline_settings`. Storage is `memory.sqlite` under the selected backend's `LEYLINE_MEMORY_DIR`, or `~/.local/share/leyline/`. It has no project or session override.
+
+Cleanup checks every 15 seconds and reads the current setting without a restart. Active work, queued tasks, pending approvals, lifecycle operations, and sessions observed through an exact `sessionId` runtime WebSocket stay loaded. An unscoped WebSocket or compact background snapshots do not protect every runtime.
+
+Cleanup disposes eligible runtimes and their MCP resources without deleting session history. It emits `runtime_removed`. Reopening or a scoped action rebuilds the runtime and connections. Process-local restoration retains the branch leaf, model, thinking level, and eligible Ultrafast choice. See [Idle runtime cleanup](../developer-guide/backend-api#idle-runtime-cleanup) for protections and restoration limits.
+
+### Session-title settings
+
+#### `GET /api/pi/settings/session-titles`
+
+Response:
+
+```text
+{
+  enabled: boolean,
+  model: string,
+  thinking: "" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+}
+```
+
+Defaults are `{ enabled: false, model: "", thinking: "" }`. Only stored `"true"` enables titles. An absent or invalid stored thinking value becomes `""`.
+
+#### `PUT /api/pi/settings/session-titles`
+
+Request:
+
+```text
+{
+  enabled: boolean,
+  model: string,
+  thinking?: "" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+}
+```
+
+Response: the same configuration object as GET. It does not return a generated title.
+
+`enabled` and `model` are required. The server trims `model`. A nonempty model must match `^[^/\s]+/\S+$` and contain at most 512 characters after trimming. This is `provider/model` format: the provider cannot contain `/`, but the model ID can. Enabling requires a nonempty model. Disabling permits an empty model.
+
+Omitting `thinking` preserves its saved value. `""` selects the title model's lowest supported level. If a saved level is unsupported, generation also uses the lowest supported level, or `off` when none exists. Save validates the listed values, not model availability, credentials, or support for that model.
+
+Validation returns `400` with one of these messages:
+
+- Missing or invalid required fields, or unsupported fields: `Provide automatic titles and a title model.`
+- Invalid thinking value, including null: `Choose a valid title thinking mode.`
+- Invalid model format, excessive length, or an empty model with titles enabled: `Choose a title model in provider/model format.`
+
+The three values persist as strings under `session_titles.enabled`, `session_titles.model`, and `session_titles.thinking` in the selected backend's `leyline_settings` table. They use the same SQLite location as runtime settings. They have no project or session override and no conversation-model fallback.
+
+Generation runs once for a newly created ordinary conversation, after pi accepts its first user message. It runs beside the conversation request, not after the reply. Blank first-message text, including image-only input, suppresses generation. Existing or resumed sessions, forks, research sessions, and children do not receive a generator. Manual names and explicit clears take precedence. Failures keep the normal label. See [Automatic session titles](../developer-guide/backend-api#automatic-session-titles) for request limits and cancellation.
+
+PUT bodies for runtime and session-title settings must be objects. Null or array bodies return `400` with `Expected a settings request object`. An optional `target` must be an object with only string `sessionId` and/or `cwd` fields. Invalid targets return `400` with `Invalid settings target`. These settings ignore a valid target and remain backend-wide.
+
+Neither setting requires a revision. Unsupported methods return `405`. Malformed JSON or unexpected storage errors return `500` with `{ error }`.
 
 ### Targets and revisions
 
@@ -1584,7 +1690,7 @@ A missing or invalid vision model returns `500` for immediate submission. For a 
 
 The prompt response does not wait for `vision_agent` execution.
 
-Prompt preflight and model or Ultrafast changes share a per-runtime submission lock. A prompt during either change returns `500`, including while model authentication resolves. It does not enter the editable queue. Automatic queue dispatch waits until the change finishes.
+Prompt preflight and model or Ultrafast changes use a per-runtime submission lock outside active compaction. Ordinary prompts during either change remain accepted in the editable queue, including while model authentication resolves. Automatic dispatch waits until the change finishes. Recognized extension commands retain their direct pi path.
 
 ### Editable prompt queue
 
@@ -1614,16 +1720,16 @@ Send the current `active.state.promptQueue.revision` with every mutation. A stal
 | --- | --- | --- |
 | `hold` | None | Hold remaining tasks and cancel unaccepted queue submission. An empty queue stays unheld. |
 | `resume` | None | Release the hold, clear the queue error, and schedule the next task when pi is idle. |
-| `edit` | `id`, `text` | Replace pending text, retain attachments, and hold the queue. Cancel any unaccepted queue submission. |
+| `edit` | `id`, `text` | Replace pending text, retain attachments and task type, and hold the queue. Cancel any unaccepted queue submission. |
 | `remove` | `id` | Remove the pending task. Removing the last task clears the hold and queue error. |
 | `move` | `id`, `direction` | Move the pending task one position up or down. |
-| `steer` | `id` | Submit the pending task through pi's steering path. Requires an unheld queue. |
+| `steer` | `id` | Submit a pending prompt through pi's steering path. Requires an unheld queue. Shell commands cannot steer. |
 
-Item mutations require `status: "pending"`. The UI calls `hold` before opening an editor, then `edit` on Save. Empty replacement text is valid only if the item has images.
+Item mutations require `status: "pending"`. The UI calls `hold` before opening an editor, then `edit` on Save. Empty replacement text is valid only if the item has images. A shell edit must retain a `!` or `!!` prefix and a nonblank command. `!!` sets `excludeFromContext`; `!` clears it.
 
 Invalid actions, missing items, changes to a sending item, or blocked lifecycle operations return `400`. Dispatch failures remain in `promptQueue.error`; inspect the returned snapshot after Resume or Steer.
 
-Pi acceptance removes the task from the editable queue. These routes do not edit, clear, or replay native pi queues.
+Pi prompt acceptance removes a prompt from the editable queue. A shell command leaves the queue after its `user_bash` hooks finish and execution starts. Hook or setup failure before this point retains the command, holds the queue, and sets `promptQueue.error`. A nonzero exit, cancellation, or later execution error holds remaining tasks. These routes do not edit, clear, or replay native pi queues.
 
 Pending tasks survive browser refresh and session switching. Runtime reload retains them in a held state. Backend restart discards them.
 
@@ -1643,10 +1749,16 @@ Request:
 Response:
 
 ```text
-{ ok: true, active: Active, detail: SessionDetail }
+{ ok: true, queued: true, active: Active }
 ```
 
-The response is sent after the shell action finishes. An empty command or a concurrent shell command returns `500`.
+Both routes confirm acceptance into the shared **Up next** queue, not command completion. They return no `detail`. Multiple commands can queue during a model run or another shell command. Prompts and shell commands run in queue order when the runtime is ready.
+
+`command` must be a string with non-whitespace content. The server trims it. Empty or non-string commands return `500`. Only `excludeFromContext: true` excludes output from future model context. Other values act as false.
+
+Shell dispatch calls native `user_bash` hooks, then `session.executeBash()` with any returned operations. A hook can supply a result for `session.recordBashResult()` instead. Hook failure blocks execution. The native result enters the session manager as a `bashExecution` message. Pi can defer writing it to disk. Shell execution does not request an assistant reply.
+
+Use `active.state.isBashRunning`, full-snapshot `bashExecution`, and the `bash_execution_start`, `bash_execution_update`, and `bash_execution_end` runtime events to observe progress. Interrupt stops execution and holds remaining tasks.
 
 ### Compaction
 
@@ -1749,9 +1861,9 @@ Response:
 { ok: true, active: Active }
 ```
 
-The runtime must be idle, with no pending prompt setup or interrupt. Initialization, extension binding, reload, or another model or Ultrafast change also blocks the request. Missing fields, an unknown model, authentication failure, or a blocked change returns `500`.
+Initialization, extension binding, reload, branch changes, or another model or Ultrafast change blocks the request. The API does not require an idle model run. Missing fields, an unknown model, authentication failure, or a blocked change returns `500`.
 
-The model change holds the submission lock through pi's authentication check and model selection. Prompt preflight and Ultrafast changes cannot run concurrently. Automatic queue dispatch waits until the change finishes.
+Outside active compaction, the model change holds the submission lock through pi's authentication check and model selection. Ordinary new prompts remain accepted in the editable queue. Automatic queue dispatch waits until the change finishes.
 
 ### Set Ultrafast
 
@@ -1771,7 +1883,7 @@ Response:
 
 Enabling requires `active.state.model.supportsUltrafast: true` and the bundled command in the runtime. Disabling does not require an eligible model, but still requires the command.
 
-The runtime must be idle, with no pending prompt setup or interrupt. Initialization, extension binding, reload, or another model or Ultrafast change blocks the request. Invalid `enabled`, unavailable support, or a blocked change returns `500` with `{ error }`. An unknown session returns `404`.
+Initialization, extension binding, reload, branch changes, or another model or Ultrafast change blocks the request. The API does not require an idle model run. Ordinary new prompts remain accepted in the editable queue until the change finishes. Invalid `enabled`, unavailable support, or a blocked change returns `500` with `{ error }`. An unknown session returns `404`.
 
 Read `active.state.extensionUi.statuses["leyline-ultrafast"]` for the resulting mode. The response has no separate `enabled` field. A cancelled setup or runtime replacement can leave the mode unchanged despite `ok: true`. If the HTTP response closes before completion, the server cancels pending Ultrafast setup when possible.
 
@@ -2658,7 +2770,7 @@ sessionId?: string
 
 Each connection sends one `active_session` event for every open runtime, followed by `runtime_roster`. This includes reconnects.
 
-The browser supplies `?sessionId=<id>` to select full snapshots and live updates for one session. Other sessions receive compact snapshots and filtered runtime events. Compact `promptQueue` state contains `count`, `held`, and `error`, without item content.
+The browser supplies `?sessionId=<id>` to select full snapshots and live updates for one session. Other sessions receive compact snapshots and filtered runtime events. Compact `promptQueue` state contains `count`, `held`, and `error`, without item content. Compact snapshots retain `session`, `titleGenerating`, and `isBashRunning`, but omit `bashExecution`.
 
 An empty `sessionId` selects no full runtime. Omitting the parameter selects full events for all runtimes, for protocol compatibility.
 
@@ -2704,7 +2816,25 @@ trace_config: {
 
 Trace notices reuse this stream without full trace payloads. `trace_updated` follows a storage commit. Trace views refresh paged HTTP data after notices or reconnect. These notices do not enter the browser Runtime Events log or transcript projection.
 
-`runtime_event.event` is the pi SDK runtime event. Its nested fields depend on the event type. The connection stays open until the client or server closes it.
+`runtime_event.event` contains a pi SDK event or a Leyline shell lifecycle event. Its nested fields depend on the event type. The connection stays open until the client or server closes it.
+
+For queued shell commands, full events use these shapes:
+
+```text
+bash_execution_start: { type: "bash_execution_start", ...BashExecution }
+bash_execution_update: {
+  type: "bash_execution_update",
+  id: string,
+  delta: string,
+  output: string,
+  revision: number
+}
+bash_execution_end: { type: "bash_execution_end", ...BashExecution }
+```
+
+Start and end events come from the queue executor. Updates come from native `executeBash()` and include the current output tail and revision. An extension-supplied result can complete without update events. A deferred native result can produce an end event before it enters the session manager, then another with the exact `entryId`.
+
+Background connections receive start/end summaries with `id`, `status`, `entryId`, and optional `error`, but no shell updates. `runtime_removed` can report idle disposal. It does not mean that the session was deleted.
 
 ## Terminal WebSocket
 

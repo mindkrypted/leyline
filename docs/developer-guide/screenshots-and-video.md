@@ -39,7 +39,7 @@ This command intercepts Leyline API calls and supplies sanitized fixtures. Mock 
 - Catalog search results for three Qwen3.8-27B provider variants, with model details, thinking maps, and compatibility metadata
 - Projects, folder browsing, session lists, detail, activation, and runtime state
 - Git status and selected-file diffs
-- Memory records, subagent configuration, and vision configuration
+- Memory records, subagent configuration, vision configuration, and automatic-title settings
 - Saved child transcripts, tool arguments, and child-scoped runtime events for subagent ledgers
 - Queue, research, shell, and image-delegation transcript states
 - Runtime snapshots and events, Git review notices, and terminal traffic through mock WebSockets, plus exported HTML
@@ -51,7 +51,9 @@ The registry contains the native backend and a fictional saved connection. The t
 
 The visible native address is `localhost:5173`, even when the capture uses another server URL. The command does not change local data or model configuration.
 
-The command writes product images to `docs/assets/screenshots/`. It also refreshes the README images in `assets/readme/`, including `tracing.png`.
+The command writes product images to `docs/assets/screenshots/`. It also refreshes the README images in `assets/readme/`, including `tracing.png` and `header.png`.
+
+`header.png` keeps the 1440 by 480 pixel banner layout and approved wording. Its workspace crop comes from the same sanitized workbench fixture, including the pin filter and child sessions. Refresh it with `DOCS_SCREENSHOT_FILTER=header.png npm run docs:screenshots`.
 
 Set a different app URL with:
 
@@ -98,7 +100,7 @@ DOCS_SCREENSHOT_FILTER=subagents.png,vision-agent.png,session-details.png,subage
 | Asset in `docs/assets/screenshots/` | Captured state |
 | --- | --- |
 | `subagents.png` | Agent defaults with global batch size 4 and subagent model choices. |
-| `vision-agent.png` | Agent defaults with vision controls and the updated Subagents section. |
+| `vision-agent.png` | Agent defaults with automatic titles off, vision controls, and the Subagents section. |
 | `session-details.png` | Session drawer with runtime state, inherited batch size, and model overrides. |
 | `subagent-batch-size.png` | Desktop Session details with session batch size 2 and **Use global default (4)**. |
 | `subagent-batch-size-mobile.png` | The same session override in the mobile drawer. |
@@ -263,6 +265,25 @@ DOCS_SCREENSHOT_FILTER=composer-issue.png,composer-issue-mobile.png,composer-sen
 Desktop captures use a 1440 by 900 CSS-pixel viewport and crop to the composer and open details. Mobile uses 390 by 844 CSS pixels. All captures use device scale factor 2 and the `local/glm-5.3-flash` fixture.
 
 The helper sends a synthetic extension error through the mock runtime WebSocket. The image-warning fixture has no vision model and uses the real attachment chooser. Checks confirm that dismissal retains the draft, attachment, and disabled Send state. No provider request or configuration change reaches a backend.
+
+## Automatic-title captures
+
+Refresh the title settings, pending state, and affected Agent defaults overview with:
+
+```bash
+DOCS_SCREENSHOT_FILTER=session-title-settings.png,session-title-settings-mobile.png,session-title-generating.png,vision-agent.png npm run docs:screenshots
+```
+
+| Asset in `docs/assets/screenshots/` | Captured state |
+| --- | --- |
+| `session-title-settings.png` | Desktop Agent defaults with automatic titles enabled, `local/glm-5.3-flash`, and the lowest supported thinking mode. |
+| `session-title-settings-mobile.png` | The same title controls in mobile Settings. |
+| `session-title-generating.png` | A new conversation with its first accepted message and **Generating title…** in the header and sidebar. |
+| `vision-agent.png` | Agent defaults with automatic titles off above the configured vision controls. |
+
+The settings helper selects the model and enables titles through the real controls. GET and PUT requests change only intercepted fixture state. The pending capture uses a synthetic runtime snapshot with `state.titleGenerating: true`, one user message, and no existing session name. No title request reaches a model provider.
+
+Desktop captures use 1440 by 900 CSS pixels. Mobile uses 390 by 844. Both use device scale factor 2. Check the title model, independent thinking selection, switch state, and both pending labels.
 
 ## Dictation captures
 

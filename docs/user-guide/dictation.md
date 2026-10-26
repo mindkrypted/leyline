@@ -1,6 +1,6 @@
 # Dictation
 
-Dictation adds recognized speech to the composer draft. It does not send the draft. When you select Send, Leyline finishes an active recording first, then follows the normal send or queue behavior.
+Dictation adds recognized speech to the composer draft. Recognition does not submit the draft. **Send**, **Enter**, and **Option+Enter** finish active dictation before the normal composer action.
 
 ![Composer dictation capsule with a live waveform, Finish, and Cancel controls](../assets/screenshots/dictation.png)
 
@@ -28,6 +28,8 @@ In a browser, microphone access requires a secure context: open Leyline over HTT
 
 Leyline supplies **Parakeet Unified English** and **Whisper Large v3 Turbo**. Parakeet transcribes while you speak and supports English. Whisper transcribes after you finish and supports English or language detection. Model downloads are separate from pi and agent model downloads.
 
+Parakeet downloads from `leyline.download`, with Hugging Face as a fallback. Whisper downloads from Hugging Face. Leyline checks each file's size and SHA-256 checksum.
+
 The download is stored on the speech-processing computer. By default, model files are under `$HOME/.local/share/leyline/dictation/models`. Set `LEYLINE_MEMORY_DIR` to use a different Leyline data directory. In browser use, this path is on the computer serving Leyline.
 
 ![Dictation settings with Local models selected and the speech model download controls](../assets/screenshots/dictation-settings.png)
@@ -38,13 +40,17 @@ The download is stored on the speech-processing computer. By default, model file
 
 Select the composer microphone button, or use the in-app shortcut. The compact status capsule shows the recording state, elapsed time, and **Finish** and **Cancel** controls.
 
-During local dictation, the waveform shows recent microphone audio. During Browser dictation, the waveform is a static motif because the browser does not provide an audio-level signal to Leyline. The microphone button tooltip and the Processing row in Dictation settings identify **Browser** or the local processing location.
+During local dictation, the waveform shows recent microphone audio. During Browser dictation, the waveform is a static motif because the browser does not provide an audio-level signal to Leyline. The microphone button tooltip and the **Speech processing** row in Dictation settings identify **Browser** or the local processing location.
 
 Select **Finish** to stop and insert recognized text. Select **Cancel** to discard the recording. A microphone test uses **Stop test** instead. The microphone closes when dictation or a test ends. Keeping a local model ready does not keep the microphone open.
 
 Leyline inserts text at the selection captured when recording starts. If you edit the draft during recording, finishing can detect that the draft changed. Leyline then leaves the draft unchanged and shows the recognized final text as a recoverable transcript that you can copy or dismiss.
 
-Leyline cancels recording if the window loses focus, the tab becomes hidden, focus moves outside the composer, or you navigate away or change sessions. Cancellation does not guarantee a recoverable transcript. Select **Finish** before you leave the composer. If you select Send while recording, Leyline finishes dictation before it sends or queues the draft. There is no automatic send when speech recognition finishes.
+Select **Send** or press **Enter** to finish recording and send or queue the draft. During a run, **Option+Enter** finishes recording and steers the agent. These keys also work from composer controls or the page body when the text area has no focus. They do not override unrelated fields, dialogs, terminal input, or a microphone test.
+
+During recording, **Escape** does not stop dictation or the agent. After a dictation error, **Escape** dismisses the error before it can stop the agent.
+
+Leyline cancels recording if the window loses focus, the tab becomes hidden, focus moves outside the composer, or you navigate away or change sessions. Cancellation does not guarantee a recoverable transcript. Select **Finish** before you leave the composer. There is no automatic send when speech recognition finishes.
 
 ![Mobile composer with the compact dictation status capsule and recording controls](../assets/screenshots/dictation-mobile.png)
 
@@ -64,6 +70,6 @@ The default in-app shortcut is **Command+Shift+D** on macOS and **Ctrl+Shift+D**
 
 The shortcut works only while Leyline is focused. It is not a global system shortcut. Shortcut and microphone preferences are stored for this client. Model and language settings apply to the speech service.
 
-**Keep model ready** controls model memory on the speech-processing computer. When enabled, **Unload after idle** sets how long Leyline keeps the loaded model ready between recordings. This does not keep the microphone open. Disabling this option unloads the model after use; downloaded model files remain on disk.
+**Keep model ready** controls model memory on the speech-processing computer. When enabled, **Unload after idle** sets how long Leyline keeps the loaded model ready between recordings. Use whole minutes from 0 through 60. Set **0** to disable idle unloading. This does not keep the microphone open. Disabling **Keep model ready** unloads the model after use; downloaded model files remain on disk.
 
 Dictation does not provide cloud speech providers, named profiles, or cleanup models.

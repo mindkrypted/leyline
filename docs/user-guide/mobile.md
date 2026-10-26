@@ -47,6 +47,14 @@ Settings fills the mobile viewport. **Models & providers** and **MCP servers** u
 
 Use **Close Leyline settings** to return to the workspace. See [Settings](./settings) for scope, authentication, and reload behavior.
 
+### Set automatic session titles
+
+Select **Agent defaults** in **Category**, then find **Session titles**. Choose a **Title model** and set **Thinking mode** if needed. Turn on **Automatic titles**.
+
+![Mobile Session titles settings with model and thinking controls](../assets/screenshots/session-title-settings-mobile.png)
+
+See [Set automatic session titles](./settings#set-automatic-session-titles) for defaults, backend scope, and request charges.
+
 ### Share the backend with another device
 
 Select **Connections** in **Category**, then turn on **Allow network access**. Copy an address that the other device can reach.

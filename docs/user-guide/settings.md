@@ -14,11 +14,12 @@ The modal has these categories:
 | **Connections** | Network access for the native backend, saved connections, and the default connection. Each window selects its own active backend. |
 | **Dictation** | Dictation method and client preferences. Local speech model settings belong to the speech host. |
 | **Files** | File actions on the selected backend. |
-| **Agent defaults** | Global subagent and vision defaults on the selected backend. |
+| **Agent defaults** | Session titles and global subagent and vision defaults on the selected backend. |
+| **Runtime** | Idle runtime cleanup on the selected backend. |
 | **Models & providers** | Pi provider credentials, custom providers, model definitions, and catalog overrides on the selected backend. |
 | **MCP servers** | Pi's global MCP configuration on the selected backend. |
 
-**Files**, **Models & providers**, and **MCP servers** appear only when the selected backend supports them. On narrow screens, use **Category** to select a page.
+**Files**, **Runtime**, **Models & providers**, and **MCP servers** appear only when the selected backend supports them. On narrow screens, use **Category** to select a page.
 
 Dictation is available in the browser and Electron. Browser dictation stays the default in normal web browsers. **Local models** is also available in normal web browsers and Electron. See [Dictation](./dictation) for setup and processing details.
 
@@ -28,7 +29,7 @@ For local models, select and download a model explicitly. Parakeet supports Engl
 
 Trace capture has no category in this modal. Open **Session traces** or the sidebar **Trace explorer** button, then expand **Capture new runs** in the footer. See [Tracing](./tracing#control-capture).
 
-Global pi configuration stays in pi's files. Leyline stores its display preferences, connections, and subagent/vision overrides separately. See [Configuration storage](../reference/environment#pi-configuration-storage).
+Global pi configuration stays in pi's files. Leyline stores display preferences, connections, agent defaults and overrides, and runtime cleanup settings in its own `memory.sqlite` database. See [Configuration storage](../reference/environment#pi-configuration-storage).
 
 ## Manage backend connections
 
@@ -334,6 +335,21 @@ See [Images and previews](./images-and-previews#preview-a-local-file) for local 
 
 The setting controls the initial state of each new **Thought** or **Thinking** row. If no setting is saved, Leyline uses **Collapsed**. Existing rows keep their current state. This setting does not change the model's thinking level.
 
+## Set automatic session titles
+
+![Session title settings with a title model and independent thinking mode](../assets/screenshots/session-title-settings.png)
+
+Automatic titles are off by default. A **Title model** is required before you can enable them.
+
+1. Open **Settings → Agent defaults → Session titles**.
+2. Choose a **Title model**.
+3. Set **Thinking mode** if needed.
+4. Turn on **Automatic titles**.
+
+**Thinking mode** defaults to the title model's lowest supported mode, independently of the conversation's thinking level. These settings apply to all projects on the selected backend, with no project or session overrides.
+
+Each title request sends up to 1,024 characters from your first message to the chosen provider and can incur charges. It does not change the conversation model or thinking level. See [Automatic session titles](./sessions#automatic-session-titles) for eligible sessions, progress, and manual names.
+
 ## Manage the vision agent
 
 ![Agent defaults with the image-capable vision model and thinking controls](../assets/screenshots/vision-agent.png)
@@ -364,6 +380,16 @@ Open **Agent defaults → Subagents**. Change **Batch size** to a positive whole
 For a session override, open **Session details → Subagents**. Select **Use global default** to remove that override. Forks copy the override. There is no project batch-size override.
 
 Batch size limits concurrent subagents within each batch, not total work across a session or backend. Changes apply to future groups and parallel calls without reload. Running groups keep their size. See [Configure batch size](./subagents#configure-batch-size) for execution behavior.
+
+## Configure idle runtime cleanup
+
+1. Open **Settings → Runtime → Idle cleanup**.
+2. Set **Idle timeout (minutes)** to a whole number from 0 through 1440.
+3. Select **Save**.
+
+The default is 5 minutes. Set 0 to disable cleanup. This setting applies to all projects on the selected backend.
+
+Cleanup closes idle runtimes and their MCP processes without deleting sessions. Sessions open in connected windows stay loaded. Sessions with active work, queued or held tasks, or pending approvals also stay loaded. Reopen a session to restore its history and connections.
 
 ## Inspect runtime state
 
