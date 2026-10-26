@@ -521,7 +521,14 @@ export function useDictation(options) {
   }
 
   function handleKeydown(event) {
-    if (!supported.value || event.repeat || event.isComposing || !options.shortcutAllowed(event)) return false
+    if (!supported.value || event.repeat || event.isComposing) return false
+    if (operation?.purpose === 'dictation' && event.key === 'Enter' && !event.shiftKey && options.submitAllowed(event)) {
+      event.preventDefault()
+      event.stopPropagation()
+      options.submit(event)
+      return true
+    }
+    if (!options.shortcutAllowed(event)) return false
     if (!operation) syncClientPreferences()
     const preferences = operation?.settings || settings.value
     const shortcut = preferences.shortcut

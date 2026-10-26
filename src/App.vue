@@ -690,20 +690,14 @@ const dictation = reactive(useDictation({
     return true
   },
   openSettings: () => openGlobalSettings('dictation'),
+  submit: event => homeComposerVisible.value
+    ? handleStartComposerKeydown(event) : handleComposerKeydown(event),
+  submitAllowed: dictationInputAllowed,
   focusAllowed: event => {
     const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
     return Boolean(composer?.form?.contains(event.target))
   },
-  shortcutAllowed: event => {
-    if (isComposingInput(event) || composerComposing.value || settingsOpen.value
-      || anyEscapeTargetOpen(false, true) || terminalEl.value?.contains(event.target)) return false
-    const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
-    const target = event.target
-    if (target?.closest?.('input, textarea, [contenteditable="true"], [role="dialog"], [role="menu"]')) {
-      return target === composer?.getTextarea()
-    }
-    return target === document.body || composer?.form?.contains(target)
-  },
+  shortcutAllowed: event => !anyEscapeTargetOpen(false, true) && dictationInputAllowed(event),
 }))
 watch(draft, () => { draftRevision.value++ }, { flush: 'sync' })
 watch([
@@ -3711,6 +3705,18 @@ function handleComposerInputBlur(event) {
 
 function isComposingInput(event) {
   return event.isComposing || event.keyCode === 229 || compositionInputs.get(event.target)?.composing
+}
+
+function dictationInputAllowed(event) {
+  if (isComposingInput(event) || composerComposing.value || settingsOpen.value
+    || terminalEl.value?.contains(event.target)) return false
+  const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
+  if (!composer?.form || composer.form.closest('[inert]')) return false
+  const target = event.target
+  if (target?.closest?.('input, textarea, [contenteditable="true"], [role="dialog"], [role="menu"]')) {
+    return target === composer.getTextarea()
+  }
+  return target === document.body || composer.form.contains(target)
 }
 
 function handleComposerKeydown(event) {
