@@ -8,6 +8,8 @@ import { DICTATION_MODELS, normalizeDictationSettings } from '../lib/dictation.j
 
 const hostKeys = ['modelId', 'language', 'keepModelWarm', 'idleMinutes']
 
+class DownloadSourceError extends Error {}
+
 export function createDictationStorage(onChange, onError, { host = false } = {}) {
   const settingsKey = host ? 'dictation.host-settings.v1' : 'dictation.settings.v1'
   const root = process.env.LEYLINE_MEMORY_DIR || join(homedir(), '.local', 'share', 'leyline')
@@ -216,17 +218,9 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
     const job = { controller, progress: 0 }
     downloads.set(model.id, job)
     job.promise = (async () => {
-      const temporary = join(directory, `${model.filename}.${randomUUID()}.part`)
-      let file
-      let reader
       let lock
-      let idleTimer
       let lastNotice = 0
       const deadline = setTimeout(() => controller.abort('timeout'), 30 * 60 * 1000)
-      const resetIdle = () => {
-        clearTimeout(idleTimer)
-        idleTimer = setTimeout(() => controller.abort('timeout'), 30000)
-      }
       try {
         lock = await modelLock(model)
         controller.signal.throwIfAborted()
@@ -235,53 +229,96 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
           installed.add(model.id)
           return
         }
-        resetIdle()
-        const response = await fetch(model.url, { signal: controller.signal })
-        if (!response.ok || !response.body || new URL(response.url).protocol !== 'https:') {
-          throw new Error('Could not download the dictation model')
-        }
-        const contentLength = response.headers.get('content-length')
-        if (contentLength && Number(contentLength) !== model.bytes) {
-          throw new Error('The dictation model download has an unexpected size')
-        }
-        file = await open(temporary, 'wx', 0o600)
-        reader = response.body.getReader()
-        const hash = createHash('sha256')
-        let bytes = 0
-        while (true) {
-          resetIdle()
-          const { done, value } = await reader.read()
-          if (done) break
-          if (controller.signal.aborted) throw new Error('Dictation model download cancelled')
-          bytes += value.byteLength
-          if (bytes > model.bytes) throw new Error('The dictation model download is too large')
-          hash.update(value)
-          let offset = 0
-          while (offset < value.byteLength) {
-            const result = await file.write(value, offset, value.byteLength - offset)
-            if (!result.bytesWritten) throw new Error('Could not write the dictation model')
-            offset += result.bytesWritten
-          }
-          job.progress = bytes / model.bytes
-          if (Date.now() - lastNotice >= 150) {
-            lastNotice = Date.now()
+        const urls = [model.url, ...(model.fallbackUrls || [])]
+        for (const [index, url] of urls.entries()) {
+          controller.signal.throwIfAborted()
+          lock.check()
+          if (index > 0) {
+            job.progress = 0
             onChange()
           }
+          const temporary = join(directory, `${model.filename}.${randomUUID()}.part`)
+          const source = new AbortController()
+          const signal = AbortSignal.any([controller.signal, source.signal])
+          let file
+          let reader
+          let idleTimer
+          const resetIdle = () => {
+            clearTimeout(idleTimer)
+            idleTimer = setTimeout(() => source.abort('timeout'), 30000)
+          }
+          try {
+            resetIdle()
+            const response = await fetch(url, { signal }).catch(cause => {
+              throw new DownloadSourceError('Could not download the dictation model', { cause })
+            })
+            reader = response.body?.getReader()
+            if (!response.ok || !reader || new URL(response.url).protocol !== 'https:') {
+              throw new DownloadSourceError('Could not download the dictation model')
+            }
+            const contentLength = response.headers.get('content-length')
+            if (contentLength && Number(contentLength) !== model.bytes) {
+              throw new DownloadSourceError('The dictation model download has an unexpected size')
+            }
+            file = await open(temporary, 'wx', 0o600)
+            const hash = createHash('sha256')
+            let bytes = 0
+            while (true) {
+              resetIdle()
+              const { done, value } = await reader.read().catch(cause => {
+                throw new DownloadSourceError('Could not download the dictation model', { cause })
+              })
+              if (signal.aborted) throw new DownloadSourceError('Could not download the dictation model')
+              if (done) break
+              bytes += value.byteLength
+              if (bytes > model.bytes) throw new DownloadSourceError('The dictation model download is too large')
+              hash.update(value)
+              let offset = 0
+              while (offset < value.byteLength) {
+                const result = await file.write(value, offset, value.byteLength - offset)
+                if (!result.bytesWritten) throw new Error('Could not write the dictation model')
+                offset += result.bytesWritten
+              }
+              job.progress = bytes / model.bytes
+              if (Date.now() - lastNotice >= 150) {
+                lastNotice = Date.now()
+                onChange()
+              }
+            }
+            clearTimeout(idleTimer)
+            if (bytes !== model.bytes || hash.digest('hex') !== model.sha256) {
+              throw new DownloadSourceError('The dictation model download failed its integrity check')
+            }
+            await file.sync()
+            await file.close()
+            file = null
+            if (controller.signal.aborted || closed) throw new Error('Dictation model download cancelled')
+            lock.check()
+            await rename(temporary, path(model))
+            if (controller.signal.aborted || closed) {
+              await rm(path(model), { force: true })
+              throw new Error('Dictation model download cancelled')
+            }
+            installed.add(model.id)
+            return
+          } catch (error) {
+            if (!(error instanceof DownloadSourceError) || controller.signal.aborted || closed || index === urls.length - 1) {
+              if (error instanceof DownloadSourceError && source.signal.reason === 'timeout') {
+                throw new DownloadSourceError('The dictation model download timed out. Retry the download.', { cause: error })
+              }
+              throw error
+            }
+          } finally {
+            clearTimeout(idleTimer)
+            source.abort()
+            await reader?.cancel().catch(() => {})
+            try {
+              await file?.close()
+            } finally {
+              await rm(temporary, { force: true })
+            }
+          }
         }
-        if (bytes !== model.bytes || hash.digest('hex') !== model.sha256) {
-          throw new Error('The dictation model download failed its integrity check')
-        }
-        await file.sync()
-        await file.close()
-        file = null
-        if (controller.signal.aborted || closed) throw new Error('Dictation model download cancelled')
-        lock.check()
-        await rename(temporary, path(model))
-        if (controller.signal.aborted || closed) {
-          await rm(path(model), { force: true })
-          throw new Error('Dictation model download cancelled')
-        }
-        installed.add(model.id)
       } catch (error) {
         const timedOut = controller.signal.reason === 'timeout'
         if (!closed && (!controller.signal.aborted || timedOut)) {
@@ -289,10 +326,6 @@ export function createDictationStorage(onChange, onError, { host = false } = {})
         }
       } finally {
         clearTimeout(deadline)
-        clearTimeout(idleTimer)
-        await reader?.cancel().catch(() => {})
-        await file?.close().catch(() => {})
-        await rm(temporary, { force: true }).catch(() => {})
         await lock?.release()
         downloads.delete(model.id)
         if (!closed) onChange()
