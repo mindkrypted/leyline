@@ -120,11 +120,17 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
     }
   }
 
-  async function generate(text, settings) {
+  async function generate(text, images, settings) {
     if (closed || !isCurrent() || protectedTitle(session)) return
     const separator = settings.model.indexOf('/')
     const model = session.modelRuntime.getModel(settings.model.slice(0, separator), settings.model.slice(separator + 1))
     if (!model) return
+    const titleText = text.slice(0, 1024)
+    const titleImages = model.input?.includes('image') ? images : []
+    if (!titleText.trim() && !titleImages.length) return
+    const content = titleImages.length
+      ? [...(titleText.trim() ? [{ type: 'text', text: titleText }] : []), ...titleImages]
+      : titleText
     const supported = getSupportedThinkingLevels(model)
     const thinking = supported.includes(settings.thinking) ? settings.thinking : supported[0] || 'off'
     const thinkingBudget = thinking === 'off' ? 0 : thinkingBudgetForLevel(thinking)
@@ -141,7 +147,7 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
       try {
         const stream = session.modelRuntime.streamSimple(model, {
           systemPrompt: titlePrompt,
-          messages: [{ role: 'user', content: text.slice(0, 1024), timestamp: Date.now() }],
+          messages: [{ role: 'user', content, timestamp: Date.now() }],
         }, {
           signal: controller.signal,
           maxTokens: outputBudget,
@@ -176,7 +182,7 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
       prepared = true
       try {
         const settings = getSessionTitleSettings()
-        if (!settings.enabled || !settings.model || !text.trim() || protectedTitle(session)
+        if (!settings.enabled || !settings.model || protectedTitle(session)
           || session.sessionManager.getEntries().some(entry => entry.type === 'message' && entry.message.role === 'user')) {
           cancel()
           return
@@ -191,8 +197,9 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
           if (event.type === 'session_info_changed') cancel()
           if (closed || started || event.type !== 'message_end' || event.message?.role !== 'user') return
           started = true
+          const images = Array.isArray(event.message.content) ? event.message.content.filter(block => block.type === 'image') : []
           queueMicrotask(() => {
-            void generate(text, settings).catch(() => {}).finally(cancel)
+            void generate(text, images, settings).catch(() => {}).finally(cancel)
           })
         })
       } catch {
