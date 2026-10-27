@@ -102,6 +102,7 @@ async function titleResponse(stream, signal, thinkingLimit) {
 export function createSessionTitleGenerator(session, isCurrent, onGeneratingChange) {
   let closed = false
   let prepared = false
+  let accepted = false
   let generating = false
   let unsubscribe
   let timer
@@ -125,9 +126,13 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
     reset()
   }
 
+  function canRebind() {
+    return !closed && !accepted && !protectedTitle(session)
+      && !session.sessionManager.getEntries().some(entry => entry.type === 'message' && entry.message.role === 'user')
+  }
+
   function configuration() {
-    if (closed || prepared || !isCurrent() || protectedTitle(session)
-      || session.sessionManager.getEntries().some(entry => entry.type === 'message' && entry.message.role === 'user')) return
+    if (prepared || !isCurrent() || !canRebind()) return
     const settings = getSessionTitleSettings()
     if (!settings.enabled || !settings.model) return
     const separator = settings.model.indexOf('/')
@@ -190,6 +195,7 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
 
   return {
     cancel,
+    canRebind,
     eligibility() {
       try {
         const config = configuration()
@@ -207,7 +213,6 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
         job = { model: settings.model, thinking: settings.thinking, cancel }
         const currentJob = job
         pendingTitles.add(job)
-        let accepted = false
         let received = false
         unsubscribe = session.subscribe(event => {
           if (event.type === 'session_info_changed') cancel()

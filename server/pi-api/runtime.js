@@ -1933,7 +1933,9 @@ function trashStamp() {
 
 const reloadSession = trackRuntimeCreation(async (handle) => {
   requireSessionMutation(handle)
-  const session = handle.runtime.session
+  const runtime = handle.runtime
+  const session = runtime.session
+  const restoreTitle = handle.sessionTitle?.canRebind() === true
   handle.sessionTitle?.cancel()
   handle.reloading = true
   let replacement
@@ -1986,6 +1988,12 @@ const reloadSession = trackRuntimeCreation(async (handle) => {
     throw error
   } finally {
     handle.reloading = false
+    if (!runtimeShuttingDown && !handle.disposalPromise
+      && runtimeHandles.get(handle.sessionId) === handle
+      && (handle.runtime === runtime || handle.runtime === replacement)) {
+      if (restoreTitle) bindSessionTitle(handle)
+      events.broadcastActiveSession(handle)
+    }
     handle.promptQueue?.schedule()
   }
 })
@@ -2111,15 +2119,7 @@ const createNewSession = trackRuntimeCreation(async (cwd, kind = 'session') => {
     runtimeHandles.set(handle.sessionId, handle)
     forceOneAtATime(runtime.session)
     await bindRuntimeHandle(handle)
-    if (kind === 'session') {
-      handle.sessionTitle = createSessionTitleGenerator(runtime.session, () => !runtimeShuttingDown
-        && runtimeHandles.get(sessionId) === handle && handle.runtime === runtime
-        && !handle.disposalPromise && !handle.reloading && !handle.changingBranch, (generating) => {
-        if (runtimeHandles.get(sessionId) !== handle || handle.runtime !== runtime) return
-        handle.titleGenerating = generating
-        events.broadcastActiveSession(handle)
-      })
-    }
+    if (kind === 'session') bindSessionTitle(handle)
     setActiveHandle(handle)
     return activeSessionDto(handle)
   } catch (error) {
@@ -2127,6 +2127,19 @@ const createNewSession = trackRuntimeCreation(async (cwd, kind = 'session') => {
     throw error
   }
 })
+
+function bindSessionTitle(handle) {
+  const { runtime, sessionId } = handle
+  const generator = createSessionTitleGenerator(runtime.session, () => !runtimeShuttingDown
+    && runtimeHandles.get(sessionId) === handle && handle.runtime === runtime
+    && !handle.disposalPromise && !handle.reloading && !handle.changingBranch, (generating) => {
+    if (runtimeHandles.get(sessionId) !== handle || handle.runtime !== runtime) return
+    handle.titleGenerating = generating
+    events.broadcastActiveSession(handle)
+  })
+  if (generator.canRebind()) handle.sessionTitle = generator
+  else generator.cancel()
+}
 
 function activeSessionDto(handle = activeHandle) {
   return runtimeSessionDto(handle)
