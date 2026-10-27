@@ -72,6 +72,7 @@ export function useSessionWorkspace({
     },
   })
   const runtimeSessionsById = ref({})
+  const pendingSessionTitles = ref({})
   const projectAgeNow = ref(Date.now())
   const startupRun = ref(null)
   const sessionHandoff = ref(null)
@@ -704,6 +705,7 @@ export function useSessionWorkspace({
       isBashRunning: state.isBashRunning === true,
       isCompacting: state.isCompacting === true,
       titleGenerating: state.titleGenerating === true,
+      titleGeneration: state.titleGeneration || null,
       compactionCutEntryId: state.compactionCutEntryId || '',
       snapshotRevision: runtimeSession.snapshotRevision,
       queuedCount: queuedCount(state.queuedMessages)
@@ -727,6 +729,7 @@ export function useSessionWorkspace({
           settledRevision: finiteRuntimeNumber(activity.settledRevision),
         } : {}),
     }
+    if (patch.titleGenerating || !patch.titleGeneration) clearPendingSessionTitle(runtimeSession.id)
     const wasBusy = previous?.isStreaming || previous?.isCompacting || previous?.isBashRunning
     const isBusy = patch.isStreaming || patch.isCompacting || patch.isBashRunning
     const newlySettled = previous
@@ -805,6 +808,25 @@ export function useSessionWorkspace({
 
   function sessionTitleGenerating(id) {
     return runtimeSessionsById.value[id]?.titleGenerating === true
+      || Boolean(pendingSessionTitles.value[id])
+  }
+
+  function clearPendingSessionTitle(id) {
+    if (!pendingSessionTitles.value[id]) return
+    const next = { ...pendingSessionTitles.value }
+    delete next[id]
+    pendingSessionTitles.value = next
+  }
+
+  function beginSessionTitle(id, text, images) {
+    const eligibility = runtimeSessionsById.value[id]?.titleGeneration
+    if (!eligibility || pendingSessionTitles.value[id]
+      || (!text.slice(0, 1024).trim() && !(eligibility.supportsImages && images.length))) return
+    const token = Symbol()
+    pendingSessionTitles.value = { ...pendingSessionTitles.value, [id]: token }
+    return () => {
+      if (pendingSessionTitles.value[id] === token) clearPendingSessionTitle(id)
+    }
   }
 
   function sessionRuntimeStatus(id) {
@@ -1860,6 +1882,7 @@ export function useSessionWorkspace({
     sessionSelectionToken += 1
     sessionListRequestToken += 1
     startRuntimeRequests.clear()
+    pendingSessionTitles.value = {}
     clearInterval(projectAgeTimer)
     clearTimeout(refreshTimer)
     clearTimeout(sessionHandoffSettlingTimer)
@@ -1870,6 +1893,7 @@ export function useSessionWorkspace({
     availableModels,
     availableThinkingLevels,
     beginRenameSession,
+    beginSessionTitle,
     beginStartupRun,
     cancelDeleteSession,
     cancelDeleteProject,

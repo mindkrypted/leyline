@@ -108,16 +108,31 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
   let controller
   let job
 
-  function cancel() {
-    closed = true
+  function reset() {
     clearTimeout(timer)
     unsubscribe?.()
     controller?.abort()
     pendingTitles.delete(job)
+    job = undefined
     if (generating) {
       generating = false
       onGeneratingChange?.(false)
     }
+  }
+
+  function cancel() {
+    closed = true
+    reset()
+  }
+
+  function configuration() {
+    if (closed || prepared || !isCurrent() || protectedTitle(session)
+      || session.sessionManager.getEntries().some(entry => entry.type === 'message' && entry.message.role === 'user')) return
+    const settings = getSessionTitleSettings()
+    if (!settings.enabled || !settings.model) return
+    const separator = settings.model.indexOf('/')
+    const model = session.modelRuntime.getModel(settings.model.slice(0, separator), settings.model.slice(separator + 1))
+    if (model) return { settings, model }
   }
 
   async function generate(text, images, settings) {
@@ -138,8 +153,6 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
       ? MIN_ANSWER_TOKENS + (model.api === 'openai-completions' ? thinkingBudget : 0)
       : 256
     const thinkingLimit = thinkingBudget ? thinkingBudget * 8 : 1024
-    generating = true
-    onGeneratingChange?.(true)
     let response
     for (let attempt = 0; attempt <= maxTitleRetries; attempt++) {
       const started = performance.now()
@@ -177,31 +190,49 @@ export function createSessionTitleGenerator(session, isCurrent, onGeneratingChan
 
   return {
     cancel,
-    prepare(text) {
-      if (closed || prepared) return
-      prepared = true
+    eligibility() {
       try {
-        const settings = getSessionTitleSettings()
-        if (!settings.enabled || !settings.model || protectedTitle(session)
-          || session.sessionManager.getEntries().some(entry => entry.type === 'message' && entry.message.role === 'user')) {
-          cancel()
-          return
-        }
+        const config = configuration()
+        return config ? { supportsImages: config.model.input?.includes('image') === true } : null
+      } catch { return null }
+    },
+    prepare(text, images = []) {
+      try {
+        const config = configuration()
+        if (!config || (!text.slice(0, 1024).trim()
+          && !(images.length && config.model.input?.includes('image')))) return
+        const { settings } = config
+        prepared = true
         controller = new AbortController()
         job = { model: settings.model, thinking: settings.thinking, cancel }
+        const currentJob = job
         pendingTitles.add(job)
-        timer = setTimeout(cancel, 30000)
-        timer.unref?.()
-        let started = false
+        let accepted = false
+        let received = false
         unsubscribe = session.subscribe(event => {
           if (event.type === 'session_info_changed') cancel()
-          if (closed || started || event.type !== 'message_end' || event.message?.role !== 'user') return
-          started = true
+          if (closed || !accepted || received || event.type !== 'message_end' || event.message?.role !== 'user') return
+          received = true
           const images = Array.isArray(event.message.content) ? event.message.content.filter(block => block.type === 'image') : []
           queueMicrotask(() => {
             void generate(text, images, settings).catch(() => {}).finally(cancel)
           })
         })
+        generating = true
+        onGeneratingChange?.(true)
+        return {
+          start() {
+            if (closed || accepted || job !== currentJob) return
+            accepted = true
+            timer = setTimeout(cancel, 30000)
+            timer.unref?.()
+          },
+          discard() {
+            if (closed || accepted || job !== currentJob) return
+            prepared = false
+            reset()
+          },
+        }
       } catch {
         cancel()
       }

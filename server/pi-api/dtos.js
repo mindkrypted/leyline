@@ -101,6 +101,7 @@ export function activeSessionStateDto(handle) {
     ),
     isBashRunning: Boolean(handle.bashPromise || handle.runtime.session.isBashRunning),
     titleGenerating: handle.titleGenerating === true,
+    titleGeneration: handle.sessionTitle?.eligibility() || null,
     bashExecution: handle.bashExecution ? { ...handle.bashExecution } : null,
     promptQueue: handle.promptQueue?.snapshot()
       || { revision: 0, held: false, error: '', items: [] },

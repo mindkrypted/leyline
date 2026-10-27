@@ -38,7 +38,11 @@ export function createPiSettingsHandler(api) {
         if (req.method === 'PUT') return json(res, setRuntimeSettings(values))
       } else if (url.pathname === '/settings/session-titles') {
         if (req.method === 'GET') return json(res, getSessionTitleSettings())
-        if (req.method === 'PUT') return json(res, setSessionTitleSettings(values))
+        if (req.method === 'PUT') {
+          const settings = setSessionTitleSettings(values)
+          api.refreshSessionTitleEligibility()
+          return json(res, settings)
+        }
       } else if (url.pathname === '/settings/providers') {
         if (req.method === 'GET') return json(res, await providers.list(target, { refresh: url.searchParams.get('refresh') === '1' }))
         if (req.method === 'PUT') return json(res, await providers.saveProvider(bodyTarget, values))

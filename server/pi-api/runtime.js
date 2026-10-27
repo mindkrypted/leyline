@@ -810,6 +810,7 @@ async function promptSession(
   handle.pendingPromptControllers ||= new Set()
   handle.pendingPromptControllers.add(controller)
   let release
+  let titlePreparation
 
   try {
     if (controller.signal.aborted) throw new Error('Prompt cancelled')
@@ -835,6 +836,10 @@ async function promptSession(
     if (waitingForPrompt()) return retainPrompt()
     requireInitializedSession(handle)
     if (handle.runtime.session !== session) throw new Error('Session changed before sending')
+    if (!isExtensionCommand(session, promptText)) {
+      titlePreparation = handle.sessionTitle?.prepare(promptText, promptImages)
+      if (titlePreparation) controller.signal.addEventListener('abort', titlePreparation.discard, { once: true })
+    }
 
     const model = session.state?.model || session.model
     const modelSupportsImages = Boolean(model?.input?.includes('image'))
@@ -863,6 +868,7 @@ async function promptSession(
         controller.signal,
         undefined,
         onAccepted,
+        titlePreparation,
       )
       if (controller.signal.aborted && disposition === 'started') {
         await session.abort()
@@ -887,6 +893,7 @@ async function promptSession(
         controller.signal,
         registration,
         onAccepted,
+        titlePreparation,
       )
       if (controller.signal.aborted && disposition === 'started') {
         registration.cancel()
@@ -901,6 +908,10 @@ async function promptSession(
       throw error
     }
   } finally {
+    if (titlePreparation) {
+      controller.signal.removeEventListener('abort', titlePreparation.discard)
+      titlePreparation.discard()
+    }
     signal?.removeEventListener?.('abort', abortPrompt)
     handle.pendingPromptControllers.delete(controller)
     release?.()
@@ -959,6 +970,7 @@ async function runSessionPrompt(
   signal,
   visionRegistration,
   onAccepted,
+  titlePreparation,
 ) {
   const session = handle.runtime.session
   let handoff
@@ -976,7 +988,7 @@ async function runSessionPrompt(
           if (result === 'started') {
             visionRegistration?.start()
             handoff = createPromptHandoff(handle, handoffId)
-            handle.sessionTitle?.prepare(text)
+            titlePreparation?.start()
           }
           onAccepted?.(result)
           resolve()
@@ -2177,6 +2189,12 @@ function broadcastActiveSession(handle = activeHandle) {
   events.broadcastActiveSession(handle)
 }
 
+function refreshSessionTitleEligibility() {
+  for (const handle of runtimeHandles.values()) {
+    if (handle.sessionTitle) events.broadcastActiveSession(handle)
+  }
+}
+
 function broadcastEvent(type, data) {
   events.broadcastEvent(type, data)
 }
@@ -2509,6 +2527,7 @@ export function createPiRuntimeApi() {
   readGitReview,
   readGitReviewDiff,
   readJson,
+  refreshSessionTitleEligibility,
   reloadSession,
   renameSession,
   renderSessionExportHtml,

@@ -507,6 +507,7 @@ const {
   availableModels,
   availableThinkingLevels,
   beginRenameSession,
+  beginSessionTitle,
   beginStartupRun,
   cancelDeleteProject,
   cancelDeleteSession,
@@ -3221,6 +3222,9 @@ async function submitDraft(streamingBehavior) {
   if (!startsEmptySession && !startupRun.value) pulseComposerCommit()
   let localEntry
   let promptAccepted = false
+  const releaseTitle = !editing && startsTurn && !initializesResearchSession
+    ? beginSessionTitle(sessionId, text, images)
+    : undefined
   try {
     localEntry = beginUserTurn(text, images)
     promptSubmitting.value = true
@@ -3287,6 +3291,7 @@ async function submitDraft(streamingBehavior) {
       }
     }
   } finally {
+    releaseTitle?.()
     if (composerMotion.isCurrent(motionToken)) {
       if (promptAccepted) composerMotion.ready(motionToken)
       else cancelComposerMotion()

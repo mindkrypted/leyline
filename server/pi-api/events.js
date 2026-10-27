@@ -255,6 +255,7 @@ function compactActiveSession(session) {
       isBashRunning: state.isBashRunning === true,
       isCompacting: state.isCompacting === true,
       titleGenerating: state.titleGenerating === true,
+      titleGeneration: state.titleGeneration || null,
       compactionCutEntryId: state.compactionCutEntryId || '',
       pendingToolCalls,
       pendingTools,
