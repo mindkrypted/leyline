@@ -215,6 +215,7 @@ const draftRevision = ref(0)
 const composerComposing = ref(false)
 const dictationSubmissionPending = ref(false)
 let dictationSubmission = null
+let dictationEscapeHeld = false
 const seenEntryIds = ref(new Set())
 const animatingEntryIds = ref(new Set())
 const composerRef = ref(null)
@@ -698,7 +699,7 @@ const dictation = reactive(useDictation({
     const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
     return Boolean(composer?.form?.contains(event.target))
   },
-  shortcutAllowed: event => !anyEscapeTargetOpen(false, true) && dictationInputAllowed(event),
+  shortcutAllowed: event => !anyEscapeTargetOpen(false, true) && dictationInputAllowed(event, true),
 }))
 watch(draft, () => { draftRevision.value++ }, { flush: 'sync' })
 watch([
@@ -3712,7 +3713,7 @@ function isComposingInput(event) {
   return event.isComposing || event.keyCode === 229 || compositionInputs.get(event.target)?.composing
 }
 
-function dictationInputAllowed(event) {
+function dictationInputAllowed(event, allowSession = false) {
   if (isComposingInput(event) || composerComposing.value || settingsOpen.value
     || terminalEl.value?.contains(event.target)) return false
   const composer = homeComposerVisible.value ? startComposerRef.value : composerRef.value
@@ -3722,6 +3723,7 @@ function dictationInputAllowed(event) {
     return target === composer.getTextarea()
   }
   return target === document.body || composer.form.contains(target)
+    || (allowSession && Boolean(selectedSessionId.value))
 }
 
 function handleComposerKeydown(event) {
@@ -3902,6 +3904,14 @@ async function submitStartDraft() {
 
 function handleGlobalKeydown(event) {
   if (isComposingInput(event)) return
+  if (event.key === 'Escape') {
+    if (dictationEscapeHeld && event.repeat) {
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    dictationEscapeHeld = false
+  }
   if (dictation.handleKeydown(event)) return
   if (settingsOpen.value) {
     if (event.key === 'Escape') {
@@ -4057,6 +4067,8 @@ function handleEscape(event) {
   if (dictation.active) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
+    dictationEscapeHeld = true
+    void dictation.cancel()
     return
   }
   if (!anyEscapeTargetOpen() && (dictation.phase === 'error' || dictation.error)) {
