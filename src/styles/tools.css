@@ -2473,15 +2473,6 @@ dialog.subagent-inspector:not([open]) {
   font-size: inherit;
 }
 
-.subagent-inspector-output blockquote {
-  border: 0;
-  border-left: 2px solid #45454b;
-  border-radius: 0;
-  padding: 0 0 0 14px;
-  background: transparent;
-  color: #b0b1b9;
-}
-
 .subagent-inspector-output hr {
   margin: 24px 0;
   border: 0;

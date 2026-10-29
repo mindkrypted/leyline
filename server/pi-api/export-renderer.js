@@ -1671,10 +1671,13 @@ button, input, textarea { color: inherit; font: inherit; }
   font-weight: 700;
 }
 .markdown-body blockquote {
-  border-left: 2px solid #4f5360;
-  padding-left: 10px;
-  color: #adb1bc;
+  margin: 0 0 12px;
+  border-left: 4px solid #55585d;
+  padding: 0 14px;
+  color: #a7a7ad;
 }
+.markdown-body blockquote > :first-child { margin-top: 0; }
+.markdown-body blockquote > :last-child { margin-bottom: 0; }
 .markdown-body a { color: #bfb5ff; text-decoration: none; }
 .markdown-body .markdown-relative-link { border-bottom: 1px dotted currentColor; color: #bfb5ff; }
 .tool-card {
@@ -3349,15 +3352,6 @@ dialog.subagent-inspector:not([open]) {
   padding: 0;
   color: #d0ced9;
   font-size: inherit;
-}
-
-.subagent-inspector-output blockquote {
-  border: 0;
-  border-left: 2px solid #45454b;
-  border-radius: 0;
-  padding: 0 0 0 14px;
-  background: transparent;
-  color: #b0b1b9;
 }
 
 .subagent-inspector-output hr {

@@ -941,11 +941,18 @@
 }
 
 .markdown-body blockquote {
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  background: #15161b;
-  padding: 9px 12px;
-  color: #adb1bc;
+  margin: 0 0 12px;
+  border-left: 4px solid #55585d;
+  padding: 0 14px;
+  color: #a7a7ad;
+}
+
+.markdown-body blockquote > :first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote > :last-child {
+  margin-bottom: 0;
 }
 
 .markdown-body a {
