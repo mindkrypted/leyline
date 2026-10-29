@@ -88,6 +88,7 @@ import {
   imageBlocksFor,
   imageSrc,
   messageBlocksFor,
+  renderedText,
   renderedToolJson,
   textFromBlocks,
   toolCommandCode,
@@ -926,11 +927,14 @@ const {
 })
 const transcriptPreferences = useTranscriptPreferences()
 const {
+  autolinkBareFilenames,
   error: transcriptPreferencesError,
   load: loadTranscriptPreferences,
+  setAutolinkBareFilenames,
   setThinkingDefault,
   thinkingDefault,
 } = transcriptPreferences
+const autolinkPreview = computed(() => renderedText('README.md and example.com'))
 const thinkingInitiallyExpanded = computed(
   () => thinkingDefault.value === 'expanded',
 )
@@ -5556,6 +5560,32 @@ function closePickerMenus() {
           <p v-if="thinkingDefault === 'expanded'">I’ll check the active branch and its runtime state before making a change.</p>
         </div>
         <p class="settings-note">This setting does not change the model’s thinking level.</p>
+        <div class="settings-choice-group">
+          <span>
+            <strong>Link bare filenames as web addresses</strong>
+            <small>How filenames such as README.md appear in transcripts</small>
+          </span>
+          <div class="settings-choice-options" :data-active="autolinkBareFilenames ? 'expanded' : 'collapsed'" role="group" aria-label="Bare filename links">
+            <span class="settings-choice-thumb" aria-hidden="true" />
+            <button
+              type="button"
+              :class="{ active: !autolinkBareFilenames }"
+              :aria-pressed="!autolinkBareFilenames"
+              @click="setAutolinkBareFilenames(false)"
+            >Off</button>
+            <button
+              type="button"
+              :class="{ active: autolinkBareFilenames }"
+              :aria-pressed="autolinkBareFilenames"
+              @click="setAutolinkBareFilenames(true)"
+            >On</button>
+          </div>
+        </div>
+        <p class="settings-note">Off keeps bare filenames as plain text. On restores Markdown autolinking. Explicit URLs and local-file links are unaffected.</p>
+        <div class="settings-thought-preview" aria-label="Filename link preview">
+          <span>Preview</span>
+          <div class="entry-text markdown-body" v-html="autolinkPreview"></div>
+        </div>
       </template>
       <template #files>
         <FileLinkSettings ref="piSettingsPane" :backend-name="activeBackendConnection.name" />
@@ -5816,6 +5846,18 @@ function closePickerMenus() {
                   Source
                 </button>
               </div>
+              <button
+                v-if="fullscreenTool.preview?.path"
+                type="button"
+                @click="copyTranscriptItem('file-path', fullscreenTool.preview.path)"
+              >{{ copiedEntryId === 'file-path' ? 'Copied' : 'Copy path' }}</button>
+              <button
+                v-if="fullscreenTool.preview?.path"
+                type="button"
+                aria-label="Tool file actions"
+                aria-haspopup="menu"
+                @click="openFileActionMenu(fullscreenTool.preview, $event)"
+              >Actions</button>
               <button
                 class="copy-button"
                 type="button"
