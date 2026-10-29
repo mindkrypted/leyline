@@ -35,7 +35,7 @@ export async function bindRuntimeHandle(handle, events) {
         onError: (error) => {
           events.broadcastEvent('extension_error', {
             activeSessionId: handle.sessionId,
-            error: { message: error?.message || String(error) },
+            error: { message: error?.error || error?.message || String(error) },
           })
         },
       })

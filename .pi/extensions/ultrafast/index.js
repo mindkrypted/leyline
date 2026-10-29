@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
+import { clearSessionServiceTier, readSessionServiceTier, saveSessionServiceTier } from '../../../server/pi-api/service-tiers.js'
 import {
   supportedServiceTiers,
   SERVICE_TIER_COMMAND,
@@ -21,6 +22,7 @@ export default async function (pi) {
   let requestBoundaryAvailable = false
   let compacting = false
   let getProviderRequest
+  let restoreContext
   let requests = new WeakMap()
   const responses = new Map()
 
@@ -54,12 +56,31 @@ export default async function (pi) {
   }
 
   function reset(_event, ctx) {
+    restoreContext = undefined
     requestCleanup(ctx)
-    if (tier !== 'standard' && ctx.signal) {
-      resetPending = true
-      return
+    if (tier !== 'standard' && ctx.signal) resetPending = true
+    else disable(ctx)
+    clearSessionServiceTier(ctx.sessionManager.getSessionId())
+  }
+
+  function restoreTier() {
+    if (!requestBoundaryAvailable || !restoreContext) return
+    const ctx = restoreContext
+    restoreContext = undefined
+    try {
+      const saved = readSessionServiceTier(ctx.sessionManager.getSessionId())
+      if (!saved) return
+      if (saved.provider !== ctx.model?.provider || saved.id !== ctx.model?.id
+        || saved.api !== ctx.model?.api || !availableTiers(ctx, ctx.model).includes(saved.tier)) {
+        clearSessionServiceTier(ctx.sessionManager.getSessionId())
+        return
+      }
+      tier = saved.tier
+      tierModel = { ...ctx.model }
+      publish(ctx)
+    } catch (error) {
+      ctx.ui.notify(`Could not restore speed: ${error.message}`, 'error')
     }
-    disable(ctx)
   }
 
   pi.on('session_start', (_event, ctx) => {
@@ -68,9 +89,11 @@ export default async function (pi) {
     resetPending = false
     cleanupPending = false
     compacting = false
+    restoreContext = ctx
     requests = new WeakMap()
     responses.clear()
     publish(ctx)
+    restoreTier()
   })
   pi.on('model_select', reset)
   pi.on('session_before_compact', () => { compacting = true })
@@ -101,6 +124,7 @@ export default async function (pi) {
     requestBoundaryAvailable = false
     compacting = false
     getProviderRequest = undefined
+    restoreContext = undefined
     requests = new WeakMap()
     responses.clear()
   })
@@ -108,6 +132,8 @@ export default async function (pi) {
   function setTier(nextTier, ctx) {
     if (!SERVICE_TIERS.includes(nextTier)) return
     if (nextTier === 'standard') {
+      clearSessionServiceTier(ctx.sessionManager.getSessionId())
+      restoreContext = undefined
       disable(ctx)
       return
     }
@@ -116,6 +142,8 @@ export default async function (pi) {
       ctx.ui.notify('Service tiers require the Leyline request boundary.', 'warning')
       return
     }
+    saveSessionServiceTier(ctx.sessionManager.getSessionId(), ctx.model, nextTier)
+    restoreContext = undefined
     if (nextTier !== tier || tierModel?.provider !== ctx.model.provider
       || tierModel?.id !== ctx.model.id || tierModel?.api !== ctx.model.api) requestCleanup(ctx)
     tier = nextTier
@@ -153,6 +181,7 @@ export default async function (pi) {
   pi.events.on('leyline:request-boundary-ready', (currentRequest) => {
     getProviderRequest = currentRequest
     requestBoundaryAvailable = typeof currentRequest === 'function'
+    restoreTier()
   })
   pi.events.on('leyline:provider-request', ({ model, options, ctx }) => {
     if (!requestBoundaryAvailable || !options.signal || ctx.signal !== options.signal || compacting) return

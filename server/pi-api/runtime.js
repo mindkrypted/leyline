@@ -22,6 +22,7 @@ import { createTracing, TRACING_EXTENSION_PATH } from './tracing.js'
 import { createPromptQueue } from './prompt-queue.js'
 import { createIdleRuntimeCleanup } from './idle-runtimes.js'
 import { createSessionTitleGenerator } from './session-titles.js'
+import { clearSessionServiceTier, readSessionServiceTier, saveSessionServiceTier } from './service-tiers.js'
 import { shutdownSettingsOperations, waitForSettings, withProviderSettingsLock } from './settings-operations.js'
 import { settingsError } from './pi-config.js'
 import { refreshCustomProviders, wrapModelRuntime } from './custom-providers.js'
@@ -715,15 +716,6 @@ const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
       handle.activityState = suspended?.activityState
       forceOneAtATime(runtime.session)
       await bindRuntimeHandle(handle)
-      const serviceTier = suspended?.serviceTier ?? (suspended?.ultrafast ? 'ultrafast' : 'standard')
-      const model = runtime.session.model
-      if (serviceTier !== 'standard' && model
-        && model.provider === suspended.model?.provider
-        && model.id === suspended.model?.id
-        && runtime.session.extensionRunner.getCommand(SERVICE_TIER_COMMAND)
-        && supportedServiceTiers(model, runtime.session.modelRuntime.isUsingSubscription(model.provider)).includes(serviceTier)) {
-        await setSessionServiceTier(handle, serviceTier)
-      }
       idleSessions.delete(sessionId)
       return handle
     } catch (error) {
@@ -1387,7 +1379,8 @@ async function editSessionPrompt(
     if (serviceTierModel
       && handle.runtime.session === session
       && session.model?.provider === serviceTierModel.provider
-      && session.model?.id === serviceTierModel.id) {
+      && session.model?.id === serviceTierModel.id
+      && session.model?.api === serviceTierModel.api) {
       await setSessionServiceTier(handle, serviceTier, undefined, true)
     }
   }
@@ -1457,6 +1450,7 @@ async function resetSessionToEntry(handle, entryId) {
     await interruptSession(handle)
     requireInitializedSession(handle)
     if (handle.runtime.session !== session) throw new Error('Session changed before resetting')
+    clearSessionServiceTier(handle.sessionId)
     const header = manager.getHeader()
     manager.fileEntries = [header, ...manager.getBranch(entryId)]
     manager._buildIndex()
@@ -1799,6 +1793,7 @@ async function moveSessionToTrash(session, stamp, allowMissing) {
     throw new Error('Session file not found')
   }
   deleteSessionSubagentBatchOverride({ cwd: session.cwd, sessionPath })
+  clearSessionServiceTier(session.id)
   await removeVisionAttachments(session.id)
   return { path }
 }
@@ -1848,7 +1843,6 @@ async function suspendIdleRuntime(handle) {
     },
     model: session.model && { provider: session.model.provider, id: session.model.id },
     thinkingLevel: session.thinkingLevel,
-    serviceTier: serviceTierFromStatuses(handle.extensionUiState?.statuses),
     activityState: handle.activityState,
     leafId: manager.getLeafId(),
     lastEntryId: manager.getEntries().at(-1)?.id,
@@ -2029,11 +2023,20 @@ async function setSessionServiceTier(handle, tier, signal, editing = false) {
 
   handle.settingServiceTier = true
   const release = session.isCompacting ? undefined : await lockPromptSubmission(handle)
+  let commandError
+  const unsubscribe = session.extensionRunner.onError(error => {
+    if (error.extensionPath === `command:${SERVICE_TIER_COMMAND}`) commandError = error.error
+  })
   try {
     requireInitializedSession(handle)
     if (signal?.aborted || handle.runtime.session !== session) return
     await session.prompt(`/${SERVICE_TIER_COMMAND} ${tier}`, { source: 'api' })
+    if (commandError) throw new Error(`Could not save speed: ${commandError}`)
+    if (serviceTierFromStatuses(handle.extensionUiState?.statuses) !== tier) {
+      throw new Error('The service tier could not be applied.')
+    }
   } finally {
+    unsubscribe()
     release?.()
     handle.settingServiceTier = false
     handle.promptQueue?.schedule()
@@ -2060,7 +2063,24 @@ async function setSessionModel(handle, provider, id) {
     if (handle.runtime.session !== session) throw new Error('Session changed before changing models')
     const model = session.modelRuntime.getModel(provider, id)
     if (!model) throw new Error('Model not found')
-    await session.setModel(model, { persist: true })
+    const previousModel = session.model
+    const changingModel = model.provider !== previousModel?.provider || model.id !== previousModel?.id
+      || model.api !== previousModel?.api
+    const savedTier = changingModel ? readSessionServiceTier(handle.sessionId) : undefined
+    if (changingModel) clearSessionServiceTier(handle.sessionId)
+    try {
+      await session.setModel(model, { persist: true })
+    } catch (error) {
+      if (savedTier && session.model === previousModel
+        && serviceTierFromStatuses(handle.extensionUiState?.statuses) === savedTier.tier) {
+        try {
+          saveSessionServiceTier(handle.sessionId, savedTier, savedTier.tier)
+        } catch (restoreError) {
+          throw new AggregateError([error, restoreError], `${error.message}. Could not restore the saved speed: ${restoreError.message}`)
+        }
+      }
+      throw error
+    }
     const branch = session.sessionManager.getBranch()
     const lastModelChange = branch.findLast((entry) => entry.type === 'model_change')
     const change = projectModelChanges(branch, {
