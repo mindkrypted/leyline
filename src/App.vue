@@ -1182,7 +1182,7 @@ const canSubmitDraft = computed(() => {
   if (imageSupportWarning.value || dictationSubmissionPending.value) return false
   if (dictation.active && dictation.phase !== 'testing') return true
   if (shellModeDraft.value) return Boolean(shellDraft.value)
-  return draft.value.trim() || attachedImages.value.length > 0
+  return Boolean(draft.value.trim()) || attachedImages.value.length > 0
 })
 const eventStreamLabel = computed(() => {
   if (eventStreamConnected.value) return 'Connected'
