@@ -5531,60 +5531,64 @@ function closePickerMenus() {
 
       </template>
       <template #display>
-        <div class="settings-choice-group">
-          <span>
-            <strong>Thought rows</strong>
-            <small>Initial state in live and saved transcripts</small>
-          </span>
-          <div class="settings-choice-options" :data-active="thinkingDefault" role="group" aria-label="Thought display">
-            <span class="settings-choice-thumb" aria-hidden="true" />
-            <button
-              type="button"
-              :class="{ active: thinkingDefault === 'collapsed' }"
-              :aria-pressed="thinkingDefault === 'collapsed'"
-              @click="setThinkingDefault('collapsed')"
-            >Collapsed</button>
-            <button
-              type="button"
-              :class="{ active: thinkingDefault === 'expanded' }"
-              :aria-pressed="thinkingDefault === 'expanded'"
-              @click="setThinkingDefault('expanded')"
-            >Expanded</button>
+        <div class="settings-choice-group settings-display-card">
+          <div class="settings-choice-heading">
+            <span>
+              <strong>Thought rows</strong>
+              <small>Initial state in live and saved transcripts</small>
+            </span>
+            <div class="settings-choice-options" :data-active="thinkingDefault" role="group" aria-label="Thought display">
+              <span class="settings-choice-thumb" aria-hidden="true" />
+              <button
+                type="button"
+                :class="{ active: thinkingDefault === 'collapsed' }"
+                :aria-pressed="thinkingDefault === 'collapsed'"
+                @click="setThinkingDefault('collapsed')"
+              >Collapsed</button>
+              <button
+                type="button"
+                :class="{ active: thinkingDefault === 'expanded' }"
+                :aria-pressed="thinkingDefault === 'expanded'"
+                @click="setThinkingDefault('expanded')"
+              >Expanded</button>
+            </div>
           </div>
-        </div>
-        <p v-if="transcriptPreferencesError" class="settings-error" role="alert">{{ transcriptPreferencesError }}</p>
-        <p class="settings-note">Applies to new rows. Rows already in the transcript keep their current state.</p>
-        <div class="settings-thought-preview" aria-label="Thought display preview">
-          <span>Preview</span>
-          <div>{{ thinkingDefault === 'expanded' ? '⌄' : '›' }} Thought</div>
-          <p v-if="thinkingDefault === 'expanded'">I’ll check the active branch and its runtime state before making a change.</p>
-        </div>
-        <p class="settings-note">This setting does not change the model’s thinking level.</p>
-        <div class="settings-choice-group">
-          <span>
-            <strong>Link bare filenames as web addresses</strong>
-            <small>How filenames such as README.md appear in transcripts</small>
-          </span>
-          <div class="settings-choice-options" :data-active="autolinkBareFilenames ? 'expanded' : 'collapsed'" role="group" aria-label="Bare filename links">
-            <span class="settings-choice-thumb" aria-hidden="true" />
-            <button
-              type="button"
-              :class="{ active: !autolinkBareFilenames }"
-              :aria-pressed="!autolinkBareFilenames"
-              @click="setAutolinkBareFilenames(false)"
-            >Off</button>
-            <button
-              type="button"
-              :class="{ active: autolinkBareFilenames }"
-              :aria-pressed="autolinkBareFilenames"
-              @click="setAutolinkBareFilenames(true)"
-            >On</button>
+          <p v-if="transcriptPreferencesError" class="settings-error" role="alert">{{ transcriptPreferencesError }}</p>
+          <p class="settings-note">Applies to new rows. Rows already in the transcript keep their current state.</p>
+          <div class="settings-thought-preview" aria-label="Thought display preview">
+            <span>Preview</span>
+            <div>{{ thinkingDefault === 'expanded' ? '⌄' : '›' }} Thought</div>
+            <p v-if="thinkingDefault === 'expanded'">I’ll check the active branch and its runtime state before making a change.</p>
           </div>
+          <p class="settings-note">This setting does not change the model’s thinking level.</p>
         </div>
-        <p class="settings-note">Off keeps bare filenames as plain text. On restores Markdown autolinking. Explicit URLs and local-file links are unaffected.</p>
-        <div class="settings-thought-preview" aria-label="Filename link preview">
-          <span>Preview</span>
-          <div class="entry-text markdown-body" v-html="autolinkPreview"></div>
+        <div class="settings-choice-group settings-display-card settings-display-followup">
+          <div class="settings-choice-heading">
+            <span>
+              <strong>Link bare filenames as web addresses</strong>
+              <small>How filenames such as README.md appear in transcripts</small>
+            </span>
+            <div class="settings-choice-options" :data-active="autolinkBareFilenames ? 'expanded' : 'collapsed'" role="group" aria-label="Bare filename links">
+              <span class="settings-choice-thumb" aria-hidden="true" />
+              <button
+                type="button"
+                :class="{ active: !autolinkBareFilenames }"
+                :aria-pressed="!autolinkBareFilenames"
+                @click="setAutolinkBareFilenames(false)"
+              >Off</button>
+              <button
+                type="button"
+                :class="{ active: autolinkBareFilenames }"
+                :aria-pressed="autolinkBareFilenames"
+                @click="setAutolinkBareFilenames(true)"
+              >On</button>
+            </div>
+          </div>
+          <p class="settings-note">Off keeps bare filenames as plain text. On restores Markdown autolinking. Explicit URLs and local-file links are unaffected.</p>
+          <div class="settings-thought-preview" aria-label="Filename link preview">
+            <span>Preview</span>
+            <div class="entry-text markdown-body" v-html="autolinkPreview"></div>
+          </div>
         </div>
       </template>
       <template #files>
