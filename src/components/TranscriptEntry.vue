@@ -439,6 +439,7 @@ function openMarkdownContent(event) {
                 imageSrc(entry.preview),
                 'Read image preview',
                 $event,
+                entry.preview,
               )"
             >
               <img :src="imageSrc(entry.preview)" alt="Read image preview" />
