@@ -1,29 +1,36 @@
-import { calculateCost, cleanupSessionResources } from '@earendil-works/pi-ai'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import {
-  supportsUltrafastWithAuth,
+  supportedServiceTiers,
+  SERVICE_TIER_COMMAND,
+  SERVICE_TIER_STATUS_KEY,
+  SERVICE_TIERS,
   ULTRAFAST_COMMAND,
   ULTRAFAST_STATUS_KEY,
 } from '../../../lib/ultrafast.js'
 
-export default function (pi) {
-  let enabled = false
-  let enabledModel
+export default async function (pi) {
+  const require = createRequire(import.meta.resolve('@earendil-works/pi-coding-agent'))
+  const { calculateCost, cleanupSessionResources } = await import(pathToFileURL(require.resolve('@earendil-works/pi-ai', {
+    conditions: new Set(['node', 'import']),
+  })).href)
+  let tier = 'standard'
+  let tierModel
   let resetPending = false
   let cleanupPending = false
   let requestBoundaryAvailable = false
   let compacting = false
-  let headerRequest
+  let getProviderRequest
+  let requests = new WeakMap()
   const responses = new Map()
 
-  function available(ctx, model) {
-    return Boolean(model) && supportsUltrafastWithAuth(
-      model,
-      ctx.modelRegistry.isUsingOAuth(model),
-    )
+  function availableTiers(ctx, model) {
+    return supportedServiceTiers(model, model && ctx.modelRegistry.isUsingOAuth(model))
   }
 
   function publish(ctx) {
-    ctx.ui.setStatus(ULTRAFAST_STATUS_KEY, enabled ? 'on' : 'off')
+    ctx.ui.setStatus(SERVICE_TIER_STATUS_KEY, tier)
+    ctx.ui.setStatus(ULTRAFAST_STATUS_KEY, tier === 'ultrafast' ? 'on' : 'off')
   }
 
   function flushCleanup(ctx) {
@@ -38,16 +45,17 @@ export default function (pi) {
   }
 
   function disable(ctx) {
-    const cleanup = enabled || enabledModel
-    enabled = false
-    enabledModel = undefined
+    const cleanup = tier !== 'standard' || tierModel
+    tier = 'standard'
+    tierModel = undefined
     resetPending = false
     publish(ctx)
     if (cleanup) requestCleanup(ctx)
   }
 
   function reset(_event, ctx) {
-    if (enabled && ctx.signal) {
+    requestCleanup(ctx)
+    if (tier !== 'standard' && ctx.signal) {
       resetPending = true
       return
     }
@@ -55,12 +63,12 @@ export default function (pi) {
   }
 
   pi.on('session_start', (_event, ctx) => {
-    enabled = false
-    enabledModel = undefined
+    tier = 'standard'
+    tierModel = undefined
     resetPending = false
     cleanupPending = false
     compacting = false
-    headerRequest = undefined
+    requests = new WeakMap()
     responses.clear()
     publish(ctx)
   })
@@ -79,98 +87,112 @@ export default function (pi) {
   })
   pi.on('turn_end', (_event, ctx) => {
     if (resetPending) disable(ctx)
-    headerRequest = undefined
     flushCleanup(ctx)
   })
   pi.on('agent_settled', (_event, ctx) => {
     if (resetPending) disable(ctx)
-    headerRequest = undefined
     flushCleanup(ctx)
   })
   pi.on('session_shutdown', () => {
-    enabled = false
-    enabledModel = undefined
+    tier = 'standard'
+    tierModel = undefined
     resetPending = false
     cleanupPending = false
     requestBoundaryAvailable = false
     compacting = false
-    headerRequest = undefined
+    getProviderRequest = undefined
+    requests = new WeakMap()
     responses.clear()
   })
 
+  function setTier(nextTier, ctx) {
+    if (!SERVICE_TIERS.includes(nextTier)) return
+    if (nextTier === 'standard') {
+      disable(ctx)
+      return
+    }
+    if (!availableTiers(ctx, ctx.model).includes(nextTier)) return
+    if (!requestBoundaryAvailable) {
+      ctx.ui.notify('Service tiers require the Leyline request boundary.', 'warning')
+      return
+    }
+    if (nextTier !== tier || tierModel?.provider !== ctx.model.provider
+      || tierModel?.id !== ctx.model.id || tierModel?.api !== ctx.model.api) requestCleanup(ctx)
+    tier = nextTier
+    tierModel = { ...ctx.model }
+    resetPending = false
+    publish(ctx)
+  }
+
+  pi.registerCommand(SERVICE_TIER_COMMAND, {
+    description: 'Set Standard, Fast, or Ultrafast from the Leyline composer',
+    handler: async (args, ctx) => setTier(args, ctx),
+  })
   pi.registerCommand(ULTRAFAST_COMMAND, {
     description: 'Set Ultrafast from the Leyline composer',
     handler: async (args, ctx) => {
-      if (!['on', 'off'].includes(args)
-        || (args === 'on' && !available(ctx, ctx.model))) return
-      if (args === 'off') {
-        disable(ctx)
-        return
-      }
-      if (!requestBoundaryAvailable) {
-        ctx.ui.notify('Ultrafast requires the Leyline request boundary.', 'warning')
-        return
-      }
-      if (!enabled) requestCleanup(ctx)
-      enabled = true
-      enabledModel = ctx.model
-      resetPending = false
-      publish(ctx)
+      if (['on', 'off'].includes(args)) setTier(args === 'on' ? 'ultrafast' : 'standard', ctx)
     },
   })
 
   pi.on('cache_warming_decision', () => {
-    if (enabled) return { action: 'stop' }
+    if (tier !== 'standard') return { action: 'stop' }
   })
 
   pi.on('before_provider_headers', ({ headers }, ctx) => {
-    if (!headerRequest?.enabled || compacting || ctx.signal !== headerRequest.signal) return
-    const { model } = headerRequest
+    const request = requests.get(getProviderRequest?.())
+    if (!request || compacting || ctx.signal !== request.signal) return
+    const { model, tier: requestTier } = request
     if (model.provider === 'openai-codex') {
-      headers['x-codex-routing-hint'] = `model=${model.id};tier=ultrafast`
+      headers['x-codex-routing-hint'] = `model=${model.id}${requestTier === 'default' ? '' : `;tier=${requestTier}`}`
     } else if (model.id === 'gpt-6-astra') {
-      headers['OpenAI-Service-Tier'] = 'ultrafast'
+      headers['OpenAI-Service-Tier'] = requestTier === 'ultrafast' ? 'ultrafast' : null
     }
   })
 
-  pi.events.on('leyline:request-boundary-ready', () => {
-    requestBoundaryAvailable = true
+  pi.events.on('leyline:request-boundary-ready', (currentRequest) => {
+    getProviderRequest = currentRequest
+    requestBoundaryAvailable = typeof currentRequest === 'function'
   })
   pi.events.on('leyline:provider-request', ({ model, options, ctx }) => {
-    if (!requestBoundaryAvailable || !options.signal) return
+    if (!requestBoundaryAvailable || !options.signal || ctx.signal !== options.signal || compacting) return
     if (resetPending) disable(ctx)
     flushCleanup(ctx)
-    headerRequest = undefined
-    if (!available(ctx, model)) return
+    const tiers = availableTiers(ctx, model)
+    if (tiers.length === 1) return
+    const requestTier = tierModel?.provider === model.provider && tierModel?.id === model.id
+      && tierModel?.api === model.api && tiers.includes(tier) ? tier : 'standard'
     const request = {
       model: { ...model, cost: { ...model.cost } },
       signal: options.signal,
-      enabled: enabled && enabledModel?.provider === model.provider
-        && enabledModel?.id === model.id,
+      tier: requestTier === 'standard' ? 'default' : requestTier === 'fast' ? 'priority' : 'ultrafast',
     }
-    headerRequest = request
+    requests.set(options, request)
     const onPayload = options.onPayload
     options.onPayload = async (payload, requestModel) => {
       const replacement = await onPayload?.(payload, requestModel)
       const current = replacement === undefined ? payload : replacement
-      if (ctx.signal !== request.signal || requestModel.provider !== model.provider
-        || requestModel.id !== model.id || current?.model !== model.id) return current
-      request.tier = request.enabled ? 'ultrafast' : current.service_tier
-      return request.enabled ? { ...current, service_tier: 'ultrafast' } : current
+      if (compacting || ctx.signal !== request.signal || requestModel.provider !== request.model.provider
+        || requestModel.id !== request.model.id || requestModel.api !== request.model.api
+        || current?.model !== request.model.id) return current
+      return { ...current, service_tier: request.tier }
     }
     const onProviderStreamEvent = options.onProviderStreamEvent
     options.onProviderStreamEvent = async (data, requestModel) => {
-      if (requestBoundaryAvailable && ctx.signal === request.signal
-        && requestModel.provider === model.provider
-        && requestModel.id === model.id
+      if (requestBoundaryAvailable && !compacting && ctx.signal === request.signal
+        && requestModel.provider === request.model.provider
+        && requestModel.id === request.model.id && requestModel.api === request.model.api
         && ['response.completed', 'response.done', 'response.incomplete'].includes(data?.type)
         && data.response?.id) {
-        const tier = data.response.service_tier
-        const ultrafast = tier === 'ultrafast'
-          || (model.provider === 'openai-codex' && request.tier === 'ultrafast'
-            && (!tier || tier === 'default'))
-        if (ultrafast) {
-          responses.set(data.response.id, request.model)
+        let responseTier = data.response.service_tier
+        if (!responseTier || (responseTier === 'default' && request.model.provider === 'openai-codex')) {
+          responseTier = request.model.provider === 'openai-codex' || request.tier === 'priority'
+            ? request.tier : 'default'
+        }
+        if (['default', 'priority', 'fast', 'ultrafast'].includes(responseTier)) {
+          const multiplier = responseTier === 'ultrafast' ? 6 : responseTier === 'default' ? 1
+            : request.model.id === 'gpt-5.5' ? 2.5 : 2
+          responses.set(data.response.id, { model: request.model, multiplier })
           if (responses.size > 16) responses.delete(responses.keys().next().value)
         }
       }
@@ -180,14 +202,13 @@ export default function (pi) {
 
   pi.on('message_end', ({ message }) => {
     if (message.role !== 'assistant') return
-    headerRequest = undefined
-    const model = responses.get(message.responseId)
+    const response = responses.get(message.responseId)
     responses.delete(message.responseId)
-    if (!model || message.provider !== model.provider || message.model !== model.id
+    if (!response || message.provider !== response.model.provider || message.model !== response.model.id
       || !message.usage) return
     const usage = { ...message.usage, cost: { ...message.usage.cost } }
-    calculateCost(model, usage)
-    for (const key of Object.keys(usage.cost)) usage.cost[key] *= 6
+    calculateCost(response.model, usage)
+    for (const key of Object.keys(usage.cost)) usage.cost[key] *= response.multiplier
     return { message: { ...message, usage } }
   })
 }

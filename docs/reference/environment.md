@@ -150,7 +150,7 @@ The live screenshot viewport is fixed at 1503 by 818 CSS pixels with a device
 scale factor of 2. Documentation captures use fixed desktop, mobile, and README
 viewports. A filter such as `composer-queue.png,activity.png` selects matching basenames in either output directory.
 
-See [Screenshots and video](../developer-guide/screenshots-and-video) for mocked coverage, model requirements, and focused Ultrafast, System, and trace captures.
+See [Screenshots and video](../developer-guide/screenshots-and-video) for mocked coverage, model requirements, and focused service-tier, System, and trace captures.
 
 ## Internal variables
 

@@ -19,6 +19,8 @@ description: Definitions of Leyline terms, including sessions, runtimes, steerin
 - **Deep research session**: A pi session whose lead agent plans parallel source work and writes a cited report.
 - **Elune**: The embedded library that stores and displays Leyline run traces.
   Leyline does not require the standalone Elune server.
+- **Fast**: A premium service tier for eligible OpenAI Responses models.
+  It requests priority service without changing the thinking level.
 - **File preview**: A view of the current local file on the session's backend,
   separate from saved tool output.
 - **Follow-up**: An input that pi has accepted to run after the active turn.
@@ -54,9 +56,14 @@ description: Definitions of Leyline terms, including sessions, runtimes, steerin
 - **Sent to agent**: Waiting inputs that pi has already accepted. These inputs
   cannot be edited, reordered, or removed from the queue tray.
 - **Source ledger**: The persisted research list that maps citation numbers to cited, supporting, or excluded sources.
+- **Service tier**: The Standard, Fast, or Ultrafast choice for the current
+  runtime/session. Available tiers depend on the model and authentication.
+  Compaction and branch summaries do not receive a premium tier override.
+  See [Choose a service tier](../user-guide/runtime-controls#choose-a-service-tier).
 - **Session details**: A drawer for runtime information, session metadata,
   and session-level agent overrides.
 - **Session scope**: Data that applies to one session file.
+- **Standard**: The default service tier, with no Fast or Ultrafast override.
 - **Steering**: A message sent to the active run at its next accepted input
   point. Use Option+Enter during an active run.
 - **Subagent**: A child pi session that runs a delegated task with isolated
@@ -77,9 +84,8 @@ description: Definitions of Leyline terms, including sessions, runtimes, steerin
 - **Tracing workspace**: The expanded timeline and detail view opened through
   **Open workspace**. **Back** returns to its inspector or explorer.
 - **Transcript**: The selected branch of a pi session as Leyline displays it.
-- **ultrafast**: A premium service tier for supported OpenAI Responses models.
-  Its composer chip is off by default and applies to the current runtime/session.
-  Compaction and branch summaries remain Standard.
+- **Ultrafast**: A premium service tier for eligible OpenAI Responses models:
+  `gpt-6-astra` and `gpt-6.1-sol`. Fast remains a separate choice on these models.
 - **Up next**: The editable queue of tasks that Leyline sends one at a time
   when the agent becomes idle. Enter adds a task during an active run.
 - **Vision agent**: The `vision_agent` tool. It starts an isolated child session

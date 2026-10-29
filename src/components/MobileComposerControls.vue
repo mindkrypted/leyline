@@ -16,14 +16,14 @@ const props = defineProps({
   settingsDisabled: Boolean,
   settingsError: { type: String, default: '' },
   imageDisabled: Boolean,
-  ultrafastAvailable: Boolean,
-  ultrafastEnabled: Boolean,
+  availableServiceTiers: { type: Array, default: () => ['standard'] },
+  serviceTier: { type: String, default: 'standard' },
   researchEnabled: Boolean,
   researchDisabled: Boolean,
   research: Boolean,
   toolNames: { type: Array, default: () => [] },
 })
-const emit = defineEmits(['select-model', 'select-thinking', 'toggle-ultrafast', 'pick-images', 'newline', 'toggle-research', 'interrupt', 'open'])
+const emit = defineEmits(['select-model', 'select-thinking', 'select-service-tier', 'pick-images', 'newline', 'toggle-research', 'interrupt', 'open'])
 const page = ref('')
 const rootPage = ref('')
 const selecting = ref(false)
@@ -36,6 +36,9 @@ const title = computed(() => ({ options: 'Session options', thinking: 'Thinking'
 const selectedModel = computed(() => props.availableModels.find(model => props.modelKey(model) === props.selectedModelKey))
 const modelLabel = computed(() => selectedModel.value?.name || props.currentModelLabel || 'Choose model')
 const thinkingLabel = computed(() => formatMode(props.thinkingLevel) || 'off')
+const tierLabels = { standard: 'Standard', fast: 'Fast', ultrafast: 'Ultrafast' }
+const serviceTiers = computed(() => Object.keys(tierLabels).filter(tier => props.availableServiceTiers.includes(tier)))
+const premiumTier = computed(() => props.serviceTier !== 'standard')
 const models = computed(() => {
   const terms = query.value.toLowerCase().trim().split(/\s+/).filter(Boolean)
   return props.availableModels.filter(model => terms.every(term => `${model.name} ${model.id} ${model.provider}`.toLowerCase().includes(term)))
@@ -79,9 +82,9 @@ function chooseThinking(level) {
   if (rootPage.value === 'options') page.value = 'options'
   else selecting.value = true
 }
-function chooseTier(enabled) {
-  if (props.disabled || props.settingsDisabled || (enabled && !props.ultrafastAvailable)) return
-  if (enabled !== props.ultrafastEnabled) emit('toggle-ultrafast')
+function chooseTier(tier) {
+  if (props.disabled || props.settingsDisabled || !serviceTiers.value.includes(tier)) return
+  if (tier !== props.serviceTier) emit('select-service-tier', tier)
   if (rootPage.value === 'options') page.value = 'options'
   else selecting.value = true
 }
@@ -96,7 +99,7 @@ defineExpose({ open, dismiss, opened })
         <span class="mobile-model-title"><span>{{ modelLabel }}</span><svg class="mobile-model-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5h6L6 8.5z" /></svg></span>
       </button>
       <button class="mobile-setting-control mobile-thinking-control" type="button" aria-haspopup="dialog" :aria-label="`Thinking: ${thinkingLabel}. Change thinking`" :aria-expanded="page === 'thinking'" :disabled="disabled || settingsDisabled || !availableThinkingLevels.length" :title="availableThinkingLevels.length ? `Thinking: ${thinkingLabel}` : 'Thinking is not available for this model.'" @click="open('thinking', $event)">{{ thinkingLabel }}</button>
-      <button class="mobile-setting-control mobile-speed-control" :class="{ active: ultrafastEnabled }" type="button" aria-haspopup="dialog" :aria-label="`Speed: ${ultrafastEnabled ? 'Ultrafast' : 'Standard'}. Change speed`" :aria-expanded="page === 'service'" :disabled="disabled || settingsDisabled" :title="ultrafastEnabled ? 'Speed: Ultrafast. Premium pricing.' : 'Speed: Standard'" @click="open('service', $event)">
+      <button class="mobile-setting-control mobile-speed-control" :class="{ active: premiumTier }" type="button" aria-haspopup="dialog" :aria-label="`Speed: ${tierLabels[serviceTier]}. Change speed`" :aria-expanded="page === 'service'" :disabled="disabled || settingsDisabled" :title="`Speed: ${tierLabels[serviceTier]}${premiumTier ? '. Premium pricing.' : ''}`" @click="open('service', $event)">
         <span class="mobile-speed-face"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 10-12h-7V2Z" /></svg></span>
       </button>
     </div>
@@ -117,15 +120,15 @@ defineExpose({ open, dismiss, opened })
                 <p v-if="!models.length">{{ availableModels.length ? 'No matching models.' : 'No models available.' }}</p>
               </div>
               <h3>Options</h3>
-              <div class="mobile-sheet-choices"><button type="button" :disabled="disabled || settingsDisabled || !availableThinkingLevels.length" @click="page = 'thinking'"><span>Thinking</span><span class="mobile-option-value">{{ formatMode(thinkingLevel) }}</span><span aria-hidden="true">›</span></button><button type="button" :disabled="disabled || settingsDisabled" @click="page = 'service'"><span>Speed</span><span class="mobile-option-value" :class="{ 'mobile-ultrafast': ultrafastEnabled }">{{ ultrafastEnabled ? 'Ultrafast' : 'Standard' }}</span><span aria-hidden="true">›</span></button></div>
+              <div class="mobile-sheet-choices"><button type="button" :disabled="disabled || settingsDisabled || !availableThinkingLevels.length" @click="page = 'thinking'"><span>Thinking</span><span class="mobile-option-value">{{ formatMode(thinkingLevel) }}</span><span aria-hidden="true">›</span></button><button type="button" :disabled="disabled || settingsDisabled" @click="page = 'service'"><span>Speed</span><span class="mobile-option-value" :class="{ 'mobile-premium-tier': premiumTier }">{{ tierLabels[serviceTier] }}</span><span aria-hidden="true">›</span></button></div>
             </template>
             <template v-else-if="page === 'thinking'">
               <p>Choose the thinking level for your next message.</p>
               <div class="mobile-sheet-choices"><button v-for="level in availableThinkingLevels" :key="level" type="button" :disabled="disabled || settingsDisabled" :aria-pressed="level === thinkingLevel" @click="chooseThinking(level)"><span>{{ formatMode(level) }}</span><span v-if="level === thinkingLevel" aria-hidden="true">✓</span></button></div>
             </template>
             <template v-else-if="page === 'service'">
-              <div class="mobile-sheet-choices"><button type="button" :disabled="disabled || settingsDisabled" :aria-pressed="!ultrafastEnabled" @click="chooseTier(false)"><span>Standard<small>Default service tier</small></span><span v-if="!ultrafastEnabled" aria-hidden="true">✓</span></button><button type="button" :disabled="disabled || settingsDisabled || !ultrafastAvailable" :aria-pressed="ultrafastEnabled" @click="chooseTier(true)"><span>Ultrafast<small>Premium pricing</small></span><span v-if="ultrafastEnabled" aria-hidden="true">✓</span></button></div>
-              <p class="mobile-sheet-note">{{ ultrafastAvailable ? 'Applies to this session only.' : 'Ultrafast is not available for this model.' }}</p>
+              <div class="mobile-sheet-choices"><button v-for="tier in serviceTiers" :key="tier" type="button" :disabled="disabled || settingsDisabled" :aria-pressed="tier === serviceTier" @click="chooseTier(tier)"><span>{{ tierLabels[tier] }}<small>{{ tier === 'standard' ? 'Default service tier' : 'Premium pricing' }}</small></span><span v-if="tier === serviceTier" aria-hidden="true">✓</span></button></div>
+              <p class="mobile-sheet-note">{{ serviceTiers.length > 1 ? 'Applies to this session only.' : 'Fast and Ultrafast are not available for this model.' }}</p>
             </template>
             <div v-else-if="page === 'add'" class="mobile-sheet-choices"><button type="button" :disabled="disabled || imageDisabled" @click="addImage"><span>Add image</span></button><button type="button" :disabled="disabled" @click="newline"><span>New line</span></button><button v-if="running" type="button" :disabled="interrupting" @click="emit('interrupt'); dismiss()"><span>{{ interrupting ? 'Stopping' : 'Stop generation' }}</span></button><button v-if="researchEnabled" type="button" :disabled="disabled || imageDisabled || researchDisabled" :aria-pressed="research" @click="emit('toggle-research')"><span>Research</span><span v-if="research" aria-hidden="true">✓</span></button></div>
             <template v-else-if="page === 'details'"><h3>Enabled tools · {{ toolNames.length }}</h3><ul class="mobile-tool-inventory"><li v-for="tool in toolNames" :key="tool">{{ tool }}</li></ul><p v-if="!toolNames.length">No tools are enabled.</p></template>
@@ -159,7 +162,7 @@ defineExpose({ open, dismiss, opened })
   .mobile-speed-control.active::before { background: #514365; }
   .mobile-speed-control.active .mobile-speed-face { background: #342d45; }
   .mobile-speed-control.active svg { fill: currentColor; stroke-width: 1.2; }
-  .mobile-ultrafast { color: #bfb3ef !important; }
+  .mobile-premium-tier { color: #bfb3ef !important; }
   .mobile-sheet-backdrop { position: fixed; z-index: 80; top: var(--app-top, 0px); left: 0; width: 100%; height: var(--app-height, 100dvh); display: flex; align-items: flex-end; background: #0008; }
   .mobile-composer-sheet { display: flex; flex-direction: column; width: 100%; max-height: calc(100% - 16px - env(safe-area-inset-top, 0px)); min-height: 0; border: 1px solid #3a3a3a; border-bottom: 0; border-radius: 24px 24px 0 0; outline: none; background: #181818; color: #e5e5e5; box-shadow: 0 -12px 50px #0005; padding-bottom: env(safe-area-inset-bottom, 0px); }
   .mobile-composer-sheet.is-options { height: 560px; }

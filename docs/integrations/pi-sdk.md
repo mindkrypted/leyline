@@ -6,7 +6,9 @@ Leyline discovers sessions by scanning pi JSONL files with bounded concurrent re
 
 `AgentSessionRuntime` owns execution. Leyline keeps one runtime handle for each loaded session and tracks one selected active handle. Scoped API actions can run in background sessions without changing the selected session.
 
-Unobserved idle handles are eligible for disposal after 5 minutes by default. The selected backend's runtime setting accepts 0 through 1440 minutes. 0 disables cleanup. Active work, queued inputs, pending approvals, lifecycle operations, and matching session WebSocket observers protect handles. Disposal shuts down extensions and MCP resources without deleting history. Reopening or a scoped action restores retained branch/model/thinking state and eligible Ultrafast state with fresh connections. See [Idle runtime cleanup](../developer-guide/backend-api#idle-runtime-cleanup) for restoration limits.
+Unobserved idle handles are eligible for disposal after 5 minutes by default. The selected backend's runtime setting accepts 0 through 1440 minutes. 0 disables cleanup. Active work, queued inputs, pending approvals, lifecycle operations, and matching session WebSocket observers protect handles. Disposal shuts down extensions and MCP resources without deleting history.
+
+Reopening or a scoped action restores retained branch/model/thinking state with fresh connections. The exact premium tier restores only for the same provider/model, with current eligibility and the service-tier command available. See [Idle runtime cleanup](../developer-guide/backend-api#idle-runtime-cleanup) for restoration limits.
 
 `ModelRuntime` is the current SDK boundary for model access and authentication. Leyline uses `services.modelRuntime` and `session.modelRuntime` for lookup, available snapshots, and subscription state. `custom-providers.js` wraps public authentication and streaming methods without patching SDK internals.
 
@@ -14,7 +16,7 @@ The integration pins `@earendil-works/pi-coding-agent` to `1.2.0`. The separate 
 
 `AgentSession.prompt()` handles commands, skills, templates, native input delivery, authentication, compaction, and persistence. Native steering and follow-up delivery remain `one-at-a-time`.
 
-Leyline holds editable prompts and shell commands in one **Up next** queue on each runtime handle. It dispatches one task when `session.isIdle` and lifecycle guards permit it. Prompt tasks use `session.prompt()`, with `preflightResult` marking acceptance. **Steer** uses native delivery and cannot be edited afterward. Ordinary prompt requests during model or Ultrafast changes remain accepted in the editable queue until dispatch is safe.
+Leyline holds editable prompts and shell commands in one **Up next** queue on each runtime handle. It dispatches one task when `session.isIdle` and lifecycle guards permit it. Prompt tasks use `session.prompt()`, with `preflightResult` marking acceptance. **Steer** uses native delivery and cannot be edited afterward. Ordinary prompt requests during model or service-tier changes remain accepted in the editable queue until dispatch is safe.
 
 Both bash routes confirm queue acceptance with `{ ok: true, queued: true, active }`, not command completion. Multiple commands can queue. Shell items expose `shell: true`, have no images, require `!` or `!!` when edited, and cannot steer. Shell dispatch first emits native `user_bash` hooks. Returned operations go to `session.executeBash()`. A supplied result goes to `session.recordBashResult()`. Hook failures block execution. No assistant reply starts automatically.
 
@@ -30,9 +32,27 @@ Pi session logs are tree-structured JSONL records. Normal writes use runtime and
 
 Normal runtimes load output-budget, ultrafast, memory, subagent, research, and vision-agent. They also append the Leyline system prompt. Conversation runtimes also install Elune through a named inline factory. Isolated custom-prompt children retain output-budget and inline capture.
 
-Bundled extensions replace matching conflicts, and Ultrafast runs last. See [Runtime construction](../developer-guide/backend-api#runtime-construction) and [Ultrafast](../developer-guide/backend-api#ultrafast) for the implementation contracts.
+Bundled extensions replace matching conflicts. The service-tier extension keeps its `ultrafast` directory name and runs last. See [Runtime construction](../developer-guide/backend-api#runtime-construction) for the loading contract.
 
 Normal runtimes add native MCP and tool search through SDK factories. Leyline enables `tool_search` unless settings explicitly disable it. Codemode is not loaded and remains excluded.
+
+## Service tiers
+
+`.pi/extensions/ultrafast/index.js` owns Standard/Fast/Ultrafast selection. `lib/ultrafast.js` defines explicit eligibility, and model DTOs expose `serviceTiers`. No dynamic Codex catalog controls eligibility. Standard is the runtime-local default, with no durable tier setting.
+
+`POST /api/pi/sessions/:id/service-tier` accepts `{ tier }` and invokes the `leyline-service-tier` command through `session.prompt()`. The matching status key contains `standard`, `fast`, or `ultrafast`. The legacy `leyline-ultrafast` command/status and `POST /api/pi/sessions/:id/ultrafast` with `{ enabled }` remain for compatibility only.
+
+Model changes, explicit reloads, and reset navigation select Standard. New forks start Standard. Same-runtime, same-model retries and edits retain the exact tier. The edit path restores it through the command after extension binding, including rollback. Idle restoration applies the same current eligibility checks.
+
+The runtime wraps `agent.streamFunction` and copies request options before it emits `leyline:provider-request`. It uses `AsyncLocalStorage` to retain the options object's identity. Through `leyline:request-boundary-ready`, the extension receives a function that reads that identity. Its `WeakMap` stores the request's model, costs, signal, and tier snapshot. Header hooks require that identity, while payload and response hooks verify the captured model and signal.
+
+This boundary excludes compaction and branch summaries, including concurrent summary calls. Both premium tiers stop cache warming. Fast sends `service_tier: "priority"`, and Codex routing headers match the request tier.
+
+The extension resolves public `calculateCost()` and `cleanupSessionResources()` from the coding-agent package's own `@earendil-works/pi-ai` dependency. The separate direct dependency can have a different cleanup registry. Safe-boundary cleanup closes cached transports for tier changes and model switches, including Standard-to-Standard switches.
+
+Final response fields determine cost adjustment, subject to provider-specific fallback rules. The extension recalculates base costs before it applies one multiplier, avoiding double counting of native tier pricing. Fast uses native factors of 2, or 2.5 for exact `gpt-5.5`. Ultrafast uses 6. These are cost estimates, not authoritative billing amounts. See [Service tiers](../developer-guide/backend-api#service-tiers) for response fields, Codex fallback, direct OpenAI downgrades, and the complete request contract.
+
+Browser/Vite and packaged Electron share this runtime path. Packaged runtimes execute in the backend utility process.
 
 ## Automatic session titles
 

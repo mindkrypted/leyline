@@ -148,11 +148,11 @@ Handles remain available after the user selects another session while active wor
 
 A 15-second sweep protects active work, pending tasks and approvals, lifecycle operations, and sessions observed through a matching `sessionId` runtime WebSocket. Compact background snapshots and the legacy active selection alone do not protect a handle.
 
-Disposal shuts down extensions and MCP resources and emits `runtime_removed`, without deleting history. Lightweight process-local state retains the branch, model, thinking level, eligible Ultrafast choice, and unsaved manager when necessary. Reopening or a scoped action rebuilds services and connections. See [Idle runtime cleanup](./backend-api#idle-runtime-cleanup) for the full protection and restoration rules.
+Disposal shuts down extensions and MCP resources and emits `runtime_removed`, without deleting history. Lightweight process-local state retains the branch, model, thinking level, exact service tier, and unsaved manager when necessary. Premium restoration requires the same provider/model, current eligibility, and the service-tier command. Reopening or a scoped action rebuilds services and connections. See [Idle runtime cleanup](./backend-api#idle-runtime-cleanup) for the full protection and restoration rules.
 
 `activeHandle`, `activeRuntime`, and `activeSessionId` identify the process-wide active session. Legacy routes use this selection.
 
-Scoped session routes and Leyline terminal connections resolve a handle by session ID. Use scoped routes for prompt, shell, compaction, edit, interrupt, reload, model, and thinking operations.
+Scoped session routes and Leyline terminal connections resolve a handle by session ID. Use scoped routes for prompt, shell, compaction, edit, interrupt, reload, model, thinking, and service-tier operations.
 
 Active session selection is process-wide within one backend. Two windows that use the same backend can change all legacy active-session routes. Their terminal connections remain independent. Windows that use different backends do not share this selection.
 
@@ -239,9 +239,17 @@ that directory. Elune records use a separate `elune/elune.db` under the same dat
 
 Normal runtimes load output-budget, ultrafast, memory, subagent, research, and vision-agent from `.pi/extensions/`. They load the inline Elune capture factory from `@elune/embedded/pi` and append `.pi/LEYLINE_SYSTEM.md` to the system prompt.
 
-Bundled conflict filtering removes other extensions with matching names or designated commands and tools. The bundled Ultrafast extension runs last, after other provider hooks.
+Bundled conflict filtering removes other extensions with matching names or designated commands and tools. The service-tier extension stays in `.pi/extensions/ultrafast/` and runs last, after other provider hooks. It owns runtime-local Standard/Fast/Ultrafast state and publishes `leyline-service-tier`, with legacy `leyline-ultrafast` compatibility.
 
-Normal runtimes also load pi's native MCP and tool-search extensions. Leyline excludes `codemode`. See [Runtime construction](./backend-api#runtime-construction) and [Ultrafast](./backend-api#ultrafast) for the loading and request contracts.
+`lib/ultrafast.js` defines explicit model and authentication eligibility. Model DTOs expose `serviceTiers`. The renderer selects a tier through the session-scoped `service-tier` route and reads the resulting extension status.
+
+Standard is the default. Model changes, explicit reloads, and reset navigation select Standard. New forks start Standard. Same-runtime, same-model retries and edits retain the exact tier.
+
+The shared runtime uses `AsyncLocalStorage` to identify each provider request. The extension's `WeakMap` binds payload, header, and cost handling to that request's model, signal, and tier snapshot. Compaction and branch summaries receive no premium overrides. Both premium tiers stop cache warming.
+
+Public cleanup and cost functions resolve from the coding-agent package's own `pi-ai` dependency. Connection cleanup includes Standard-to-Standard model switches. Browser/Vite and packaged Electron use this same runtime and extension path. Packaged execution stays in the backend utility process, not the Electron main process.
+
+Normal runtimes also load pi's native MCP and tool-search extensions. Leyline excludes `codemode`. See [Runtime construction](./backend-api#runtime-construction) and [Service tiers](./backend-api#service-tiers) for the loading, request, and cost contracts.
 
 A new research session gets its marker before extension binding. The research extension exposes `research_update` only when the active branch contains a marker for that session ID.
 

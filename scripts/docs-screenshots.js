@@ -33,6 +33,7 @@ const model = {
   name: 'GLM 5.3 Flash',
   supportsImages: false,
   supportsUltrafast: false,
+  serviceTiers: ['standard'],
   contextWindow: 204800,
   availableThinkingLevels: ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'],
 }
@@ -42,6 +43,7 @@ const ultrafastModel = {
   name: 'GPT-6.1 Sol',
   supportsImages: true,
   supportsUltrafast: true,
+  serviceTiers: ['standard', 'fast', 'ultrafast'],
   contextWindow: 272000,
   availableThinkingLevels: ['off', 'low', 'medium', 'high', 'xhigh'],
 }
@@ -1179,6 +1181,8 @@ const allowedNames = new Set([
   'session-title-settings.png',
   'session-title-settings-mobile.png',
   'session-title-generating.png',
+  'service-tiers.png',
+  'mobile-speed.png',
   ...(eluneOutputDir ? embeddedAssetNames : []),
 ])
 for (const name of screenshotFilter) {
@@ -1696,6 +1700,17 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'service-tiers.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .service-tier-chip',
+    scenario: 'fast',
+    interact: openServiceTierChoices,
+    clipSelectors: ['.composer', '.service-tier-menu'],
+    padding: 18,
+    preserveHover: true,
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'composer-issue.png'),
     route: '/sessions/demo-session',
     ready: '.assistant-message',
@@ -2050,6 +2065,15 @@ try {
   })
   await capture({
     browser,
+    file: path.join(docsOutputDir, 'mobile-speed.png'),
+    route: '/sessions/demo-session',
+    ready: '.composer .mobile-speed-control',
+    viewport: { width: 390, height: 844 },
+    scenario: 'fast',
+    interact: openServiceTierChoices,
+  })
+  await capture({
+    browser,
     file: path.join(docsOutputDir, 'mobile-sidebar.png'),
     route: '/sessions/demo-session',
     ready: '.composer .mobile-model-control',
@@ -2123,6 +2147,24 @@ try {
 }
 
 console.log('Screenshot capture complete')
+
+async function openServiceTierChoices(page) {
+  await disableMotion(page)
+  const mobile = await page.locator('.mobile-speed-control:visible').count() > 0
+  await page.locator(mobile ? '.mobile-speed-control:visible' : '.service-tier-chip:visible').click()
+  const menu = mobile
+    ? page.getByRole('dialog', { name: 'Speed', exact: true })
+    : page.getByRole('listbox', { name: 'Speed', exact: true })
+  await menu.waitFor()
+  const choices = menu.locator(mobile ? '.mobile-sheet-choices button' : '[role="option"]')
+  const labels = await choices.locator('span:first-child').evaluateAll(elements => elements.map(element => element.firstChild.textContent.trim()))
+  const expected = mobile ? ['Standard', 'Fast', 'Ultrafast'] : ['standard', 'fast', 'ultrafast']
+  if (JSON.stringify(labels) !== JSON.stringify(expected)
+    || await choices.nth(1).getAttribute(mobile ? 'aria-pressed' : 'aria-selected') !== 'true') {
+    throw new Error('Service-tier choices must show Fast selected alongside Standard and Ultrafast')
+  }
+  await page.mouse.move(0, 0)
+}
 
 async function waitForBatchSize(page, scope, value, inherited = false) {
   await page.waitForFunction(({ scope, value, inherited }) => {
@@ -2594,7 +2636,7 @@ function runtimeFor(scenario) {
   const live = scenario === 'subagent-live'
   const titleGenerating = scenario === 'title-generating'
   const subagents = ['subagent-outcomes', 'subagent-mobile', 'subagent-sidebar', 'subagent-live'].includes(scenario)
-  const selectedModel = ['home', 'ultrafast'].includes(scenario) ? ultrafastModel : model
+  const selectedModel = ['home', 'ultrafast', 'fast'].includes(scenario) ? ultrafastModel : model
   const id = research ? researchSession.id : 'demo-session'
   return {
     id,
@@ -2667,6 +2709,7 @@ function runtimeFor(scenario) {
       extensionUi: {
         statuses: {
           'leyline-ultrafast': scenario === 'ultrafast' ? 'on' : 'off',
+          'leyline-service-tier': scenario === 'ultrafast' ? 'ultrafast' : scenario === 'fast' ? 'fast' : 'standard',
         },
         widgets: {},
         notifications: [],
@@ -2763,6 +2806,7 @@ function detailFor(scenario) {
     'title-generating': [baseEntries[0]],
     system: systemTranscriptEntries,
     ultrafast: systemTranscriptEntries,
+    fast: systemTranscriptEntries,
     export: systemTranscriptEntries,
     research: researchEntries,
     'subagent-outcomes': subagentOutcomeEntries,
@@ -3171,8 +3215,9 @@ async function capture({
         `${runtime.state.model.provider}/${runtime.state.model.id}`,
         runtime.state.model.name,
       )
-      if (['home', 'ultrafast'].includes(scenario)) {
-        const enabled = scenario === 'ultrafast'
+      if (['home', 'ultrafast', 'fast'].includes(scenario)) {
+        const enabled = scenario !== 'home'
+        const tierLabel = scenario === 'ultrafast' ? 'Ultrafast' : scenario === 'fast' ? 'Fast' : 'Standard'
         if (await page.locator('.mobile-model-control:visible').count()) {
           const control = page.locator('.mobile-speed-control:visible')
           if (await control.count() !== 1
@@ -3180,10 +3225,10 @@ async function capture({
             throw new Error('Unexpected mobile speed control state')
           }
         } else {
-          const chip = page.locator('.ultrafast-toggle:visible').first()
-          if ((await chip.innerText()).trim() !== 'ultrafast'
-            || await chip.getAttribute('aria-pressed') !== String(enabled)) {
-            throw new Error('Unexpected Ultrafast control state')
+          const chip = page.locator('.service-tier-chip:visible').first()
+          if (await chip.getAttribute('aria-label') !== `Speed: ${tierLabel}`
+            || await chip.evaluate(element => element.classList.contains('active')) !== enabled) {
+            throw new Error('Unexpected service tier control state')
           }
         }
       }
@@ -3455,7 +3500,7 @@ async function assertModelLabel(page, expected, mobileExpected = expected) {
     }, { expected: mobileExpected }, { timeout: 15000 })
     return
   }
-  const selector = '.model-picker:not(.small-picker):not(.tool-picker) > .model-picker-button'
+  const selector = '.model-picker:not(.small-picker):not(.tool-picker):not(.service-tier-picker) > .model-picker-button'
   await page.waitForFunction(({ expected, selector }) => {
     const buttons = [...document.querySelectorAll(selector)]
       .filter((button) => button.getClientRects().length)

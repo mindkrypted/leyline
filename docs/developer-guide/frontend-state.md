@@ -7,7 +7,7 @@
 | Owner | State and behavior |
 | --- | --- |
 | `App.vue` | Global Settings and contextual drawer visibility, fixed agent scope and request targets, sidebar navigation, Git review and research sources, composer/queue drafts, attachments, prompt edits and submission, session kind, project selection, and startup motion |
-| `useSessionWorkspace.js` | Session list, project grouping, routes, selected detail, activation, runtime snapshots, sidebar activity rows, model, thinking, and Ultrafast controls, rename, delete, fork, reset, and reload |
+| `useSessionWorkspace.js` | Session list, project grouping, routes, selected detail, activation, runtime snapshots, sidebar activity rows, model, thinking, and service-tier controls, rename, delete, fork, reset, and reload |
 | `useBackendConnections.js` | App-wide connection records, window-specific selection, connection tests, and default selection |
 | `usePinnedSessions.js` | Pinned session IDs for the active connection, load revisions, pending toggles, errors, and batched cleanup |
 | `useTranscriptPreferences.js` | App-wide transcript display settings, loading state, and save errors |
@@ -15,6 +15,8 @@
 | `AgentSettings.vue` | Fixed-scope subagent models, global/session batch size, vision controls, global-only session titles, inheritance display, and available model choices |
 | `SessionTitleSettings.vue` / `SettingsSelect.vue` | Automatic-title settings, model filtering, and model/thinking selectors on the selected backend |
 | `RuntimeSettings.vue` | Selected-backend idle-timeout draft, validation, save state, and leave guard |
+| `ServiceTierPicker.vue` | Desktop service-tier chip, menu, keyboard selection, and focus handling |
+| `MobileComposerControls.vue` | Shared Home/session controls and sheets for model, thinking, and speed |
 | `ProviderSettings.vue` / `McpSettings.vue` | Inventories, selection, drafts, revisions, mutation errors, connection tests or MCP checks, and leave guards |
 | `PiSettingsWorkspace.vue` | Searchable list, narrow-layout selector, and bounded detail pane |
 | `useSettingsOperation.js` | Private operation polling, answers, cancellation, and backend-bound cleanup |
@@ -114,13 +116,23 @@ Background event summaries remain in `runtimeSessionsById`. They supply current-
 
 Activity derives shared-CWD warnings from active or unheld queued work. Its **Stop** action uses the session-scoped interrupt route and stays unavailable during compaction.
 
-## Ultrafast and confirmations
+<a id="ultrafast-and-confirmations"></a>
 
-Both composers show a lowercase `ultrafast` chip beside the model and thinking controls for eligible models. A click changes the mode directly, without a confirmation modal.
+## Service tiers and confirmations
 
-`useSessionWorkspace.js` owns eligibility, mutation state, and the staged Home choice. Home reads only project-matched runtime previews. Project and model changes clear its staged Ultrafast choice. A same-project refresh retains it only for the same model with current Ultrafast eligibility.
+Both desktop composers use `ServiceTierPicker.vue` when a premium tier is available. Its chip shows the current tier. The menu uses lowercase labels: `standard`, `fast`, and `ultrafast`, with only eligible choices shown. Fast remains available on Ultrafast-capable models. Selection needs no confirmation modal.
 
-Selected sessions read the extension status from revision-accepted runtime snapshots. The renderer does not construct provider tier fields or calculate Ultrafast costs. See [Ultrafast](./backend-api#ultrafast) for eligibility, reset, and request rules.
+`MobileComposerControls.vue` keeps the speed bolt visible in the shared Home/session capsule. The bolt opens **Speed** directly. Standard uses an outlined gray bolt. Fast and Ultrafast use a filled lavender bolt. The sheet lists each available tier or explains that Fast and Ultrafast are unavailable. Failed asynchronous changes keep error feedback visible.
+
+`useSessionWorkspace.js` reads model DTO `serviceTiers`, owns mutation state, and stages the Home choice. Standard is the default. Home reads only project-matched runtime previews. Project and model changes reset its staged tier to Standard. A same-project refresh retains the exact tier only for the same available model with current eligibility.
+
+Home submission captures the staged tier and model. `App.vue` creates the session, applies model and thinking choices, then applies the premium tier before it submits the prompt. A failed or unconfirmed tier change stops that submission.
+
+Selected sessions read `extensionUi.statuses["leyline-service-tier"]`, whose values are `standard`, `fast`, and `ultrafast`. Tier changes use `setPiServiceTier()` and the session-scoped `service-tier` route. The composable confirms the result from the revision-accepted snapshot, rather than a stale HTTP response. Ordinary session prompts can still enter **Up next** during the change.
+
+For compatibility, models without `serviceTiers` fall back to `supportsUltrafast`. A runtime with only the legacy `leyline-ultrafast` status offers Standard and eligible Ultrafast, never Fast. That path uses `setPiUltrafast()` and the legacy `ultrafast` route. Missing both statuses does not establish premium support.
+
+The renderer does not construct provider tier fields or calculate tier costs. See [Service tiers](./backend-api#service-tiers) for eligibility, lifecycle resets, exact-tier restoration, request isolation, and cost estimates. The user-facing control is documented at [Choose a service tier](../user-guide/runtime-controls#choose-a-service-tier).
 
 `ExtensionConfirmations.vue` displays pending extension confirmations from the selected runtime snapshot. It sends **Confirm** or **Cancel** replies through the session-scoped API. The panel remains outside the fading and inert composer layers during startup motion.
 
@@ -252,7 +264,7 @@ Changing draft values or the test-only model ID clears the previous test result.
 
 Provider Refresh sends `refresh=1` to `/settings/providers`, which reloads settings extension registrations. Catalog refresh is a separate provider action. Editor lookup uses `/settings/catalog/models` with the captured target and query. Ordinary search uses the backend runtime cache. Lookup **Refresh** sends `refresh=1` to request a fresh settings runtime and network catalog refresh. Lookup displays any warning when the backend falls back to cached results.
 
-On Home, provider changes trigger `/state` with an explicit cwd and `refresh=1`. Same-project previews retain valid explicit model/thinking choices and recheck Ultrafast eligibility. Request identity and cwd checks reject stale previews.
+On Home, provider changes trigger `/state` with an explicit cwd and `refresh=1`. Same-project previews retain valid explicit model/thinking choices and recheck eligibility for the exact staged service tier. Request identity and cwd checks reject stale previews.
 
 Settings changes do not refresh a live conversation catalog. The explicit reload control uses the existing session reload path and then refreshes the settings pane. It is unavailable when the selected session cannot reload. Other open sessions remain unchanged.
 

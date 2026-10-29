@@ -139,7 +139,15 @@ Browser dictation is the default in normal web browsers. It is browser-managed a
 
 The gray capsule has three separate controls. Select the model name to open **Session options**. Select the thinking level to open **Thinking**, or the lightning bolt to open **Speed**.
 
-The bolt stays visible in both speed modes. It is gray and outlined for **Standard**, or lavender and filled for **Ultrafast**. For unsupported models, **Speed** explains why Ultrafast is unavailable. Supported models, premium pricing, and session scope match desktop. See [Runtime controls](./runtime-controls#use-ultrafast).
+**Speed** lists **Standard** and each eligible premium tier: **Fast**, **Ultrafast**, or both.
+
+![Mobile Speed sheet with Standard, Fast, and Ultrafast choices and Fast selected for gpt-6.1-sol](../assets/screenshots/mobile-speed.png)
+
+*Fast is selected for `gpt-6.1-sol` in the mobile Speed sheet.*
+
+The bolt stays visible for all models. It is gray and outlined for **Standard**, or lavender and filled for **Fast** or **Ultrafast**. For unsupported models, **Speed** explains that Fast and Ultrafast are unavailable.
+
+Tier changes remain available during generation or compaction. An in-flight request keeps its tier. Model eligibility, account restrictions, pricing, and session scope match desktop. See [Choose a service tier](./runtime-controls#choose-a-service-tier).
 
 During an active run, an empty draft shows **Stop**. Add text or an image to restore the send arrow and queue the draft in **Up next**. Select **Send options** beside the arrow for **Queue next task** or **Steer current run**.
 

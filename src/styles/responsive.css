@@ -1076,21 +1076,6 @@
   }
 }
 
-@media (max-width: 380px) {
-  .composer-actions.has-ultrafast {
-    flex-wrap: wrap;
-  }
-
-  .composer-actions.has-ultrafast > .model-picker:first-child {
-    flex: 1 1 100%;
-  }
-
-  .composer-actions.has-ultrafast > .small-picker {
-    min-width: 0;
-    flex: 1 1 0;
-  }
-}
-
 .header-more-button {
   display: none;
 }
@@ -1196,7 +1181,7 @@
     max-width: 100%;
   }
 
-  .composer-actions .ultrafast-toggle {
+  .composer-actions > .service-tier-picker {
     flex: none;
     width: auto;
   }
@@ -1402,7 +1387,6 @@
   }
 
   .composer-actions > .model-picker,
-  .composer-actions > .ultrafast-toggle,
   .composer .composer-context-row,
   .start-composer .composer-context-row {
     display: none;

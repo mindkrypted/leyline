@@ -389,6 +389,15 @@ export async function switchPiModel(sessionId, provider, id) {
   return data.active
 }
 
+export async function setPiServiceTier(sessionId, tier) {
+  const data = await apiRequest(
+    sessionActionUrl(sessionId, 'service-tier'),
+    'Failed to change speed',
+    { method: 'POST', body: { tier } },
+  )
+  return data.active
+}
+
 export async function setPiUltrafast(sessionId, enabled) {
   const data = await apiRequest(
     sessionActionUrl(sessionId, 'ultrafast'),

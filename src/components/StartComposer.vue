@@ -5,7 +5,7 @@ import DictationStatus from './DictationStatus.vue'
 import ModelPicker from './ModelPicker.vue'
 import MobileComposerControls from './MobileComposerControls.vue'
 import { useMobileComposerInput } from '../composables/useMobileComposerInput'
-import UltrafastToggle from './UltrafastToggle.vue'
+import ServiceTierPicker from './ServiceTierPicker.vue'
 import { formatMode } from '../lib/format'
 
 const props = defineProps({
@@ -101,9 +101,9 @@ const props = defineProps({
   },
   switchingModel: Boolean,
   switchingThinking: Boolean,
-  switchingUltrafast: Boolean,
-  ultrafastAvailable: Boolean,
-  ultrafastEnabled: Boolean,
+  switchingServiceTier: Boolean,
+  availableServiceTiers: { type: Array, default: () => ['standard'] },
+  serviceTier: { type: String, default: 'standard' },
   thinkingLevel: {
     type: String,
     default: '',
@@ -135,10 +135,10 @@ const emit = defineEmits([
   'select-project',
   'select-slash-command',
   'select-thinking',
+  'select-service-tier',
   'show-slash-picker',
   'submit',
   'toggle-picker',
-  'toggle-ultrafast',
   'toggle-session-kind',
   'toggle-project-picker',
   'update:draft',
@@ -151,6 +151,8 @@ const issueControl = ref(null)
 const issueDetailsOpen = computed(() => Boolean(issueControl.value?.opened))
 const mobileControls = ref(null)
 const mobileSheetOpen = ref(false)
+const serviceTierPicker = ref(null)
+const serviceTierPickerOpen = computed(() => Boolean(serviceTierPicker.value?.opened))
 useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
 const startProjectMenu = ref(null)
 const startProjectMenuStyle = ref({})
@@ -169,6 +171,14 @@ const shellModeLabel = computed(() => {
 })
 const inputDisabled = computed(() => Boolean(props.creatingSessionCwd))
 
+watch([
+  () => props.modelPickerOpen,
+  () => props.thinkingPickerOpen,
+  () => props.toolsPickerOpen,
+  () => props.startProjectPickerOpen,
+], (opened) => {
+  if (opened.some(Boolean)) dismissServiceTierPicker(false)
+})
 watch(() => props.startProjectPickerOpen, scheduleProjectMenu, { flush: 'post' })
 watch(() => props.startProjectTrigger, (element, previous) => {
   if (previous) projectMenuObserver?.unobserve(previous)
@@ -274,6 +284,15 @@ function dismissMobileSheet() {
   return mobileControls.value?.dismiss() || false
 }
 
+function dismissServiceTierPicker(restoreFocus = true) {
+  return serviceTierPicker.value?.dismiss(restoreFocus) || false
+}
+
+function openServiceTierPicker() {
+  emit('toggle-picker', 'service-tier')
+  if (props.startProjectPickerOpen) emit('toggle-project-picker')
+}
+
 function dismissIssueDetails() {
   return issueControl.value?.dismissDetails() || false
 }
@@ -302,7 +321,7 @@ async function restoreSelection(input, value, caret, valid, restoreFocus) {
   input.setSelectionRange(caret, caret)
 }
 
-defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileSheetOpen, dismissMobileSheet, openMobileDetails, issueDetailsOpen, dismissIssueDetails, closePopovers })
+defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileSheetOpen, dismissMobileSheet, openMobileDetails, serviceTierPickerOpen, dismissServiceTierPicker, issueDetailsOpen, dismissIssueDetails, closePopovers })
 </script>
 
 <template>
@@ -314,7 +333,7 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
       'hidden-shell-mode-composer': hiddenShellMode,
       'research-mode-composer': researchMode,
     }"
-    @submit.prevent="!switchingUltrafast && emit('submit')"
+    @submit.prevent="!switchingServiceTier && emit('submit')"
   >
     <div class="composer-input-shell">
       <Transition name="shell-glyph">
@@ -393,7 +412,7 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
           @focus-composer="focus"
         />
         <div class="composer-row-spacer"></div>
-        <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
+        <div class="composer-actions">
           <MobileComposerControls
             v-if="mobile"
             ref="mobileControls"
@@ -404,18 +423,18 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
             :model-key="modelKey"
             :thinking-level="thinkingLevel"
             :disabled="inputDisabled"
-            :settings-disabled="switchingModel || switchingThinking || switchingUltrafast"
+            :settings-disabled="switchingModel || switchingThinking || switchingServiceTier"
             :settings-error="settingsError"
             :image-disabled="shellMode"
-            :ultrafast-available="ultrafastAvailable"
-            :ultrafast-enabled="ultrafastEnabled"
+            :available-service-tiers="availableServiceTiers"
+            :service-tier="serviceTier"
             :research-enabled="researchEnabled"
             :research="researchMode"
             :tool-names="toolNames"
             @open="mobileSheetOpen = $event"
             @select-model="emit('select-model', $event)"
             @select-thinking="emit('select-thinking', $event)"
-            @toggle-ultrafast="emit('toggle-ultrafast')"
+            @select-service-tier="emit('select-service-tier', $event)"
             @toggle-research="emit('toggle-session-kind')"
             @pick-images="emit('pick-images', $event)"
             @newline="insertNewline"
@@ -423,33 +442,33 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
           <ModelPicker
             :available-models="availableModels"
             :current-model-label="currentModelLabel"
-            :disabled="switchingModel || switchingUltrafast || availableModels.length === 0"
+            :disabled="switchingModel || switchingServiceTier || availableModels.length === 0"
             :model-key="modelKey"
-            :open="modelPickerOpen && !switchingUltrafast"
+            :open="modelPickerOpen && !switchingServiceTier"
             :selected-model-key="selectedModelKey"
             start
-            @select="!switchingUltrafast && emit('select-model', $event)"
+            @select="!switchingServiceTier && emit('select-model', $event)"
             @toggle="emit('toggle-picker', 'model')"
           />
           <div class="model-picker small-picker start-picker">
             <button
               class="composer-chip model-picker-button start-composer-chip"
               type="button"
-              :disabled="switchingThinking || switchingUltrafast || !availableThinkingLevels.length"
+              :disabled="switchingThinking || switchingServiceTier || !availableThinkingLevels.length"
               @click="emit('toggle-picker', 'thinking')"
             >
               <span class="model-label">{{ currentThinkingLabel }}</span>
               <span class="model-caret">▾</span>
             </button>
             <Transition name="composer-popover">
-              <div v-if="thinkingPickerOpen && !switchingUltrafast" class="model-menu small-menu">
+              <div v-if="thinkingPickerOpen && !switchingServiceTier" class="model-menu small-menu">
                 <button
                   v-for="level in availableThinkingLevels"
                   :key="level"
                   type="button"
                   :class="{ active: level === thinkingLevel }"
-                  :disabled="switchingUltrafast"
-                  @click="!switchingUltrafast && emit('select-thinking', level)"
+                  :disabled="switchingServiceTier"
+                  @click="!switchingServiceTier && emit('select-thinking', level)"
                 >
                   <span>{{ formatMode(level) }}</span>
                   <span v-if="level === thinkingLevel">✓</span>
@@ -457,15 +476,18 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
               </div>
             </Transition>
           </div>
-          <UltrafastToggle
-            v-if="ultrafastAvailable"
-            :enabled="ultrafastEnabled"
+          <ServiceTierPicker
+            v-if="!mobile && availableServiceTiers.length > 1"
+            ref="serviceTierPicker"
+            :available-service-tiers="availableServiceTiers"
+            :service-tier="serviceTier"
             :disabled="!!creatingSessionCwd
               || switchingModel
               || switchingThinking
-              || switchingUltrafast"
+              || switchingServiceTier"
             start
-            @toggle="emit('toggle-ultrafast')"
+            @open="openServiceTierPicker"
+            @select-service-tier="emit('select-service-tier', $event)"
           />
           <button
             class="dictation-button"
@@ -507,7 +529,7 @@ defineExpose({ form, focus, getSelection, getTextarea, restoreSelection, mobileS
             :title="shellMode ? 'Run shell command' : 'Send message'"
             :disabled="!newSessionCwd.trim()
               || !!creatingSessionCwd
-              || switchingUltrafast
+              || switchingServiceTier
               || dictationSubmitting
               || !!imageSupportWarning
               || (!dictation.active && shellMode && (!shellCommand || attachedImages.length))"

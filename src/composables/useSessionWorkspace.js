@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { highlightedText as highlightFuzzyText } from '../lib/fuzzy'
-import { ULTRAFAST_STATUS_KEY } from '../../lib/ultrafast.js'
+import { SERVICE_TIERS, SERVICE_TIER_STATUS_KEY, ULTRAFAST_STATUS_KEY, serviceTierFromStatuses } from '../../lib/ultrafast.js'
 import {
   formatMode,
   modelChip,
@@ -21,6 +21,7 @@ import {
   reloadPiSession,
   renamePiSession,
   resetPiSession,
+  setPiServiceTier,
   setPiUltrafast,
   switchPiModel,
   switchPiThinkingLevel,
@@ -28,6 +29,13 @@ import {
 
 const PROJECT_AGE_REFRESH_MS = 60 * 60 * 1000
 const RECENT_PROJECT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000
+
+function modelServiceTiers(model) {
+  if (Array.isArray(model?.serviceTiers)) {
+    return SERVICE_TIERS.filter(tier => tier === 'standard' || model.serviceTiers.includes(tier))
+  }
+  return model?.supportsUltrafast === true ? ['standard', 'ultrafast'] : ['standard']
+}
 
 export function useSessionWorkspace({
   liveTurn,
@@ -52,7 +60,7 @@ export function useSessionWorkspace({
   const startRuntimeState = ref(null)
   const startSelectedModel = ref(null)
   const startSelectedThinkingLevel = ref(null)
-  const startUltrafastEnabled = ref(false)
+  const startServiceTier = ref('standard')
   const sessionQuery = ref('')
   const selectedSessionId = ref('')
   const sessionDetail = ref(null)
@@ -79,7 +87,7 @@ export function useSessionWorkspace({
   const sessionHandoffSettling = ref(false)
   const switchingModel = ref(false)
   const switchingThinking = ref(false)
-  const switchingUltrafast = ref(false)
+  const switchingServiceTier = ref(false)
   const reloadingSession = ref(false)
   const renamingSessionId = ref('')
   const renamingSessionSource = ref('')
@@ -170,17 +178,18 @@ export function useSessionWorkspace({
   const availableModels = computed(() => {
     return composerRuntime.value?.state?.availableModels || []
   })
-  const ultrafastAvailable = computed(() => {
+  const availableServiceTiers = computed(() => {
     const state = composerRuntime.value?.state
-    return state?.model?.supportsUltrafast === true
-      && (!selectedSession.value
-        || ['on', 'off'].includes(state.extensionUi?.statuses?.[ULTRAFAST_STATUS_KEY]))
+    const tiers = modelServiceTiers(state?.model)
+    if (!selectedSession.value || SERVICE_TIERS.includes(state?.extensionUi?.statuses?.[SERVICE_TIER_STATUS_KEY])) return tiers
+    return ['on', 'off'].includes(state?.extensionUi?.statuses?.[ULTRAFAST_STATUS_KEY])
+      ? tiers.filter(tier => tier !== 'fast') : ['standard']
   })
-  const ultrafastEnabled = computed(() => {
-    if (!ultrafastAvailable.value) return false
-    return selectedSession.value
-      ? composerRuntime.value?.state?.extensionUi?.statuses?.[ULTRAFAST_STATUS_KEY] === 'on'
-      : startUltrafastEnabled.value
+  const serviceTier = computed(() => {
+    const tier = selectedSession.value
+      ? serviceTierFromStatuses(composerRuntime.value?.state?.extensionUi?.statuses)
+      : startServiceTier.value
+    return availableServiceTiers.value.includes(tier) ? tier : 'standard'
   })
   const selectedModelKey = computed(() => {
     const model = composerRuntime.value?.state?.model
@@ -356,7 +365,7 @@ export function useSessionWorkspace({
       startRuntimeState.value = null
       startSelectedModel.value = null
       startSelectedThinkingLevel.value = null
-      startUltrafastEnabled.value = false
+      startServiceTier.value = 'standard'
     }
     if (pending && !refresh) return pending
 
@@ -375,11 +384,12 @@ export function useSessionWorkspace({
           ? startSelectedThinkingLevel.value
           : null
         const nextModel = model || state.state.model
-        startUltrafastEnabled.value = startUltrafastEnabled.value
-          && nextModel?.supportsUltrafast === true
-          && modelKey(nextModel) === selectedModelKey.value
-          && availableModels.some((model) => modelKey(model) === modelKey(nextModel)
-            && model.supportsUltrafast === true)
+        if (!nextModel || modelKey(nextModel) !== selectedModelKey.value
+          || !modelServiceTiers(nextModel).includes(startServiceTier.value)
+          || !availableModels.some(model => modelKey(model) === modelKey(nextModel)
+            && modelServiceTiers(model).includes(startServiceTier.value))) {
+          startServiceTier.value = 'standard'
+        }
         startSelectedModel.value = model || null
         startSelectedThinkingLevel.value = thinkingLevel
         startRuntimeState.value = {
@@ -533,7 +543,7 @@ export function useSessionWorkspace({
     sessionHandoffSettling.value = false
     clearTimeout(sessionHandoffSettlingTimer)
     activeRuntimeSession.value = null
-    startUltrafastEnabled.value = false
+    startServiceTier.value = 'standard'
     finishStartupRun()
     liveTurn?.reset?.()
   }
@@ -1363,7 +1373,7 @@ export function useSessionWorkspace({
   }
 
   async function selectModel(model) {
-    if (switchingModel.value || switchingUltrafast.value
+    if (switchingModel.value || switchingServiceTier.value
       || !model || modelKey(model) === selectedModelKey.value) return false
 
     switchingModel.value = true
@@ -1382,7 +1392,7 @@ export function useSessionWorkspace({
         startSelectedThinkingLevel.value = thinkingLevel
       }
       startSelectedModel.value = model
-      startUltrafastEnabled.value = false
+      startServiceTier.value = 'standard'
       startRuntimeState.value = {
         ...startRuntimeState.value,
         state: {
@@ -1412,32 +1422,35 @@ export function useSessionWorkspace({
     return true
   }
 
-  async function setUltrafast(enabled) {
-    if (switchingUltrafast.value
-      || (enabled && !selectedSession.value && !ultrafastAvailable.value)) return false
+  async function setServiceTier(tier) {
+    if (switchingServiceTier.value || switchingModel.value || switchingThinking.value
+      || !availableServiceTiers.value.includes(tier)) return false
     sessionError.value = ''
     if (!selectedSession.value) {
-      startUltrafastEnabled.value = enabled
-      return enabled
+      startServiceTier.value = tier
+      return true
     }
     const sessionId = selectedSessionId.value
-    switchingUltrafast.value = true
+    switchingServiceTier.value = true
     try {
-      const active = await setPiUltrafast(sessionId, enabled)
+      const statuses = composerRuntime.value?.state?.extensionUi?.statuses
+      const active = SERVICE_TIERS.includes(statuses?.[SERVICE_TIER_STATUS_KEY])
+        ? await setPiServiceTier(sessionId, tier)
+        : await setPiUltrafast(sessionId, tier === 'ultrafast')
       if (selectedSessionId.value !== sessionId) return false
       activeRuntimeSession.value = active
       return activeRuntimeSession.value?.id === sessionId
-        && activeRuntimeSession.value.state?.extensionUi?.statuses?.[ULTRAFAST_STATUS_KEY] === 'on'
+        && serviceTierFromStatuses(activeRuntimeSession.value.state?.extensionUi?.statuses) === tier
     } catch (error) {
       if (selectedSessionId.value === sessionId) sessionError.value = error.message
       return false
     } finally {
-      switchingUltrafast.value = false
+      switchingServiceTier.value = false
     }
   }
 
   async function selectThinkingLevel(level) {
-    if (switchingModel.value || switchingThinking.value || switchingUltrafast.value
+    if (switchingModel.value || switchingThinking.value || switchingServiceTier.value
       || !level || level === composerRuntime.value?.state?.thinkingLevel) {
       return false
     }
@@ -1989,14 +2002,14 @@ export function useSessionWorkspace({
     startRuntimeState,
     startSelectedModel,
     startSelectedThinkingLevel,
-    startUltrafastEnabled,
+    startServiceTier,
     startupRun,
     switchingModel,
     switchingThinking,
-    switchingUltrafast,
-    setUltrafast,
-    ultrafastAvailable,
-    ultrafastEnabled,
+    switchingServiceTier,
+    setServiceTier,
+    availableServiceTiers,
+    serviceTier,
     updateSelectedSessionSummary,
     visibleProjects,
   }

@@ -76,7 +76,7 @@ The router has these main route groups:
 
 - session list, normal or research creation, detail, lookup by path, rename, delete, and export
 - runtime state and active-session selection
-- prompt, queue mutation, shell, compaction, edit, fork, Reset to here, reload, model, thinking, mode, and interrupt
+- prompt, queue mutation, shell, compaction, edit, fork, Reset to here, reload, model, thinking, service tier, mode, and interrupt
 - filesystem browsing
 - read-only Git review
 - Memory Inspector operations
@@ -119,7 +119,7 @@ The WebSocket at `/api/pi/review/events?cwd=...` sends `review_ready` only after
 
 Normal runtimes load the bundled output-budget, ultrafast, memory, subagent, research, and vision-agent extensions. They also append the Leyline system prompt.
 
-`preferBundledExtensions()` filters conflicts by extension name and designated command or tool names. It puts the bundled Ultrafast extension last, so later hooks cannot overwrite its enabled tier.
+`preferBundledExtensions()` filters conflicts by extension name and designated command or tool names. The service-tier extension keeps its `ultrafast` directory name and runs last, after other provider hooks. Conflict checks include both `leyline-service-tier` and legacy `leyline-ultrafast` commands.
 
 Conversation runtimes also install the named inline Elune capture factory. Home previews use `captureTracing: false`. Settings runtimes and private probes do not install this factory.
 
@@ -142,7 +142,7 @@ Leyline retains `one-at-a-time` delivery for native pi steering and follow-up in
 Runtime access and events update the last-used time. Each sweep also resets that time for protected handles. Protections include:
 
 - an open runtime WebSocket whose selected `sessionId` exactly matches the handle
-- in-flight scoped API requests, initialization, extension binding, reload, branch changes, model or Ultrafast changes, and disposal
+- in-flight scoped API requests, initialization, extension binding, reload, branch changes, model or service-tier changes, and disposal
 - prompt locks, pending prompt setup or handoff, Stop, compaction, and shell execution
 - subagent execution controllers or signals
 - editable tasks, including held tasks, native queued inputs, and pending bash messages
@@ -152,9 +152,11 @@ An unscoped WebSocket, compact background snapshots, or the legacy active select
 
 `runtime.js` suspends eligible handles through the normal interruption and disposal path. Disposal shuts down extensions and native MCP resources, releases capture bindings, and emits `runtime_removed`. It clears the legacy active selection if that handle was active. It does not delete JSONL history.
 
-`idleSessions` retains lightweight session metadata, the branch leaf and last entry ID, model, thinking level, Ultrafast choice, and activity state. For a session without an existing file, it also retains the manager. List and detail reads use this state without recreating connections.
+`idleSessions` retains lightweight session metadata, the branch leaf and last entry ID, model, thinking level, exact service tier, and activity state. For a session without an existing file, it also retains the manager. List and detail reads use this state without recreating connections.
 
-Reopening or a scoped action rebuilds cwd-bound services and MCP connections. The saved leaf restores only when the persisted last entry still matches. Otherwise, the updated file takes precedence over temporary restoration state. Model restoration depends on availability and configured authentication. Ultrafast restores only for the same provider/model when its current authentication remains eligible and its command is available. Backend restart discards these temporary records, but retains persisted history and settings.
+Reopening or a scoped action rebuilds cwd-bound services and MCP connections. The saved leaf restores only when the persisted last entry still matches. Otherwise, the updated file takes precedence over temporary restoration state. Model restoration depends on availability and configured authentication.
+
+The exact premium tier restores only for the same provider/model, with eligible current authentication and the `leyline-service-tier` command available. Otherwise, the runtime stays Standard. Backend restart discards these temporary records, but retains persisted history and settings.
 
 ## Native MCP and tool search
 
@@ -255,28 +257,84 @@ New MCP entries default to `deferred`. The editor offers `deferred`, `direct`, a
 
 Confirmation replies apply only to the current session binding. Abort, expiry, reload, or disposal resolves pending requests as false. Stale replies cannot approve replacement runtimes.
 
-## Ultrafast
+<a id="ultrafast"></a>
 
-The bundled `.pi/extensions/ultrafast/index.js` owns the mode and provider hooks. Its `leyline-ultrafast` command is for composer controls and stays hidden from the slash picker.
+## Service tiers
 
-Eligibility requires `gpt-6-astra` or `gpt-6.1-sol` on one of these paths:
+The bundled `.pi/extensions/ultrafast/index.js` owns service-tier state and provider hooks for Standard, Fast, and Ultrafast.
+
+### Eligibility and controls
+
+`lib/ultrafast.js` defines explicit model and authentication eligibility. Leyline does not discover tier eligibility from a dynamic Codex catalog.
+
+| Tier | Exact model IDs |
+| --- | --- |
+| Standard | All models |
+| Fast | `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` |
+| Ultrafast | `gpt-6-astra`, `gpt-6.1-sol` |
+
+Both premium tiers require one of these paths:
 
 - `openai-codex` with `openai-codex-responses`
 - `openai` with `openai-responses` and API-key authentication
 
-The `openai` subscription path is ineligible. Ultrafast defaults to off and belongs to the current runtime. Model changes and explicit reloads reset it. New forks start with it off.
+The `openai` subscription path is ineligible. Ultrafast-capable models also offer Fast. Model DTOs expose the available values in `serviceTiers`, always starting with `"standard"`. The legacy `supportsUltrafast` boolean remains for compatibility and reports eligibility, not the selected tier.
 
-Retry and prompt edits retain the choice when runtime and model identity stay unchanged. Their internal navigation can rebind extensions, so the edit path restores the tier through the extension command before generation and after rollback.
+`POST /api/pi/sessions/:id/service-tier` accepts `{ tier }`, where `tier` is `"standard"`, `"fast"`, or `"ultrafast"`. The runtime validates eligibility and calls `/leyline-service-tier <tier>` through `session.prompt()`. Every change requires the command, including selection of Standard. The command and status key are both `leyline-service-tier`. The status contains the selected lowercase tier.
 
-Ultrafast applies only to normal agent turns. Compaction and branch summaries stay Standard, including automatic compaction during a turn. Cache warming stops while Ultrafast is enabled.
+The response is `{ ok: true, active }`. Read `active.state.extensionUi.statuses["leyline-service-tier"]` from the revision-accepted snapshot to confirm the result. Cancellation or runtime replacement can leave the tier unchanged despite `ok: true`.
 
-When enabled, normal agent requests use `service_tier: "ultrafast"`. Codex requests also use `x-codex-routing-hint: model=<id>;tier=ultrafast`. Direct OpenAI Astra requests add `OpenAI-Service-Tier: ultrafast`.
+The legacy `/leyline-ultrafast on|off` command and `POST /api/pi/sessions/:id/ultrafast` with `{ enabled }` remain only for compatibility. `on` or `true` selects Ultrafast. `off` or `false` selects Standard, including from Fast. The legacy `leyline-ultrafast` status is `"on"` only for Ultrafast and `"off"` otherwise. Both commands stay hidden from the slash picker.
 
-Tier changes call pi's public `cleanupSessionResources(sessionId)` to obtain a fresh connection and routing headers. An external model change during a run defers cleanup to a safe turn or provider boundary.
+### Lifecycle
 
-Cost changes require a matching response ID, provider, and model. The extension recalculates base costs and multiplies each cost field by six for confirmed Ultrafast requests. Codex confirmation also accepts an Ultrafast request when the response tier is absent or `default`. Token counts do not change.
+Standard is the default. The choice belongs to the current runtime, not durable settings or session history.
 
-Model and Ultrafast changes use the prompt-submission lock outside active compaction. They do not require an idle model run. Model changes hold the lock through asynchronous authentication. Ordinary new prompts remain accepted in the editable queue during either change. Automatic dispatch waits for the change to finish. Both paths release their flags and reschedule the queue in `finally`.
+- Model changes, explicit reloads, and reset navigation select Standard. New sessions and forks start Standard.
+- Same-runtime, same-model retries and prompt edits retain the exact tier. The edit path restores it through the extension command before generation and after rollback.
+- Idle-runtime restoration retains the exact tier only when the provider/model, current eligibility, and command availability permit it. See [Idle runtime cleanup](#idle-runtime-cleanup).
+
+Model and service-tier changes use the prompt-submission lock outside active compaction. They do not require an idle model run. Model changes hold the lock through asynchronous authentication. Ordinary new prompts remain accepted in the editable queue during either change. Automatic dispatch waits for the change to finish. Both paths release their flags and reschedule the queue in `finally`.
+
+### Request boundary and cleanup
+
+Tier overrides apply only to normal agent turns. Compaction and branch summaries receive no premium overrides, including automatic compaction during a turn. Fast and Ultrafast stop cache warming through `cache_warming_decision`.
+
+`runtime.js` copies each request's options and emits `leyline:provider-request` only when the session ID and active agent signal match. `AsyncLocalStorage` retains that options object's identity during the provider call. `leyline:request-boundary-ready` supplies the extension with a function that reads the current object.
+
+The extension uses that object as a `WeakMap` key for a request snapshot of the model, base costs, signal, and tier. Payload and response hooks check the captured model and signal. Header hooks require the same request identity. These checks prevent concurrent summary requests from inheriting premium headers. Premium selection requires the Leyline request boundary.
+
+For eligible normal requests, the payload and Codex routing header agree:
+
+| Choice | `service_tier` | Codex `x-codex-routing-hint` |
+| --- | --- | --- |
+| Standard | `"default"` | `model=<id>` |
+| Fast | `"priority"` | `model=<id>;tier=priority` |
+| Ultrafast | `"ultrafast"` | `model=<id>;tier=ultrafast` |
+
+Direct OpenAI `gpt-6-astra` requests add `OpenAI-Service-Tier: ultrafast` only for Ultrafast. Standard and Fast clear that header.
+
+The extension resolves public `calculateCost()` and `cleanupSessionResources()` from the coding-agent package's own `@earendil-works/pi-ai` dependency. A separate root dependency can have a different cleanup registry. This resolution reaches the SDK's cached transports without private imports or dependency patches.
+
+Tier transitions and model changes request `cleanupSessionResources(sessionId)`, including Standard-to-Standard model switches. Cleanup closes cached connections so later requests use current routing headers. Connection cleanup runs immediately when the session is idle. Active requests defer cleanup to safe turn, provider, compaction-completion, or settlement boundaries.
+
+### Cost estimates
+
+The response hook reads `response.id` and `response.service_tier` from `response.completed`, `response.done`, or `response.incomplete`. Recognized response tiers are `default`, `priority`, `fast`, and `ultrafast`.
+
+- Codex uses the requested tier when the response tier is absent or `default`.
+- Direct OpenAI honors an explicit `default` downgrade. If the tier is absent, only a Fast request falls back to its requested `priority` tier. An absent tier does not confirm direct OpenAI Ultrafast.
+- Other recognized response tiers take precedence over the requested tier.
+
+At `message_end`, cost adjustment requires matching `message.responseId`, provider, and model, plus usage data. `calculateCost()` first recalculates base costs from the request snapshot. The extension then applies one multiplier to each cost field, including the total. It does not multiply already-adjusted native costs or change token counts.
+
+| Resolved response tier | Cost multiplier |
+| --- | --- |
+| `default` | 1 |
+| `priority` or `fast` | 2, or 2.5 for the exact model ID `gpt-5.5` |
+| `ultrafast` | 6 |
+
+The Fast factors match native pi pricing. The extension supplies the Ultrafast factor. These values produce cost estimates, not authoritative billing amounts.
 
 ## Pending prompts
 
@@ -284,7 +342,7 @@ Each runtime handle owns a shared, editable **Up next** queue from `prompt-queue
 
 Ordinary input during a run enters this queue. A `followUp` request also enters the queue when idle. Registered extension commands still execute through pi directly.
 
-The queue submits one task when `session.isIdle`. Shell execution, prompt setup, Stop, reload, initialization, compaction, branch changes, and model or Ultrafast changes block automatic dispatch. Settlement and lifecycle completion schedule another dispatch check.
+The queue submits one task when `session.isIdle`. Shell execution, prompt setup, Stop, reload, initialization, compaction, branch changes, and model or service-tier changes block automatic dispatch. Settlement and lifecycle completion schedule another dispatch check.
 
 Prompt tasks use the prompt lock, vision preparation, and `session.prompt()`. They retain the original handoff ID for transformed-input reconciliation. Shell tasks use native bash execution instead.
 

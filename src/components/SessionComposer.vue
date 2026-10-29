@@ -5,7 +5,7 @@ import DictationStatus from './DictationStatus.vue'
 import ModelPicker from './ModelPicker.vue'
 import MobileComposerControls from './MobileComposerControls.vue'
 import { useMobileComposerInput } from '../composables/useMobileComposerInput'
-import UltrafastToggle from './UltrafastToggle.vue'
+import ServiceTierPicker from './ServiceTierPicker.vue'
 import PromptQueue from './PromptQueue.vue'
 import { formatMode } from '../lib/format'
 
@@ -130,9 +130,9 @@ const props = defineProps({
   slashPickerOpen: Boolean,
   switchingModel: Boolean,
   switchingThinking: Boolean,
-  switchingUltrafast: Boolean,
-  ultrafastAvailable: Boolean,
-  ultrafastEnabled: Boolean,
+  switchingServiceTier: Boolean,
+  availableServiceTiers: { type: Array, default: () => ['standard'] },
+  serviceTier: { type: String, default: 'standard' },
   terminalOpen: Boolean,
   terminalStatus: {
     type: String,
@@ -170,10 +170,10 @@ const emit = defineEmits([
   'select-model',
   'select-slash-command',
   'select-thinking',
+  'select-service-tier',
   'show-slash-picker',
   'submit',
   'toggle-picker',
-  'toggle-ultrafast',
   'toggle-research',
   'toggle-terminal',
   'update:draft',
@@ -186,6 +186,8 @@ const issueControl = ref(null)
 const issueDetailsOpen = computed(() => Boolean(issueControl.value?.opened))
 const mobileControls = ref(null)
 const mobileSheetOpen = ref(false)
+const serviceTierPicker = ref(null)
+const serviceTierPickerOpen = computed(() => Boolean(serviceTierPicker.value?.opened))
 useMobileComposerInput({ textarea, mobile: () => props.mobile, draft: () => props.draft })
 const sendActions = ref(null)
 const sendMenu = ref(null)
@@ -195,7 +197,7 @@ const shellMode = computed(() => props.draft.trimStart().startsWith('!'))
 const hiddenShellMode = computed(() => props.draft.trimStart().startsWith('!!'))
 const queueMode = computed(() => !props.editingLabel
   && (props.agentRunning || props.shellRunning || props.compacting || props.reloadingSession
-    || props.switchingModel || props.switchingUltrafast
+    || props.switchingModel || props.switchingServiceTier
     || props.promptQueue?.held || props.promptQueue?.items?.length > 0))
 const submitDisabled = computed(() => props.dictationSubmitting
   || (props.promptSubmitting && (!props.compacting || props.editingLabel))
@@ -208,6 +210,14 @@ const shellModeLabel = computed(() => {
 watch(() => props.sessionId, () => {
   sendMenuOpen.value = false
   mobileControls.value?.dismiss()
+  dismissServiceTierPicker(false)
+})
+watch([
+  () => props.modelPickerOpen,
+  () => props.thinkingPickerOpen,
+  () => props.toolsPickerOpen,
+], (opened) => {
+  if (opened.some(Boolean)) dismissServiceTierPicker(false)
 })
 watch([queueMode, () => props.promptSubmitting], ([queueing, submitting]) => {
   if (!queueing || submitting) sendMenuOpen.value = false
@@ -258,6 +268,10 @@ function dismissMobileSheet() {
   return mobileControls.value?.dismiss() || false
 }
 
+function dismissServiceTierPicker(restoreFocus = true) {
+  return serviceTierPicker.value?.dismiss(restoreFocus) || false
+}
+
 const mobileStop = computed(() => props.mobile && !props.editingLabel
   && (props.agentRunning || props.compacting || props.shellRunning)
   && !props.dictation.active && !props.dictationSubmitting
@@ -279,7 +293,7 @@ async function restoreSelection(input, value, caret, valid, restoreFocus) {
   input.setSelectionRange(caret, caret)
 }
 
-defineExpose({ focus, form, getSelection, getTextarea, restoreSelection, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet, issueDetailsOpen, dismissIssueDetails })
+defineExpose({ focus, form, getSelection, getTextarea, restoreSelection, dismissQueue, closePopovers, hasQueueDrafts, queueUiOpen, mobileSheetOpen, dismissMobileSheet, serviceTierPickerOpen, dismissServiceTierPicker, issueDetailsOpen, dismissIssueDetails })
 
 function updateDraft(event) {
   emit('update:draft', event.target.value)
@@ -400,7 +414,7 @@ async function insertNewline() {
           @focus-composer="focus"
         />
         <div class="composer-row-spacer"></div>
-        <div class="composer-actions" :class="{ 'has-ultrafast': ultrafastAvailable }">
+        <div class="composer-actions">
           <MobileComposerControls
             v-if="mobile"
             ref="mobileControls"
@@ -410,11 +424,11 @@ async function insertNewline() {
             :selected-model-key="selectedModelKey"
             :model-key="modelKey"
             :thinking-level="thinkingLevel"
-            :settings-disabled="reloadingSession || switchingModel || switchingThinking || switchingUltrafast"
+            :settings-disabled="reloadingSession || switchingModel || switchingThinking || switchingServiceTier"
             :settings-error="settingsError"
             :image-disabled="shellMode"
-            :ultrafast-available="ultrafastAvailable"
-            :ultrafast-enabled="ultrafastEnabled"
+            :available-service-tiers="availableServiceTiers"
+            :service-tier="serviceTier"
             :research-enabled="researchToggleEnabled"
             :research-disabled="promptSubmitting"
             :research="research"
@@ -423,7 +437,7 @@ async function insertNewline() {
             @open="mobileSheetOpen = $event"
             @select-model="emit('select-model', $event)"
             @select-thinking="emit('select-thinking', $event)"
-            @toggle-ultrafast="emit('toggle-ultrafast')"
+            @select-service-tier="emit('select-service-tier', $event)"
             @toggle-research="emit('toggle-research')"
             @pick-images="emit('pick-images', $event)"
             @interrupt="emit('interrupt')"
@@ -433,11 +447,11 @@ async function insertNewline() {
             :available-models="availableModels"
             :current-mobile-model-label="currentMobileModelLabel"
             :current-model-label="currentModelLabel"
-            :disabled="reloadingSession || switchingModel || switchingUltrafast"
+            :disabled="reloadingSession || switchingModel || switchingServiceTier"
             :model-key="modelKey"
-            :open="modelPickerOpen && !switchingUltrafast"
+            :open="modelPickerOpen && !switchingServiceTier"
             :selected-model-key="selectedModelKey"
-            @select="!switchingUltrafast && emit('select-model', $event)"
+            @select="!switchingServiceTier && emit('select-model', $event)"
             @toggle="emit('toggle-picker', 'model')"
           />
           <div class="model-picker small-picker">
@@ -445,7 +459,7 @@ async function insertNewline() {
               class="composer-chip model-picker-button"
               type="button"
               :disabled="reloadingSession || switchingModel
-                || switchingThinking || switchingUltrafast"
+                || switchingThinking || switchingServiceTier"
               @click="emit('toggle-picker', 'thinking')"
             >
               <span class="model-label desktop-label">
@@ -457,14 +471,14 @@ async function insertNewline() {
               <span class="model-caret">▾</span>
             </button>
             <Transition name="composer-popover">
-              <div v-if="thinkingPickerOpen && !switchingUltrafast" class="model-menu small-menu">
+              <div v-if="thinkingPickerOpen && !switchingServiceTier" class="model-menu small-menu">
                 <button
                   v-for="level in availableThinkingLevels"
                   :key="level"
                   type="button"
                   :class="{ active: level === thinkingLevel }"
-                  :disabled="switchingUltrafast"
-                  @click="!switchingUltrafast && emit('select-thinking', level)"
+                  :disabled="switchingServiceTier"
+                  @click="!switchingServiceTier && emit('select-thinking', level)"
                 >
                   <span>{{ formatMode(level) }}</span>
                   <span v-if="level === thinkingLevel">✓</span>
@@ -472,12 +486,15 @@ async function insertNewline() {
               </div>
             </Transition>
           </div>
-          <UltrafastToggle
-            v-if="ultrafastAvailable"
-            :enabled="ultrafastEnabled"
+          <ServiceTierPicker
+            v-if="!mobile && availableServiceTiers.length > 1"
+            ref="serviceTierPicker"
+            :available-service-tiers="availableServiceTiers"
+            :service-tier="serviceTier"
             :disabled="reloadingSession || switchingModel
-              || switchingThinking || switchingUltrafast"
-            @toggle="emit('toggle-ultrafast')"
+              || switchingThinking || switchingServiceTier"
+            @open="emit('toggle-picker', 'service-tier')"
+            @select-service-tier="emit('select-service-tier', $event)"
           />
           <button
             class="dictation-button"

@@ -26,6 +26,7 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - [Linux installation](docs/getting-started/linux-installation.md)
 - [Sessions](docs/user-guide/sessions.md)
 - [Composer](docs/user-guide/composer.md)
+- [Runtime controls](docs/user-guide/runtime-controls.md)
 - [Dictation](docs/user-guide/dictation.md)
 - [Deep research](docs/user-guide/deep-research.md)
 - [Git review](docs/user-guide/git-review.md)
@@ -46,6 +47,8 @@ See [Tracing](docs/user-guide/tracing.md) for recorded runs and capture controls
 - Browse, search, pin, and run pi sessions across projects. Show
   [only pinned sessions](docs/user-guide/sessions.md#show-only-pinned-sessions)
   in the sidebar. Read live transcripts and monitor work in **Activity**.
+- Choose a model, thinking level, and [service tier](docs/user-guide/runtime-controls.md#choose-a-service-tier):
+  Standard, Fast, or Ultrafast where supported. Standard remains the default.
 - Steer active work or queue **Up next** tasks. Examine tools, System
   changes, local files, and Git changes. Use configured MCP tools and
   respond to extension requests in the workspace.

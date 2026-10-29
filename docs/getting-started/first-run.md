@@ -30,10 +30,11 @@ packaged app does not need a development server.
 Leyline creates the session, applies the staged runtime choices, and sends the
 prompt. You do not have to create an empty session first.
 
-The optional `ultrafast` chip is off by default. On Home, clicks stage the
-choice without a confirmation dialog. It uses premium pricing for supported
-OpenAI Responses models. See [Runtime controls](../user-guide/runtime-controls#use-ultrafast)
-for model and authentication limits.
+Standard is the default service tier. For supported models, open the desktop
+tier chip to choose `standard`, `fast`, or `ultrafast`. On mobile, use **Speed**.
+Fast and Ultrafast use premium pricing. On Home, the choice stays staged until
+session creation. See [Choose a service tier](../user-guide/runtime-controls#choose-a-service-tier)
+for model, authentication, and account limits.
 
 If no usable model is available, open **Settings → Models & providers**.
 Sign in when the provider requires authentication, or add a custom endpoint

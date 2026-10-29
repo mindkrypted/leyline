@@ -592,10 +592,10 @@ const {
   startupRun,
   switchingModel,
   switchingThinking,
-  switchingUltrafast,
-  setUltrafast,
-  ultrafastAvailable,
-  ultrafastEnabled,
+  switchingServiceTier,
+  setServiceTier,
+  availableServiceTiers,
+  serviceTier,
   updateRuntimeEventState,
   updateRuntimeSessionSnapshot,
   visibleProjects,
@@ -2912,7 +2912,7 @@ async function requestResearchReportRepair() {
     || promptSubmitting.value
     || agentRunning.value
     || reloadingSession.value
-    || switchingUltrafast.value
+    || switchingServiceTier.value
     || sessionLoading.value
     || sessionSwitching.value
     || sessionActivating.value
@@ -3148,7 +3148,7 @@ async function submitDraft(streamingBehavior) {
   }
 
   if (!editingEntry.value && (agentRunning.value || composerShellRunning.value || composerCompacting.value
-    || reloadingSession.value || switchingModel.value || switchingUltrafast.value
+    || reloadingSession.value || switchingModel.value || switchingServiceTier.value
     || promptQueue.value.held || promptQueue.value.items.length)) {
     const sessionId = selectedSessionId.value
     const submittedDraft = draft.value
@@ -3594,10 +3594,10 @@ async function selectModel(model) {
   await selectWorkspaceModel(model)
 }
 
-async function toggleUltrafast() {
+async function selectServiceTier(tier) {
   closePickerMenus()
   promptError.value = ''
-  await setUltrafast(!ultrafastEnabled.value)
+  await setServiceTier(tier)
 }
 
 async function selectThinkingLevel(level) {
@@ -3621,6 +3621,8 @@ function toggleEmptySessionKind() {
 }
 
 function togglePicker(name) {
+  startComposerRef.value?.dismissServiceTierPicker(false)
+  composerRef.value?.dismissServiceTierPicker(false)
   modelPickerOpen.value = name === 'model' && !modelPickerOpen.value
   thinkingPickerOpen.value = name === 'thinking' && !thinkingPickerOpen.value
   toolsPickerOpen.value = name === 'tools' && !toolsPickerOpen.value
@@ -3823,7 +3825,7 @@ function fileToImageContent(file) {
 
 function handleStartComposerKeydown(event) {
   if (isComposingInput(event)) return
-  if (switchingUltrafast.value && event.key === 'Enter' && !event.shiftKey) {
+  if (switchingServiceTier.value && event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     return
   }
@@ -3834,16 +3836,16 @@ function handleStartComposerKeydown(event) {
 }
 
 async function submitStartDraft() {
-  if (switchingUltrafast.value || dictationSubmissionPending.value) return
+  if (switchingServiceTier.value || dictationSubmissionPending.value) return
   const submissionOwner = dictationOwner.value
   if (!await finishDictationForSubmit()) return
   if (submissionOwner !== dictationOwner.value) return
-  if (switchingUltrafast.value || !homeComposerVisible.value || sessionLoading.value
+  if (switchingServiceTier.value || !homeComposerVisible.value || sessionLoading.value
     || sessionSwitching.value || sessionActivating.value) return
   const text = draft.value.trim()
-  const requestedUltrafast = ultrafastEnabled.value
+  const requestedServiceTier = serviceTier.value
   const model = startSelectedModel.value
-    || (requestedUltrafast ? composerRuntime.value?.state?.model : null)
+    || (requestedServiceTier !== 'standard' ? composerRuntime.value?.state?.model : null)
   const thinkingLevel = startSelectedThinkingLevel.value
   const targetCwd = newSessionCwd.value.trim()
   const sourceDraftKey = activeComposerDraftKey
@@ -3886,9 +3888,9 @@ async function submitStartDraft() {
       await runStartupPhase('thinking', () => selectWorkspaceThinkingLevel(thinkingLevel))
       if (!isCurrent() || sessionError.value) return
     }
-    if (requestedUltrafast) {
-      const enabled = await runStartupPhase('ultrafast', () => setUltrafast(true))
-      if (!isCurrent() || !enabled || sessionError.value) return
+    if (requestedServiceTier !== 'standard') {
+      const applied = await runStartupPhase('service-tier', () => setServiceTier(requestedServiceTier))
+      if (!isCurrent() || !applied || sessionError.value) return
     }
     if (hasPrompt) await runStartupPhase('submitting', submitDraft)
   } finally {
@@ -3961,6 +3963,8 @@ function handleGlobalKeydown(event) {
 function anyEscapeTargetOpen(ignoreQueue = false, ignoreEditing = false) {
   return Boolean(
     mobileComposerSheetOpen.value
+    || startComposerRef.value?.serviceTierPickerOpen
+    || composerRef.value?.serviceTierPickerOpen
     || startComposerRef.value?.issueDetailsOpen
     || composerRef.value?.issueDetailsOpen
     || (!ignoreQueue && composerRef.value?.queueUiOpen)
@@ -4059,6 +4063,12 @@ function handleEscape(event) {
     event?.stopPropagation?.()
     return
   }
+  if (!issueCovered
+    && (startComposerRef.value?.dismissServiceTierPicker() || composerRef.value?.dismissServiceTierPicker())) {
+    event?.preventDefault?.()
+    event?.stopPropagation?.()
+    return
+  }
   if (!anyEscapeTargetOpen(true) && composerRef.value?.dismissQueue?.()) {
     event?.preventDefault?.()
     event?.stopPropagation?.()
@@ -4139,6 +4149,8 @@ function closeMenusOnOutsideClick(event) {
 }
 
 function closePickerMenus() {
+  startComposerRef.value?.dismissServiceTierPicker(false)
+  composerRef.value?.dismissServiceTierPicker(false)
   modelPickerOpen.value = false
   thinkingPickerOpen.value = false
   toolsPickerOpen.value = false
@@ -4535,7 +4547,7 @@ function closePickerMenus() {
               :disabled="promptSubmitting
                 || agentRunning
                 || reloadingSession
-                || switchingUltrafast
+                || switchingServiceTier
                 || sessionLoading
                 || sessionSwitching
                 || sessionActivating
@@ -5060,9 +5072,9 @@ function closePickerMenus() {
             :start-project-picker-open="startProjectPickerOpen"
             :switching-model="switchingModel"
             :switching-thinking="switchingThinking"
-            :switching-ultrafast="switchingUltrafast"
-            :ultrafast-available="ultrafastAvailable"
-            :ultrafast-enabled="ultrafastEnabled"
+            :switching-service-tier="switchingServiceTier"
+            :available-service-tiers="availableServiceTiers"
+            :service-tier="serviceTier"
             :thinking-level="composerRuntime?.state?.thinkingLevel"
             :thinking-picker-open="thinkingPickerOpen"
             :tool-names="activeToolNames"
@@ -5086,7 +5098,7 @@ function closePickerMenus() {
             @submit="submitStartDraft"
             @toggle-picker="togglePicker"
             @toggle-session-kind="toggleStartSessionKind"
-            @toggle-ultrafast="toggleUltrafast"
+            @select-service-tier="selectServiceTier"
             @toggle-project-picker="startProjectPickerOpen = !startProjectPickerOpen"
           />
         </div>
@@ -5156,9 +5168,9 @@ function closePickerMenus() {
             :tool-names="activeToolNames"
             :tools-chip-label="toolsChipLabel"
             :tools-picker-open="toolsPickerOpen"
-            :switching-ultrafast="switchingUltrafast"
-            :ultrafast-available="ultrafastAvailable"
-            :ultrafast-enabled="ultrafastEnabled"
+            :switching-service-tier="switchingServiceTier"
+            :available-service-tiers="availableServiceTiers"
+            :service-tier="serviceTier"
             @cancel-edit="cancelEditingEntry"
             @dismiss-issue="dismissComposerIssue"
             @interrupt="interruptAgent"
@@ -5179,7 +5191,7 @@ function closePickerMenus() {
             @toggle-picker="togglePicker"
             @toggle-research="toggleEmptySessionKind"
             @toggle-terminal="toggleForegroundTerminal"
-            @toggle-ultrafast="toggleUltrafast"
+            @select-service-tier="selectServiceTier"
           />
         </div>
       </div>

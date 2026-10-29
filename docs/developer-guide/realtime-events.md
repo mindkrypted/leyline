@@ -130,9 +130,15 @@ Runtime snapshots include research state. `App.vue` applies extension UI state o
 
 The research surfaces use projected state. The browser does not parse this state from transcript text.
 
-## Ultrafast and confirmation state
+<a id="ultrafast-and-confirmation-state"></a>
 
-Ultrafast publishes its runtime-local mode through extension statuses. The browser receives changes through the existing extension UI and runtime snapshots.
+## Service tiers and confirmation state
+
+The service-tier extension publishes `extensionUi.statuses["leyline-service-tier"]` as `"standard"`, `"fast"`, or `"ultrafast"`. It also publishes legacy `leyline-ultrafast`: `"on"` only for Ultrafast and `"off"` otherwise.
+
+The existing `extension_ui` event and full `active_session` snapshots carry these statuses. Full snapshots also include model DTO `serviceTiers` for eligibility. Compact background snapshots omit extension UI and model DTOs. Reconnect restores the selected session's current state without a separate tier event.
+
+Selection uses HTTP `POST /api/pi/sessions/:id/service-tier` with `{ tier }`, not the WebSocket. The client confirms the result from the revision-accepted runtime snapshot. This prevents a late HTTP response from replacing newer tier state. Legacy status and route fallback provide compatibility only. See [Service tiers](./backend-api#service-tiers) and [Frontend state](./frontend-state#service-tiers-and-confirmations).
 
 Pending browser confirmations also travel in `extensionUi.confirmations`. Compact snapshots include `pendingConfirmationCount` for background supervision. Replies use the session-scoped HTTP route, not the event WebSocket. See [Browser confirmations](./backend-api#browser-confirmations).
 

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
@@ -100,7 +101,13 @@ import {
 } from '../../lib/research-state.js'
 import { auditResearchReportCitations } from '../../lib/research-citations.js'
 import { projectModelChanges } from '../../lib/transcript-projection.js'
-import { supportsUltrafastWithAuth, ULTRAFAST_COMMAND, ULTRAFAST_STATUS_KEY } from '../../lib/ultrafast.js'
+import {
+  SERVICE_TIER_COMMAND,
+  SERVICE_TIERS,
+  serviceTierFromStatuses,
+  supportedServiceTiers,
+  ULTRAFAST_COMMAND,
+} from '../../lib/ultrafast.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const BUNDLED_OUTPUT_BUDGET_EXTENSION = resolve(
@@ -241,7 +248,7 @@ const idleRuntimeCleanup = createIdleRuntimeCleanup({
     return runtimeShuttingDown || events.isSessionObserved(handle.sessionId)
       || handle.pendingApiRequests > 0
       || handle.disposalPromise || handle.initializing || handle.bindingExtensions
-      || handle.reloading || handle.changingBranch || handle.settingModel || handle.settingUltrafast
+      || handle.reloading || handle.changingBranch || handle.settingModel || handle.settingServiceTier
       || handle.interruptPromise || handle.compactionPromise || handle.bashPromise
       || handle.promptSubmissionLock || handle.pendingPromptHandoff || handle.pendingPromptControllers?.size
       || handle.subagentController || handle.subagentSignal
@@ -325,8 +332,8 @@ function preferBundledExtensions(result) {
   const specifications = [
     { path: TRACING_EXTENSION_PATH, name: 'pi-elune' },
     { path: BUNDLED_OUTPUT_BUDGET_EXTENSION, name: 'output-budget' },
-    { path: BUNDLED_ULTRAFAST_EXTENSION, name: 'ultrafast', command: ULTRAFAST_COMMAND },
-    { path: BUNDLED_MEMORY_EXTENSION, name: 'memory', command: 'memory' },
+    { path: BUNDLED_ULTRAFAST_EXTENSION, name: 'ultrafast', commands: [SERVICE_TIER_COMMAND, ULTRAFAST_COMMAND] },
+    { path: BUNDLED_MEMORY_EXTENSION, name: 'memory', commands: ['memory'] },
     { path: BUNDLED_SUBAGENT_EXTENSION, name: 'subagent', tool: 'subagent' },
     { path: BUNDLED_RESEARCH_EXTENSION, name: 'research' },
     { path: BUNDLED_VISION_EXTENSION, name: 'vision-agent', tool: 'vision_agent' },
@@ -349,8 +356,7 @@ function preferBundledExtensions(result) {
       const names = extensionNames(extension)
       return !activeSpecifications.some((specification) => {
         return names.has(specification.name)
-          || (specification.command
-            && extension.commands?.has(specification.command))
+          || specification.commands?.some(command => extension.commands?.has(command))
           || (specification.tool && extension.tools?.has(specification.tool))
       })
     }).sort((a, b) => {
@@ -416,6 +422,7 @@ async function buildRuntimeResult(
     ...(child ? [SUBAGENT_DELEGATION_TOOL] : []),
   ])]
   const requestEvents = reloadServices?.requestEvents || createEventBus()
+  const requestContext = new AsyncLocalStorage()
   const tracingBinding = captureTracing
     ? reloadServices?.tracingBinding || tracing.createBinding()
     : undefined
@@ -476,6 +483,7 @@ async function buildRuntimeResult(
       },
     })
     services.requestEvents = requestEvents
+    services.getProviderRequest = () => requestContext.getStore()
     services.tracingBinding = tracingBinding
     previousExtensions = reloadServices && services.resourceLoader.getExtensions()
     if (reloadServices) {
@@ -539,9 +547,9 @@ async function buildRuntimeResult(
         })
         tracing.observe(runtime.session, { type: 'provider_request', model: requestModel })
       }
-      return streamFunction(requestModel, context, requestOptions)
+      return requestContext.run(requestOptions, () => streamFunction(requestModel, context, requestOptions))
     }
-    requestEvents.emit('leyline:request-boundary-ready')
+    requestEvents.emit('leyline:request-boundary-ready', services.getProviderRequest)
     return runtime
   } catch (error) {
     try {
@@ -651,7 +659,7 @@ function requireSessionMutation(handle) {
   requireInitializedSession(handle)
   if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   if (handle.settingModel) throw new Error('Wait for the model change to finish.')
-  if (handle.settingUltrafast) throw new Error('Wait for the Ultrafast change to finish.')
+  if (handle.settingServiceTier) throw new Error('Wait for the service tier change to finish.')
 }
 
 const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
@@ -707,11 +715,14 @@ const ensureRuntimeForSession = trackRuntimeCreation(async (session) => {
       handle.activityState = suspended?.activityState
       forceOneAtATime(runtime.session)
       await bindRuntimeHandle(handle)
-      if (suspended?.ultrafast && runtime.session.model?.provider === suspended.model?.provider
-        && runtime.session.model?.id === suspended.model?.id
-        && runtime.session.extensionRunner.getCommand(ULTRAFAST_COMMAND)
-        && supportsUltrafastWithAuth(runtime.session.model, runtime.session.modelRuntime.isUsingSubscription(runtime.session.model.provider))) {
-        await setSessionUltrafast(handle, true)
+      const serviceTier = suspended?.serviceTier ?? (suspended?.ultrafast ? 'ultrafast' : 'standard')
+      const model = runtime.session.model
+      if (serviceTier !== 'standard' && model
+        && model.provider === suspended.model?.provider
+        && model.id === suspended.model?.id
+        && runtime.session.extensionRunner.getCommand(SERVICE_TIER_COMMAND)
+        && supportedServiceTiers(model, runtime.session.modelRuntime.isUsingSubscription(model.provider)).includes(serviceTier)) {
+        await setSessionServiceTier(handle, serviceTier)
       }
       idleSessions.delete(sessionId)
       return handle
@@ -819,7 +830,7 @@ async function promptSession(
       if (handle.interruptPromise || handle.reloading || (handle.changingBranch && !editing)) return true
       if (handle.bashPromise || session.isBashRunning || session.hasPendingBashMessages) return true
       if (isExtensionCommand(session, promptText)) return false
-      if (handle.settingModel || handle.settingUltrafast
+      if (handle.settingModel || handle.settingServiceTier
         || handle.compactionPromise || session.isCompacting) return true
       if (onAccepted) return false
       const pending = queue.snapshot()
@@ -931,7 +942,7 @@ function ensurePromptQueue(handle) {
       && !handle.interruptPromise
       && !handle.initializing
       && !handle.settingModel
-      && !handle.settingUltrafast
+      && !handle.settingServiceTier
       && !handle.compactionPromise
       && !handle.changingBranch
       && !handle.disposalPromise
@@ -1357,7 +1368,7 @@ async function editSessionPrompt(
   const session = handle.runtime.session
   if (!entryId) throw new Error('entryId is required')
   if (handle.settingModel) throw new Error('Finish the model change before editing.')
-  if (handle.settingUltrafast) throw new Error('Finish the Ultrafast change before editing.')
+  if (handle.settingServiceTier) throw new Error('Finish the service tier change before editing.')
   if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   const entry = session.sessionManager.getEntry(entryId)
   if (entry?.type !== 'message' || entry.message?.role !== 'user') {
@@ -1369,16 +1380,15 @@ async function editSessionPrompt(
   }
   if (signal?.aborted) throw new Error('Prompt cancelled')
 
-  const ultrafastModel = handle.extensionUiState?.statuses?.[ULTRAFAST_STATUS_KEY] === 'on'
-    ? session.model
-    : null
+  const serviceTier = serviceTierFromStatuses(handle.extensionUiState?.statuses)
+  const serviceTierModel = serviceTier !== 'standard' ? session.model : null
   async function rebindSession() {
     await bindRuntimeHandle(handle)
-    if (ultrafastModel
+    if (serviceTierModel
       && handle.runtime.session === session
-      && session.model?.provider === ultrafastModel.provider
-      && session.model?.id === ultrafastModel.id) {
-      await setSessionUltrafast(handle, true, undefined, true)
+      && session.model?.provider === serviceTierModel.provider
+      && session.model?.id === serviceTierModel.id) {
+      await setSessionServiceTier(handle, serviceTier, undefined, true)
     }
   }
 
@@ -1430,7 +1440,7 @@ async function resetSessionToEntry(handle, entryId) {
   const session = handle.runtime.session
   if (!entryId) throw new Error('entryId is required')
   if (handle.settingModel) throw new Error('Finish the model change before resetting.')
-  if (handle.settingUltrafast) throw new Error('Finish the Ultrafast change before resetting.')
+  if (handle.settingServiceTier) throw new Error('Finish the service tier change before resetting.')
   if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   const manager = session.sessionManager
   const entry = manager.getEntry(entryId)
@@ -1838,7 +1848,7 @@ async function suspendIdleRuntime(handle) {
     },
     model: session.model && { provider: session.model.provider, id: session.model.id },
     thinkingLevel: session.thinkingLevel,
-    ultrafast: handle.extensionUiState?.statuses?.[ULTRAFAST_STATUS_KEY] === 'on',
+    serviceTier: serviceTierFromStatuses(handle.extensionUiState?.statuses),
     activityState: handle.activityState,
     leafId: manager.getLeafId(),
     lastEntryId: manager.getEntries().at(-1)?.id,
@@ -1998,43 +2008,48 @@ const reloadSession = trackRuntimeCreation(async (handle) => {
   }
 })
 
-async function setSessionUltrafast(handle, enabled, signal, editing = false) {
+async function setSessionServiceTier(handle, tier, signal, editing = false) {
   requireInitializedSession(handle)
   if (handle.changingBranch && !editing) throw new Error('Wait for the branch change to finish.')
-  if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean')
+  if (!SERVICE_TIERS.includes(tier)) throw new Error('tier must be standard, fast, or ultrafast')
   if (handle.settingModel) throw new Error('Wait for the model change to finish.')
-  if (handle.settingUltrafast) throw new Error('Wait for the Ultrafast change to finish.')
+  if (handle.settingServiceTier) throw new Error('Wait for the service tier change to finish.')
   const session = handle.runtime.session
-  if (!session.extensionRunner.getCommand(ULTRAFAST_COMMAND)) {
-    throw new Error('Ultrafast is not available in this runtime.')
+  if (!session.extensionRunner.getCommand(SERVICE_TIER_COMMAND)) {
+    throw new Error('Service tier selection is not available in this runtime.')
   }
   const model = session.model
-  if (enabled && (!model || !supportsUltrafastWithAuth(
+  if (tier !== 'standard' && (!model || !supportedServiceTiers(
     model,
     session.modelRuntime.isUsingSubscription(model.provider),
-  ))) {
-    throw new Error('Ultrafast is not available for this model and authentication method.')
+  ).includes(tier))) {
+    throw new Error('The service tier is not available for this model and authentication method.')
   }
   if (signal?.aborted) return
 
-  handle.settingUltrafast = true
+  handle.settingServiceTier = true
   const release = session.isCompacting ? undefined : await lockPromptSubmission(handle)
   try {
     requireInitializedSession(handle)
     if (signal?.aborted || handle.runtime.session !== session) return
-    await session.prompt(`/${ULTRAFAST_COMMAND} ${enabled ? 'on' : 'off'}`, { source: 'api' })
+    await session.prompt(`/${SERVICE_TIER_COMMAND} ${tier}`, { source: 'api' })
   } finally {
     release?.()
-    handle.settingUltrafast = false
+    handle.settingServiceTier = false
     handle.promptQueue?.schedule()
   }
+}
+
+async function setSessionUltrafast(handle, enabled, signal, editing = false) {
+  if (typeof enabled !== 'boolean') throw new Error('enabled must be a boolean')
+  return setSessionServiceTier(handle, enabled ? 'ultrafast' : 'standard', signal, editing)
 }
 
 async function setSessionModel(handle, provider, id) {
   requireInitializedSession(handle)
   if (handle.changingBranch) throw new Error('Wait for the branch change to finish.')
   if (handle.settingModel) throw new Error('Wait for the model change to finish.')
-  if (handle.settingUltrafast) throw new Error('Wait for the Ultrafast change to finish.')
+  if (handle.settingServiceTier) throw new Error('Wait for the service tier change to finish.')
   if (!provider || !id) throw new Error('provider and id are required')
 
   const session = handle.runtime.session
@@ -2187,7 +2202,7 @@ async function bindRuntimeHandle(handle) {
   try {
     if (handle.bashExecution?.status !== 'running') handle.bashExecution = undefined
     await bindRuntimeHandleExtensions(handle, events)
-    handle.runtime.services.requestEvents?.emit('leyline:request-boundary-ready')
+    handle.runtime.services.requestEvents?.emit('leyline:request-boundary-ready', handle.runtime.services.getProviderRequest)
     if (runtimeShuttingDown) throw new Error('Runtime is shutting down')
   } finally {
     handle.bindingExtensions = false
@@ -2562,6 +2577,7 @@ export function createPiRuntimeApi() {
   setSessionModel,
   setRolloutFeedback,
   setSessionThinkingLevel,
+  setSessionServiceTier,
   setSessionUltrafast,
   shutdownRuntime,
   sessionDetail,

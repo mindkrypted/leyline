@@ -59,7 +59,7 @@
     mobile 390x844, and README 1503x818 CSS pixels, all at scale factor 2.
     Use intercepted fixtures, never real app data or model requests. Keep
     `local/glm-5.3-flash` for general captures and preserve approved eligible
-    Ultrafast and image-capable vision fixture exceptions.
+    service-tier and image-capable vision fixture exceptions.
 - Build check:
   - `npm run build`
 - Cut releases with `npm run version:patch|minor|major` — they bump the

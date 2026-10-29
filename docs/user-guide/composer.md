@@ -11,7 +11,7 @@ When the agent is idle and the queue is empty:
 
 Press **Shift+Enter** to add a line break.
 
-The composer and its model, thinking, and `ultrafast` controls remain available during an active run or compaction. An in-flight model request keeps its settings. Changes apply to later requests.
+The composer and its model, thinking, and [service-tier](./runtime-controls#choose-a-service-tier) controls remain available during an active run or compaction. An in-flight model request keeps its settings. Changes apply to later requests.
 
 ## Queue the next task
 
@@ -106,7 +106,7 @@ Enter `/compact` to compact the session. Add text after the command to supply cu
 /compact keep the decisions and unresolved questions
 ```
 
-Compaction cannot run during an agent response. It cannot include images, and it cannot run while you edit a message.
+Compaction cannot run during an agent response. It cannot include images, and it cannot run while you edit a message. Compaction does not receive a premium tier override.
 
 ## Select slash commands and helpers
 

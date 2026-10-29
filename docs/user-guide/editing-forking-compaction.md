@@ -15,18 +15,18 @@ Transcript actions change the active branch or create a new session. Use **Fork 
 
 The composer shows **Editing earlier message · send to replace the current branch**. Select **Cancel** to leave edit mode.
 
-Editing moves the active branch to that user message. The replacement prompt then starts a new branch from that point.
+Editing moves the active branch to that user message. The replacement prompt then starts a new branch from that point. Prompt edits keep the selected [service tier](./runtime-controls#choose-a-service-tier) when the model stays unchanged.
 
-You cannot edit during a run or compaction. Only saved user messages can be edited.
+Only saved user messages can be edited. Sending a replacement prompt stops active work before Leyline changes the branch.
 
 ## Retry a user request
 
 1. Find the user message.
 2. Select **Retry request**.
 
-Leyline resubmits the same text and images from that point. The active branch changes to the new response path.
+Leyline resubmits the same text and images from that point. The active branch changes to the new response path. A retry with the same model keeps the exact service tier.
 
-Retry is unavailable during a run, compaction, reload, or session activation.
+Retry stops active work before it resubmits the request. It is unavailable during submission, reload, or session activation.
 
 ## Fork from an entry
 
@@ -37,7 +37,7 @@ Leyline creates and selects a new session at that entry. The original session an
 
 You can fork a saved entry during an active run. The source session keeps running after Leyline selects the fork. Wait for a live entry to finish saving before forking it.
 
-Forking is unavailable during compaction. Transcript-level subagent cards do not provide this action. The fork starts with `ultrafast` off.
+Transcript-level subagent cards do not provide this action. The fork starts with Standard.
 
 ## Reset to here
 
@@ -46,9 +46,9 @@ Forking is unavailable during compaction. Transcript-level subagent cards do not
 1. Find the target message or tool entry on the active branch.
 2. Select **Reset to here**.
 
-Leyline performs this action immediately. It does not show a confirmation dialog.
+Leyline performs this action immediately. It does not show a confirmation dialog. Reset also returns the service tier to Standard.
 
-Reset is unavailable during a run or compaction. Use **Fork from here** first when you must keep the later history.
+Reset stops active work before it changes the session. Use **Fork from here** first when you must keep the later history.
 
 Reset does not remove Elune trace data. Earlier prompts and tool results can remain in traces after their session records disappear. See [Trace privacy](./tracing#keep-trace-data-private).
 
@@ -62,7 +62,7 @@ Select **Copy** in a message or tool header. Leyline copies message text or the 
 2. Add optional custom instructions after the command.
 3. Press **Enter**.
 
-Pi creates a **Compaction** summary in the transcript. Compaction reduces the context that later turns must carry.
+Pi creates a **Compaction** summary in the transcript. Compaction reduces the context that later turns must carry. It does not receive a premium tier override.
 
 With capture on, manual compaction can also create a `pi-compaction` trace. Use **Session traces** to inspect its summary, outcome, and available usage. See [Tracing](./tracing).
 

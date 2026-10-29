@@ -15,7 +15,9 @@ Leyline connects the Vue interface to pi runtimes, bundled extensions, local SQL
 
 Normal runtimes load the bundled output-budget, ultrafast, memory, subagent, research, and vision-agent extensions. Conversation runtimes also install inline Elune capture. Isolated custom-prompt children retain output-budget and inline capture.
 
-Leyline also uses pi's native MCP and tool search. It does not load Codemode. See [Runtime construction](../developer-guide/backend-api#runtime-construction) for conflict filtering and [Ultrafast](../developer-guide/backend-api#ultrafast) for tier behavior.
+The service-tier extension keeps its `.pi/extensions/ultrafast/` path. It owns runtime-local Standard/Fast/Ultrafast selection through `leyline-service-tier`, with legacy `leyline-ultrafast` compatibility. Model DTOs expose `serviceTiers` from explicit model and authentication rules, not a dynamic Codex catalog.
+
+Leyline also uses pi's native MCP and tool search. It does not load Codemode. See [Runtime construction](../developer-guide/backend-api#runtime-construction) for conflict filtering. See [Service tiers](../developer-guide/backend-api#service-tiers) for controls, lifecycle resets, request isolation, and cost estimates.
 
 Normal runtimes also append `.pi/LEYLINE_SYSTEM.md` to the system prompt. This prompt describes Leyline's operating context. It does not replace pi or project instructions.
 

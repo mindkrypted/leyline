@@ -73,7 +73,26 @@ For mobile header and composer changes:
 DOCS_SCREENSHOT_FILTER=mobile-session.png,dictation-mobile.png,mobile-sidebar.png,subagent-inspector-mobile.png,subagent-live-tail-mobile.png,deep-research-mobile.png,trace-mobile.png npm run docs:screenshots
 ```
 
-These captures include the mobile header or composer, sometimes behind a sheet. Check the 48-pixel header targets and the 32-pixel gray capsule with separate model, thinking, and speed controls. Each capsule control has a touch target of at least 44 by 44 pixels. The speed bolt is outlined gray for Standard and filled lavender for Ultrafast. For composer-only changes, refresh `mobile-session.png` and `dictation-mobile.png`. The other captures hide the capsule behind a sidebar, sheet, or full-screen view.
+These captures include the mobile header or composer, sometimes behind a sheet. Check the 48-pixel header targets and the 32-pixel gray capsule with separate model, thinking, and speed controls. Each capsule control has a touch target of at least 44 by 44 pixels. The speed bolt is outlined gray for Standard and filled lavender for Fast or Ultrafast. For composer-only changes, refresh `mobile-session.png` and `dictation-mobile.png`. The other captures hide the capsule behind a sidebar, sheet, or full-screen view.
+
+For service-tier controls:
+
+```bash
+DOCS_SCREENSHOT_FILTER=home.png,workbench.png,composer-controls.png,mobile-session.png,service-tiers.png,mobile-speed.png npm run docs:screenshots
+```
+
+| Asset | Captured state |
+| --- | --- |
+| `home.png` in both output directories | Standard selected in the closed desktop tier chip. |
+| `workbench.png` in both output directories | Ultrafast selected beside the model and thinking controls. |
+| `docs/assets/screenshots/composer-controls.png` | The same Ultrafast state, cropped to the composer. |
+| `docs/assets/screenshots/mobile-session.png` | Mobile composer with the filled premium-speed bolt. |
+| `docs/assets/screenshots/service-tiers.png` | Desktop menu with lowercase `standard`, `fast`, and `ultrafast` choices, with `fast` selected. |
+| `docs/assets/screenshots/mobile-speed.png` | Mobile Speed sheet with Standard, Fast, and Ultrafast choices, with Fast selected. |
+
+These captures use the eligible `openai-codex/gpt-6.1-sol` fixture. General captures retain `local/glm-5.3-flash`. The helper checks the available choices and selected tier before capture. The open desktop menu keeps focus so it stays visible. No tier change or provider request reaches a live backend.
+
+Existing images keep their dimensions. Desktop captures use 1440 by 900 CSS pixels, with composer images cropped to their controls. Mobile uses 390 by 844. README captures use 1503 by 818 before framing. All use device scale factor 2. The README header and social-card crops do not show the composer, so tier-only changes do not require their replacement.
 
 For expanded tool previews:
 
@@ -176,7 +195,7 @@ DOCS_SCREENSHOT_FILTER=subagent-sidebar.png,mobile-sidebar.png,workbench.png,sub
 | `docs/assets/screenshots/subagent-outcomes.png` | Five settled children beside the desktop task inspector. |
 | `deep-research.png` in both output directories | Three research workers under their parent, beside the completed report and sources. |
 
-The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper waits for folding to finish, then checks the inset nodes, aligned parent titles, 18-pixel chevron gutter, and 4-pixel title gap. General captures retain `local/glm-5.3-flash`; workbench captures keep the approved Ultrafast model.
+The fixtures include marked child sessions, parent paths, and task metadata keyed by child ID. Running children use mock runtime snapshots. The helper waits for folding to finish, then checks the inset nodes, aligned parent titles, 18-pixel chevron gutter, and 4-pixel title gap. General captures retain `local/glm-5.3-flash`; workbench captures keep the approved service-tier model.
 
 Use local visual checks for fold motion, rapid reversals, and reduced-motion behavior. PNG captures show only the settled layout.
 
@@ -223,7 +242,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Time zone: UTC
 - Reduced motion: enabled
 - General model label: `local/glm-5.3-flash`
-- Ultrafast exception: eligible `openai-codex` Responses or API-key `openai` Responses with `gpt-6-astra` or `gpt-6.1-sol`
+- Service-tier exception: eligible `openai-codex` Responses or API-key `openai` Responses with `gpt-6-astra` or `gpt-6.1-sol`
 - Vision selector: `local/qwen3.6-27b`, with actual image-input support
 - Catalog/editor example: Qwen3.8 27B metadata inside Settings only; the parent composer remains `local/glm-5.3-flash`
 - Thought display default: **Collapsed**
@@ -238,7 +257,7 @@ Use these fixed settings and fixture requirements for refreshed documentation im
 - Deep research captures: three completed threads, six ledger sources, four citations, one excluded source, and a mobile citation preview
 - Other fixtures: Home, workbench, pinned sessions, project navigation and details, backend settings, composer controls and shell mode, transcript actions, fullscreen previews, memory, subagents, vision delegation, runtime events, terminal, export, and mobile navigation
 
-Home shows the `ultrafast` chip off. Workbench, composer-control, and mobile-session captures show it on with `openai-codex/gpt-6.1-sol`. Both pinned-session captures use two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
+Home shows the `standard` chip. Workbench and composer-control captures show `ultrafast`; the mobile-session capture shows its filled bolt. The new speed-menu captures show Fast selected. All use `openai-codex/gpt-6.1-sol`. Both pinned-session captures use two older sanitized sessions in the current project. Other captures return no pinned IDs. The workbench and export include initial and later System dividers. `system-message.png` shows the initial declaration and a later event open in the prompt inspector. The capture waits for real added and removed lines in the diff renderer. Unchanged instructions stay collapsed. That image crops to the dividers and inspector. The export capture checks the instruction-file diff and exact raw event text with the external preview module blocked, then closes the inspector before capture.
 
 These models and settings exist only in the capture fixtures. The command does not change local model configuration.
 
@@ -325,7 +344,7 @@ Desktop documentation images use 1440 by 900 CSS pixels. Mobile uses 390 by 844.
 
 Trace fixtures supply summaries, observations, pagination, and capture status. Capture controls and bookmarks change only intercepted fixture state. Trace routes, runtime streams, and other API requests must never fall through to real backend data or model requests.
 
-Keep the general model label `local/glm-5.3-flash`. Preserve the approved eligible Ultrafast model and image-capable vision fixture exceptions. Do not use local trace records, private paths, or operational performance reports as documentation fixtures.
+Keep the general model label `local/glm-5.3-flash`. Preserve the approved eligible service-tier model and image-capable vision fixture exceptions. Do not use local trace records, private paths, or operational performance reports as documentation fixtures.
 
 Review trace labels, usage, timing, omission markers, selected observations, mobile panel switches, and the capture footer. Check that Explorer identifies the selected backend and does not imply aggregation across connections. See [Tracing](../user-guide/tracing) and [Elune integration](../integrations/elune).
 
@@ -337,7 +356,7 @@ Open every changed image. Check these items:
 2. No text or control is clipped.
 3. The image has no private path, project, prompt, account, or credential data.
 4. Hover, focus, loading, menu, and animation states appear only when they explain the documented action.
-5. General model selectors show `local/glm-5.3-flash`. Ultrafast captures use an eligible OpenAI model and authentication path.
+5. General model selectors show `local/glm-5.3-flash`. Service-tier captures use an eligible OpenAI model and authentication path.
 6. The vision selector shows `local/qwen3.6-27b` and excludes text-only models.
 7. System captures show the intended prompt and tool deltas without clipping.
 8. Subagent inspectors show the selected task, its outcome, and live activity or a saved result without inline task bodies in Activity.

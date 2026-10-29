@@ -29,6 +29,8 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `src/components/PiSettingsWorkspace.vue`: Supplies the searchable list, narrow selector, and bounded detail layout.
 - `src/components/PiSettingsOperation.vue`: Displays private authentication prompts, progress, connection-test results, and cancellation.
 - `src/components/ExtensionConfirmations.vue`: Displays pending extension confirmations and sends session-scoped replies.
+- `src/components/ServiceTierPicker.vue`: Owns the desktop Standard/Fast/Ultrafast chip, menu, keyboard selection, and focus handling for both composers.
+- `src/components/MobileComposerControls.vue`: Owns shared Home/session mobile controls and the Speed sheet, with separate eligible service-tier choices.
 - `src/composables/useSessionWorkspace.js`: Owns session, route, activation, and runtime-control state.
 - `src/composables/useBackendConnections.js`: Owns connection records, the default, and window-specific backend selection.
 - `src/composables/usePinnedSessions.js`: Owns backend-scoped pinned session IDs, pending pin state, and cleanup requests.
@@ -65,7 +67,7 @@ description: Find Leyline's frontend, backend, shared modules, Electron shell, e
 - `lib/subagent-ledger.js`: Projects source-derived ledger rows and supplies an optional current-rows cache for unchanged previews and row objects.
 - `lib/subagent-view.js`: Supplies shared task, title, output, and fallback presentation helpers.
 - `lib/subagent-status.js`: Defines subagent status semantics and task outcome counts.
-- `lib/ultrafast.js`: Defines Ultrafast model and authentication eligibility and shared control identifiers.
+- `lib/ultrafast.js`: Defines explicit service-tier eligibility, tier values, command/status identifiers, and legacy Ultrafast status fallback.
 
 These files are outside `src/` because Node.js backend code and browser code import them.
 
@@ -143,7 +145,7 @@ These files are outside `src/` because Node.js backend code and browser code imp
 
 - `.pi/LEYLINE_SYSTEM.md`: Adds Leyline operating context to normal runtimes.
 - `.pi/extensions/output-budget/`: Implements one bounded retry for explicit OpenAI-compatible completion-budget errors.
-- `.pi/extensions/ultrafast/`: Owns runtime-local tier controls, provider hooks, connection cleanup, and cost adjustment.
+- `.pi/extensions/ultrafast/`: Owns runtime-local Standard/Fast/Ultrafast controls, request snapshots, provider hooks, SDK-matched connection cleanup, and cost estimates.
 - `.pi/extensions/memory/`: Implements memory injection, commands, and tools.
 - `.pi/extensions/subagent/`: Implements single, parallel, and chain subagent tools, including the reserved researcher.
 - `.pi/extensions/research/`: Implements research-session binding, state updates, orchestration protocol, and report checks.

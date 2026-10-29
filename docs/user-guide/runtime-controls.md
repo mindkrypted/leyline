@@ -1,8 +1,8 @@
 # Runtime controls
 
-The composer shows controls for the model, thinking level, optional `ultrafast`, tools, and context usage.
+The composer shows controls for the model, thinking level, service tier when available, tools, and context usage.
 
-![Composer controls with ultrafast enabled beside the model and thinking level](../assets/screenshots/composer-controls.png)
+![Composer controls with ultrafast selected beside the model and thinking level](../assets/screenshots/composer-controls.png)
 
 *Runtime controls stay with the composer for the selected session.*
 
@@ -16,7 +16,9 @@ The control and result rows use `provider/model-id` labels. Filtering also match
 
 On mobile, select the model capsule to open **Session options**. The sheet contains model, thinking, and service-tier choices. See [Mobile composer](./mobile#use-the-mobile-composer).
 
-You cannot change the model during a run, compaction, submission, or runtime reload. Leyline records the selected model in the session and saves it as the pi default for new sessions.
+You can change the model during generation or compaction. An in-flight request keeps its current model. The control is unavailable during a runtime reload or another model or service-tier change.
+
+Leyline records the selected model in the session and saves it as the pi default for new sessions.
 
 Repeated model selections before the next conversation message update one **Model changed from … to …** divider. Returning to the original model removes it. Initial model setup does not add a divider.
 
@@ -31,22 +33,40 @@ A model without reasoning support offers **off** only. Reasoning models can offe
 
 The **xhigh** and **max** levels appear only when the selected model supports them. Changing the model updates this list. Leyline records the thinking level in the session and saves the selection as the pi default.
 
-## Use ultrafast
+<a id="use-ultrafast"></a>
 
-The lowercase `ultrafast` chip appears beside the model and thinking controls for supported models and authentication:
+## Choose a service tier
 
-- `gpt-6-astra` or `gpt-6.1-sol` on `openai-codex` Responses.
-- The same models on direct `openai` Responses with API-key authentication.
+For supported models and authentication, the desktop chip shows the current tier: `standard`, `fast`, or `ultrafast`.
 
-Direct `openai` subscription authentication does not support this control. Local models do not support it.
+1. Select the tier chip beside the model and thinking controls.
+2. Select `standard`, `fast`, or `ultrafast` from the available choices.
 
-`ultrafast` requests the premium service tier. It is off by default and uses premium pricing. The thinking level stays the same.
+![Desktop service-tier menu with standard, fast, and ultrafast choices and fast selected for gpt-6.1-sol](../assets/screenshots/service-tiers.png)
 
-Click the chip while the runtime is idle to enable or disable it. The change is direct, with no confirmation dialog.
+*The desktop menu has `fast` selected for `gpt-6.1-sol`.*
 
-The choice applies only to the current runtime/session. Model changes, explicit runtime reloads, and reset navigation turn it off. A new fork starts with it off. Retry and prompt edits preserve the choice when the runtime and model stay unchanged.
+Standard is the default. Fast and Ultrafast use premium pricing without changing the thinking level. Check your provider's rates for the model and account or plan.
 
-Normal agent turns use the selected mode. Compaction and branch summaries remain Standard.
+The current model choices are:
+
+- **Fast and Ultrafast**: `gpt-6-astra` and `gpt-6.1-sol`.
+- **Fast only**: `gpt-6.1-terra`, `gpt-6-sol`, `gpt-6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, and `gpt-5.5`.
+
+Premium tiers require one of these paths:
+
+- `openai-codex` Responses with ChatGPT sign-in.
+- Direct `openai` Responses with API-key authentication.
+
+Direct `openai` subscription authentication and local models do not support premium tiers. Menu availability follows Leyline's policy and does not guarantee permission from your account or plan.
+
+On mobile, open **Speed** to select **Standard**, **Fast**, or **Ultrafast** from the available choices. See [Mobile composer](./mobile#use-the-mobile-composer).
+
+You can change the tier during generation or compaction. An in-flight request keeps the tier captured when it started. Later normal requests use the new choice. Compaction and branch summaries do not receive a premium tier override.
+
+The choice applies only to the current runtime/session. Model changes, explicit runtime reloads, and reset navigation return to Standard. A new fork starts with Standard.
+
+Prompt edits and retries keep the exact tier when the model stays unchanged. Automatic revival of an idle runtime also restores that tier if the same model remains eligible.
 
 On Home, the choice stays staged until Leyline creates the session. Leyline applies it after the staged model and thinking level, before the first prompt.
 
@@ -70,6 +90,6 @@ Select **Session traces** in the header to inspect timing, tokens, and costs for
 
 ## Stage controls for a new session
 
-The start screen loads runtime choices for the selected project. Model, thinking, and `ultrafast` choices remain staged until you create the session.
+The start screen loads runtime choices for the selected project. Model, thinking, and service-tier choices remain staged until you create the session.
 
-Leyline applies the staged model first, then the thinking level and `ultrafast` choice, before the first prompt.
+Leyline applies the staged model first, then the thinking level and service tier, before the first prompt.

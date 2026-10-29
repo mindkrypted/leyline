@@ -6,7 +6,12 @@ import {
 import { SessionManager } from '@earendil-works/pi-coding-agent'
 import { compactionCutEntryId } from './compaction-boundary.js'
 import { emptyExtensionUiState } from './extension-ui.js'
-import { supportsUltrafastWithAuth, ULTRAFAST_COMMAND } from '../../lib/ultrafast.js'
+import {
+  SERVICE_TIER_COMMAND,
+  supportedServiceTiers,
+  supportsUltrafastWithAuth,
+  ULTRAFAST_COMMAND,
+} from '../../lib/ultrafast.js'
 import { applyRolloutFeedback } from './rollout-feedback.js'
 import {
   compactResearchState,
@@ -41,6 +46,7 @@ const HIDDEN_SLASH_COMMANDS = new Set([
   'settings',
   'share',
   'tree',
+  SERVICE_TIER_COMMAND,
   ULTRAFAST_COMMAND,
 ])
 const THINKING_LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
@@ -208,15 +214,14 @@ function slashCommandDtos(session) {
 
 function modelDto(model, modelRuntime) {
   if (!model) return undefined
+  const isUsingSubscription = modelRuntime.isUsingSubscription(model.provider)
   return {
     id: model.id,
     name: model.name,
     provider: model.provider,
     supportsImages: model.input?.includes('image') === true,
-    supportsUltrafast: supportsUltrafastWithAuth(
-      model,
-      modelRuntime.isUsingSubscription(model.provider),
-    ),
+    serviceTiers: supportedServiceTiers(model, isUsingSubscription),
+    supportsUltrafast: supportsUltrafastWithAuth(model, isUsingSubscription),
     availableThinkingLevels: modelThinkingLevels(model),
   }
 }

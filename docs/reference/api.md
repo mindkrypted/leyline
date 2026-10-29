@@ -253,6 +253,7 @@ Model = {
   name: string,
   provider: string,
   supportsImages: boolean,
+  serviceTiers: Array<"standard" | "fast" | "ultrafast">,
   supportsUltrafast: boolean,
   availableThinkingLevels: string[]
 }
@@ -278,16 +279,27 @@ ExtensionConfirmation = {
 
 Confirmation times use milliseconds since the Unix epoch. `expiresAt: null` means no timeout. `pendingConfirmationCount` counts `extensionUi.confirmations`.
 
-`Model.supportsUltrafast` reports model and authentication eligibility, not whether Ultrafast is on. Eligible models are `gpt-6-astra` and `gpt-6.1-sol` on these transports:
+`Model.serviceTiers` lists tiers that the model and authentication method support. It always includes `"standard"`. It does not show the current tier or confirm runtime command availability. `Model.supportsUltrafast` remains a compatibility field. It is `true` when `serviceTiers` includes `"ultrafast"`.
+
+Fast and Ultrafast require a supported model on one of these transports:
 
 - `openai-codex` with `openai-codex-responses`.
-- `openai` with `openai-responses` and API-key authentication. Subscription authentication is excluded.
+- `openai` with `openai-responses` and API-key authentication. Subscription authentication excludes Fast and Ultrafast on this transport.
 
-The bundled extension publishes `extensionUi.statuses["leyline-ultrafast"]` as `"on"` or `"off"`. A missing status does not mean the extension is available. Ultrafast starts off and applies to the current runtime only. Model changes and runtime reload reset it to off. A new fork starts off.
+Ultrafast-capable models also support Fast. See [Choose a service tier](../user-guide/runtime-controls#choose-a-service-tier) for the supported model IDs.
 
-Retry and prompt edits preserve Ultrafast when the runtime and model stay unchanged. Compaction and branch summaries do not use Ultrafast.
+The bundled extension publishes these values in `extensionUi.statuses`:
 
-If an extension changes the model during a run, reset waits for a safe turn or provider boundary.
+| Key | Values | Meaning |
+| --- | --- | --- |
+| `leyline-service-tier` | `"standard"`, `"fast"`, `"ultrafast"` | Authoritative, exact current choice. |
+| `leyline-ultrafast` | `"on"`, `"off"` | Compatibility status. Only Ultrafast gives `"on"`. Standard and Fast give `"off"`. |
+
+Use a valid `leyline-service-tier` status first. Without a valid new status, legacy `"on"` means Ultrafast. All other legacy values mean Standard. Missing statuses do not confirm command availability. The bundled `leyline-service-tier` and `leyline-ultrafast` commands do not appear in `slashCommands`.
+
+Standard is the default. The choice applies only to the current runtime. Model changes, explicit runtime reloads, and reset navigation select Standard. A new fork starts at Standard. Retry and prompt edits keep the exact tier when the runtime and model stay unchanged.
+
+Compaction and branch summaries do not receive Fast or Ultrafast overrides. If an extension changes the model during a run, the tier resets at a safe turn or provider boundary. See [Service tiers](../developer-guide/backend-api#service-tiers) for implementation details.
 
 Open-runtime snapshots carry `snapshotRevision` and `session`, including the current session name. Clients reject older snapshots for the same session, from HTTP or WebSockets. Start-screen previews can omit these fields, `promptQueue`, `isBashRunning`, `bashExecution`, and `titleGenerating`.
 
@@ -584,7 +596,7 @@ The value persists as a decimal string under `runtime.idle_timeout_minutes` in `
 
 Cleanup checks every 15 seconds and reads the current setting without a restart. Active work, queued tasks, pending approvals, lifecycle operations, and sessions observed through an exact `sessionId` runtime WebSocket stay loaded. An unscoped WebSocket or compact background snapshots do not protect every runtime.
 
-Cleanup disposes eligible runtimes and their MCP resources without deleting session history. It emits `runtime_removed`. Reopening or a scoped action rebuilds the runtime and connections. Process-local restoration retains the branch leaf, model, thinking level, and eligible Ultrafast choice. See [Idle runtime cleanup](../developer-guide/backend-api#idle-runtime-cleanup) for protections and restoration limits.
+Cleanup disposes eligible runtimes and their MCP resources without deleting session history. It emits `runtime_removed`. Reopening or a scoped action rebuilds the runtime and connections. Process-local restoration retains the branch leaf, model, thinking level, and exact service-tier choice when still supported. See [Idle runtime cleanup](../developer-guide/backend-api#idle-runtime-cleanup) for protections and restoration limits.
 
 ### Session-title settings
 
@@ -1690,7 +1702,7 @@ A missing or invalid vision model returns `500` for immediate submission. For a 
 
 The prompt response does not wait for `vision_agent` execution.
 
-Prompt preflight and model or Ultrafast changes use a per-runtime submission lock outside active compaction. Ordinary prompts during either change remain accepted in the editable queue, including while model authentication resolves. Automatic dispatch waits until the change finishes. Recognized extension commands retain their direct pi path.
+Prompt preflight and model or service-tier changes use a per-runtime submission lock outside active compaction. Ordinary prompts during either change remain accepted in the editable queue, including while model authentication resolves. Automatic dispatch waits until the change finishes. Recognized extension commands retain their direct pi path.
 
 ### Editable prompt queue
 
@@ -1861,13 +1873,50 @@ Response:
 { ok: true, active: Active }
 ```
 
-Initialization, extension binding, reload, branch changes, or another model or Ultrafast change blocks the request. The API does not require an idle model run. Missing fields, an unknown model, authentication failure, or a blocked change returns `500`.
+Initialization, extension binding, reload, branch changes, or another model or service-tier change blocks the request. The API does not require an idle model run. Missing fields, an unknown model, authentication failure, or a blocked change returns `500`.
 
 Outside active compaction, the model change holds the submission lock through pi's authentication check and model selection. Ordinary new prompts remain accepted in the editable queue. Automatic queue dispatch waits until the change finishes.
 
+### Set service tier
+
+`POST /api/pi/sessions/:id/service-tier` selects a tier for that runtime. There is no legacy active-session equivalent.
+
+Request:
+
+```text
+{ tier: "standard" | "fast" | "ultrafast" }
+```
+
+Response (`200`):
+
+```text
+{ ok: true, active: Active }
+```
+
+Every tier requires the runtime's bundled `leyline-service-tier` command. Fast and Ultrafast also require the requested value in `active.state.model.serviceTiers`.
+
+Initialization, extension binding, reload, branch changes, or another model or service-tier change blocks the request. Session deletion, disposal, or shutdown also blocks requests. The API does not require an idle model run.
+
+Outside active compaction, tier changes use the prompt-submission lock. Ordinary new prompts enter the editable queue during the change. Automatic dispatch waits until the change finishes.
+
+Errors use `{ error }`:
+
+| Status | Condition or exact error |
+| --- | --- |
+| `500` | Missing or invalid `tier`: `tier must be standard, fast, or ultrafast`. |
+| `500` | Missing command: `Service tier selection is not available in this runtime.` |
+| `500` | Unsupported model or authentication: `The service tier is not available for this model and authentication method.` |
+| `500` | Blocked changes, malformed JSON, or runtime errors. |
+| `404` | Unknown session: `Session not found`. |
+| `405` | Unsupported method: `Method not allowed`. |
+
+Use `active.state.extensionUi.statuses["leyline-service-tier"]` from the latest accepted snapshot for the resulting tier. Apply the `snapshotRevision` rules under [Active runtime](#active-runtime). The response has no separate `tier` field. Cancellation or runtime replacement can prevent a change despite `ok: true`.
+
+If the HTTP response closes early, the server cancels pending setup when possible. It does not undo a tier change that already took effect.
+
 ### Set Ultrafast
 
-`POST /api/pi/sessions/:id/ultrafast` changes the mode on that runtime. There is no legacy active-session equivalent.
+`POST /api/pi/sessions/:id/ultrafast` remains a compatibility route. There is no legacy active-session equivalent.
 
 Request:
 
@@ -1875,17 +1924,16 @@ Request:
 { enabled: boolean }
 ```
 
-Response:
+Response (`200`):
 
 ```text
 { ok: true, active: Active }
 ```
 
-Enabling requires `active.state.model.supportsUltrafast: true` and the bundled command in the runtime. Disabling does not require an eligible model, but still requires the command.
+- `enabled: true` selects `"ultrafast"`.
+- `enabled: false` selects `"standard"`, including when the current tier is `"fast"`.
 
-Initialization, extension binding, reload, branch changes, or another model or Ultrafast change blocks the request. The API does not require an idle model run. Ordinary new prompts remain accepted in the editable queue until the change finishes. Invalid `enabled`, unavailable support, or a blocked change returns `500` with `{ error }`. An unknown session returns `404`.
-
-Read `active.state.extensionUi.statuses["leyline-ultrafast"]` for the resulting mode. The response has no separate `enabled` field. A cancelled setup or runtime replacement can leave the mode unchanged despite `ok: true`. If the HTTP response closes before completion, the server cancels pending Ultrafast setup when possible.
+A missing or nonboolean `enabled` returns `500` with `enabled must be a boolean`. Other errors, command requirements, cancellation, and snapshot rules match [Set service tier](#set-service-tier). The response has no separate `enabled` field.
 
 ### Select thinking level
 
