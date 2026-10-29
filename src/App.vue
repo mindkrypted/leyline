@@ -906,6 +906,7 @@ const {
   approveFile,
   goBackFile,
   previewFileMenu,
+  openFileActionMenu,
   fileMenuAction,
 } = useFileLinks({
   sessionId: computed(() => sessionDetail.value?.session?.id || selectedSessionId.value),
@@ -3785,10 +3786,10 @@ function removeAttachedImage(index) {
   })
 }
 
-function openImageFullscreen(src, title = 'Image preview', event) {
+function openImageFullscreen(src, title = 'Image preview', event, file = null) {
   if (!src) return
   imageOpener.value = event?.currentTarget || document.activeElement
-  fullscreenImage.value = { src, title }
+  fullscreenImage.value = { src, title, file }
 }
 
 function openToolFullscreen(entry, event) {
@@ -5714,6 +5715,18 @@ function closePickerMenus() {
             </div>
             <div>
               <button
+                v-if="fullscreenImage.file?.path"
+                type="button"
+                @click="copyTranscriptItem('file-path', fullscreenImage.file.path)"
+              >{{ copiedEntryId === 'file-path' ? 'Copied' : 'Copy path' }}</button>
+              <button
+                v-if="fullscreenImage.file?.path"
+                type="button"
+                aria-label="Image file actions"
+                aria-haspopup="menu"
+                @click="openFileActionMenu(fullscreenImage.file, $event)"
+              >Actions</button>
+              <button
                 class="copy-button"
                 type="button"
                 :title="copiedEntryId === 'fullscreen-image' ? 'Copied' : 'Copy image'"
@@ -5748,7 +5761,11 @@ function closePickerMenus() {
         <section ref="toolDialog" class="tool-fullscreen" role="dialog" aria-modal="true" aria-label="Tool preview" tabindex="-1" @click.stop>
           <header class="tool-fullscreen-header">
             <div>
-              <span>{{ fullscreenTool.label }}</span>
+              <span>{{ fullscreenTool.preview?.kind === 'image'
+                ? 'Read image preview'
+                : fullscreenTool.preview?.kind === 'file'
+                  ? 'Read file preview'
+                  : fullscreenTool.label }}</span>
               <code v-if="fullscreenTool.code" :title="fullscreenTool.code">{{ fullscreenTool.code }}</code>
             </div>
             <div>

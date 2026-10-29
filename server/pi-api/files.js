@@ -46,7 +46,7 @@ export async function setFileSettings(input) {
 }
 
 export async function performFileAction(session, input) {
-  if (!input || !['resolve', 'preview', 'editor', 'reveal'].includes(input.action)) throw badRequest('Unknown file action')
+  if (!input || !['resolve', 'preview', 'open', 'editor', 'reveal'].includes(input.action)) throw badRequest('Unknown file action')
   if (typeof input.href !== 'string') throw badRequest('href must be a string')
   if (input.basePath !== undefined && typeof input.basePath !== 'string') throw badRequest('basePath must be a string')
   if (input.allowOutsideProject !== undefined && typeof input.allowOutsideProject !== 'boolean') throw badRequest('allowOutsideProject must be a boolean')
@@ -57,7 +57,12 @@ export async function performFileAction(session, input) {
 
   try {
     if (input.action === 'preview') return { ...descriptor, ...await readPreview(descriptor.path) }
-    if (input.action === 'editor') {
+    if (input.action === 'open') {
+      if (!descriptor.openAvailable) throw new Error('Opening files is unavailable on this backend without a supported desktop environment')
+      const [executable, args] = openCommand(descriptor.path)
+      const acceptedExitCodes = process.platform === 'win32' ? [0, 1] : [0]
+      await launch(executable, args, session.cwd, acceptedExitCodes)
+    } else if (input.action === 'editor') {
       if (!descriptor.editorAvailable) throw new Error(configuration.settings.error || 'No editor configured. Set an editor or EDITOR on this backend.')
       if (descriptor.terminalEditor) return { ...descriptor, terminal: true }
       await launch(configuration.executable, editorArguments(configuration, descriptor), session.cwd)
@@ -106,6 +111,7 @@ async function resolveLocalFile(cwd, input, configuration) {
     needsApproval: false,
     editorAvailable: Boolean(configuration.executable),
     terminalEditor: configuration.settings.terminalEditor,
+    openAvailable: configuration.settings.openAvailable,
     revealLabel: configuration.settings.revealLabel,
   }
   try {
@@ -204,7 +210,15 @@ async function editorConfiguration() {
   const environmentEditor = process.env.EDITOR || ''
   const effectiveEditor = editor.trim() || environmentEditor.trim()
   const editorMode = editorModes.has(stored['files.editor_mode']) ? stored['files.editor_mode'] : 'auto'
-  const settings = { editor, environmentEditor, effectiveEditor, editorMode, terminalEditor: editorMode === 'terminal', revealLabel: revealLabel() }
+  const settings = {
+    editor,
+    environmentEditor,
+    effectiveEditor,
+    editorMode,
+    terminalEditor: editorMode === 'terminal',
+    openAvailable: defaultOpenAvailable(),
+    revealLabel: revealLabel(),
+  }
   if (!effectiveEditor) return { settings }
   try {
     const [command, ...args] = parseEditorCommand(effectiveEditor)
@@ -319,6 +333,16 @@ function editorArguments(configuration, descriptor) {
   }
   args.push(descriptor.path)
   return args
+}
+
+function defaultOpenAvailable() {
+  return process.platform !== 'linux' || Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY)
+}
+
+function openCommand(path) {
+  if (process.platform === 'darwin') return ['/usr/bin/open', [path]]
+  if (process.platform === 'win32') return ['explorer.exe', [path]]
+  return ['xdg-open', [path]]
 }
 
 function revealLabel() {
