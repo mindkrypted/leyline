@@ -1450,7 +1450,6 @@ async function resetSessionToEntry(handle, entryId) {
     await interruptSession(handle)
     requireInitializedSession(handle)
     if (handle.runtime.session !== session) throw new Error('Session changed before resetting')
-    clearSessionServiceTier(handle.sessionId)
     const header = manager.getHeader()
     manager.fileEntries = [header, ...manager.getBranch(entryId)]
     manager._buildIndex()
